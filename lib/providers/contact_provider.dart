@@ -49,13 +49,17 @@ class ContactProvider with ChangeNotifier {
       final userIdStr = await StorageService.getUserId();
       if (userIdStr == null) return;
 
-      final userId = int.tryParse(userIdStr);
-      if (userId == null) return;
-
-      final data = await _apiService.searchUsers(keyword, userId);
-      _searchResults = data
+      final data = await _apiService.searchUsers(keyword);
+      final allResults = data
           .map((json) => UserModel.fromJson(json as Map<String, dynamic>))
           .toList();
+      debugPrint('🔍 搜索关键词: $keyword');
+      debugPrint('🔍 服务端返回 ${allResults.length} 条结果');
+      for (final u in allResults) {
+        debugPrint('🔍   用户: id=${u.id}, username=${u.username}');
+      }
+      _searchResults = allResults;
+      debugPrint('🔍 最终结果数: ${_searchResults.length}');
     } catch (e) {
       debugPrint('搜索用户失败: $e');
       _searchResults = [];
