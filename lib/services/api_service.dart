@@ -4,37 +4,36 @@ import '../models/user_model.dart';
 import 'storage_service.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8080/api';
-  late Dio _dio;
+  static const String _appServerUrl = 'http://localhost:8080/api';
+  static const String _imServerUrl = 'http://localhost:80/api';
+
+  late final Dio _appDio;
+  late final Dio _imDio;
 
   ApiService() {
-    _dio = Dio(BaseOptions(
+    _appDio = _createDio(_appServerUrl);
+    _imDio = _createDio(_imServerUrl);
+  }
+
+  Dio _createDio(String baseUrl) {
+    return Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {'Content-Type': 'application/json'},
     ));
+  }
 
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await StorageService.getToken();
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        return handler.next(options);
-      },
-      onError: (error, handler) {
-        if (error.response?.statusCode == 401) {
-          StorageService.removeToken();
-        }
-        return handler.next(error);
-      },
-    ));
+  Future<void> _attachToken(Dio dio) async {
+    final token = await StorageService.getToken();
+    if (token != null && token.isNotEmpty) {
+      dio.options.headers['Authorization'] = 'Bearer $token';
+    }
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
-      final response = await _dio.post('/client/login', data: {
+      final response = await _appDio.post('/client/login', data: {
         'username': username,
         'password': password,
       });
@@ -47,7 +46,7 @@ class ApiService {
   Future<Map<String, dynamic>> register(
       String username, String password, String nickname) async {
     try {
-      final response = await _dio.post('/client/register', data: {
+      final response = await _appDio.post('/client/register', data: {
         'username': username,
         'password': password,
         'nickname': nickname,
@@ -60,76 +59,101 @@ class ApiService {
 
   Future<UserModel> getUserInfo(String userId) async {
     try {
-      final response = await _dio.get('/user/info');
+      await _attachToken(_appDio);
+      final response = await _appDio.get('/user/info');
       return UserModel.fromJson(response.data);
     } on DioException catch (e) {
       throw Exception('获取用户信息失败: ${e.message}');
     }
   }
 
-  Future<List<dynamic>> getConversations() async {
+  Future<List<dynamic>> getFriendList(int userId) async {
     try {
-      final response = await _dio.get('/conversations');
-      return response.data as List<dynamic>;
+      await _attachToken(_imDio);
+      final response = await _imDio.get('/friend/list', queryParameters: {'userId': userId});
+      final data = response.data;
+      if (data is Map<String, dynamic> && data.containsKey('data')) {
+        return data['data'] as List<dynamic>;
+      }
+      return [];
     } on DioException catch (e) {
-      throw Exception('获取会话列表失败: ${e.message}');
+      throw Exception('获取好友列表失败: ${e.message}');
     }
   }
 
-  Future<Map<String, dynamic>> createConversation(
-      String name, List<String> participantIds, bool isGroup) async {
+  Future<void> sendFriendRequest(int userId, int friendId) async {
     try {
-      final response = await _dio.post('/conversations', data: {
-        'name': name,
-        'participant_ids': participantIds,
-        'is_group': isGroup,
+      await _attachToken(_imDio);
+      await _imDio.post('/friend/request', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
       });
-      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      throw Exception('创建会话失败: ${e.message}');
+      throw Exception('发送好友请求失败: ${e.message}');
     }
   }
 
-  Future<List<dynamic>> getMessages(String conversationId) async {
+  Future<void> acceptFriendRequest(int userId, int friendId) async {
     try {
-      final response = await _dio.get('/conversations/$conversationId/messages');
-      return response.data as List<dynamic>;
+      await _attachToken(_imDio);
+      await _imDio.put('/friend/accept', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
     } on DioException catch (e) {
-      throw Exception('获取消息失败: ${e.message}');
+      throw Exception('接受好友请求失败: ${e.message}');
     }
   }
 
-  Future<Map<String, dynamic>> sendMessage(
-      String conversationId, String content, String type) async {
+  Future<void> rejectFriendRequest(int userId, int friendId) async {
     try {
-      final response = await _dio.post(
-        '/conversations/$conversationId/messages',
-        data: {
-          'content': content,
-          'type': type,
-        },
-      );
-      return response.data as Map<String, dynamic>;
+      await _attachToken(_imDio);
+      await _imDio.put('/friend/reject', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
     } on DioException catch (e) {
-      throw Exception('发送消息失败: ${e.message}');
+      throw Exception('拒绝好友请求失败: ${e.message}');
     }
   }
 
-  Future<List<dynamic>> getContacts() async {
+  Future<void> deleteFriend(int userId, int friendId) async {
     try {
-      final response = await _dio.get('/contacts');
-      return response.data as List<dynamic>;
+      await _attachToken(_imDio);
+      await _imDio.delete('/friend/$friendId', queryParameters: {'userId': userId});
     } on DioException catch (e) {
-      throw Exception('获取联系人失败: ${e.message}');
+      throw Exception('删除好友失败: ${e.message}');
     }
   }
 
-  Future<Map<String, dynamic>> searchUsers(String keyword) async {
+  Future<List<dynamic>> searchUsers(String keyword, int userId) async {
     try {
-      final response = await _dio.get('/users/search?keyword=$keyword');
-      return response.data as Map<String, dynamic>;
+      await _attachToken(_imDio);
+      final response = await _imDio.get('/friend/search-users', queryParameters: {
+        'keyword': keyword,
+        'userId': userId,
+      });
+      final data = response.data;
+      if (data is Map<String, dynamic> && data.containsKey('data')) {
+        return data['data'] as List<dynamic>;
+      }
+      return [];
     } on DioException catch (e) {
       throw Exception('搜索用户失败: ${e.message}');
+    }
+  }
+
+  Future<List<dynamic>> getFriendRequests(int userId) async {
+    try {
+      await _attachToken(_imDio);
+      final response = await _imDio.get('/friend/requests', queryParameters: {'userId': userId});
+      final data = response.data;
+      if (data is Map<String, dynamic> && data.containsKey('data')) {
+        return data['data'] as List<dynamic>;
+      }
+      return [];
+    } on DioException catch (e) {
+      throw Exception('获取好友请求失败: ${e.message}');
     }
   }
 }

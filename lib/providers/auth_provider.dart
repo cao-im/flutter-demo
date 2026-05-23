@@ -32,6 +32,10 @@ class AuthProvider with ChangeNotifier {
 
         if (token != null && userData != null) {
           await StorageService.saveToken(token);
+          final imToken = data['imToken'] as String?;
+          if (imToken != null) {
+            await StorageService.saveImToken(imToken);
+          }
           final user = UserModel.fromJson(userData);
           _user = user;
           await StorageService.saveUserId(user.id);
@@ -40,7 +44,8 @@ class AuthProvider with ChangeNotifier {
           final connectionProvider =
               context.read<ConnectionProvider>();
           if (connectionProvider.isInitialized) {
-            await connectionProvider.connect(token);
+            final connectToken = imToken ?? token;
+            await connectionProvider.connect(connectToken, userId: int.tryParse(user.id) ?? 0);
           }
 
           notifyListeners();
@@ -74,6 +79,10 @@ class AuthProvider with ChangeNotifier {
 
         if (token != null && userData != null) {
           await StorageService.saveToken(token);
+          final imToken = data['imToken'] as String?;
+          if (imToken != null) {
+            await StorageService.saveImToken(imToken);
+          }
           final user = UserModel.fromJson(userData);
           _user = user;
           await StorageService.saveUserId(user.id);
@@ -94,27 +103,56 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> loadUserFromStorage(BuildContext context) async {
+    debugPrint('');
+    debugPrint('📍[AuthProvider] ====== loadUserFromStorage() 开始 ======');
+
     final token = await StorageService.getToken();
+    final imToken = await StorageService.getImToken();
+    debugPrint('📍[AuthProvider] token: ${token != null ? "有 (长度=${token.length})" : "无"}');
+    debugPrint('📍[AuthProvider] imToken: ${imToken != null ? "有 (长度=${imToken.length})" : "无"}');
+
     if (token != null && token.isNotEmpty) {
       final userId = await StorageService.getUserId();
+      debugPrint('📍[AuthProvider] userId: $userId');
+
       if (userId != null) {
         try {
+          debugPrint('📍[AuthProvider] 调用 getUserInfo($userId)...');
           final user = await _apiService.getUserInfo(userId);
           _user = user;
+          debugPrint('✅[AuthProvider] 用户信息获取成功: ${user.username}');
 
           final connectionProvider =
               context.read<ConnectionProvider>();
+          debugPrint('📍[AuthProvider] isInitialized=${connectionProvider.isInitialized}, isConnected=${connectionProvider.isConnected}');
+
           if (connectionProvider.isInitialized && !connectionProvider.isConnected) {
-            await connectionProvider.connect(token);
+            final connectToken = imToken ?? token;
+            final uid = int.tryParse(userId) ?? 0;
+            debugPrint('📍[AuthProvider] 准备调用 connectionProvider.connect(imToken, userId=$uid)...');
+            await connectionProvider.connect(connectToken, userId: uid);
+            debugPrint('✅[AuthProvider] connect() 返回');
+          } else if (connectionProvider.isConnected) {
+            debugPrint('⚠️[AuthProvider] 已连接，跳过 connect()');
+          } else {
+            debugPrint('⚠️[AuthProvider] SDK 未初始化，跳过 connect()');
           }
 
           notifyListeners();
-        } catch (e) {
-          debugPrint('加载用户信息失败: $e');
+        } catch (e, stack) {
+          debugPrint('❌[AuthProvider] 加载用户信息失败: $e');
+          debugPrint('❌[AuthProvider] stackTrace: $stack');
           await logout(context);
         }
+      } else {
+        debugPrint('⚠️[AuthProvider] userId 为空');
       }
+    } else {
+      debugPrint('⚠️[AuthProvider] token 为空或未登录');
     }
+
+    debugPrint('📍[AuthProvider] ====== loadUserFromStorage() 结束 ======');
+    debugPrint('');
   }
 
   Future<void> logout(BuildContext context) async {

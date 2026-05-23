@@ -4,6 +4,8 @@ import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/connection_provider.dart';
 import '../router/app_router.dart';
+import 'home_page.dart';
+import 'login_page.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -49,29 +51,52 @@ class _SplashPageState extends State<SplashPage>
   }
 
   Future<void> _initializeAndNavigate() async {
+    debugPrint('');
+    debugPrint('📍[SplashPage] ====== _initializeAndNavigate() 开始 ======');
+
     final connectionProvider =
         Provider.of<ConnectionProvider>(context, listen: false);
 
     try {
-      await connectionProvider.initialize('ws://localhost:8080/api/ws');
+      debugPrint('📍[SplashPage] [步骤1/3] 调用 connectionProvider.initialize()...');
+      await connectionProvider.initialize('ws://localhost/api/ws');
+      debugPrint('✅[SplashPage] [步骤1/3] initialize 完成');
     } catch (e) {
-      debugPrint('SDK 初始化失败: $e');
+      debugPrint('❌[SplashPage] [步骤1/3] SDK 初始化失败: $e');
     }
 
+    debugPrint('📍[SplashPage] 等待 1 秒...');
     await Future.delayed(const Duration(seconds: 1));
 
     if (!mounted) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    debugPrint('📍[SplashPage] [步骤2/3] 调用 authProvider.loadUserFromStorage()...');
     await authProvider.loadUserFromStorage(context);
+    debugPrint('✅[SplashPage] [步骤2/3] loadUserFromStorage 完成, isAuthenticated=${authProvider.isAuthenticated}');
 
     if (!mounted) return;
 
     if (authProvider.isAuthenticated) {
-      Navigator.of(context).pushReplacementNamed(AppRouter.home);
+      debugPrint('✅[SplashPage] 用户已认证, 准备导航到 HomePage');
+      if (context.mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomePage()),
+        );
+      }
     } else {
-      Navigator.of(context).pushReplacementNamed(AppRouter.login);
+      debugPrint('📍[SplashPage] 用户未认证, 导航到 LoginPage');
+      if (context.mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+        );
+      }
     }
+
+    debugPrint('📍[SplashPage] ====== _initializeAndNavigate() 结束 ======');
+    debugPrint('');
   }
 
   @override

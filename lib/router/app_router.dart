@@ -6,6 +6,8 @@ import '../pages/home_page.dart';
 import '../pages/chat_page.dart';
 import '../pages/group_create_page.dart';
 import '../pages/group_chat_page.dart';
+import '../pages/search_add_friend_page.dart';
+import '../pages/new_friends_page.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -15,6 +17,8 @@ class AppRouter {
   static const String chat = '/chat';
   static const String groupCreate = '/group-create';
   static const String groupChat = '/group-chat';
+  static const String searchAddFriend = '/search-add-friend';
+  static const String newFriends = '/new-friends';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -45,6 +49,14 @@ class AppRouter {
             groupId: args?['groupId'] ?? '',
             groupName: args?['groupName'] ?? '',
           ),
+        );
+      case searchAddFriend:
+        return MaterialPageRoute(
+          builder: (_) => const SearchAddFriendPage(),
+        );
+      case newFriends:
+        return MaterialPageRoute(
+          builder: (_) => const NewFriendsPage(),
         );
       default:
         return MaterialPageRoute(

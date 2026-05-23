@@ -35,9 +35,7 @@ class _ContactsPageState extends State<ContactsPage>
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('添加好友功能开发中...')));
+              Navigator.pushNamed(context, AppRouter.searchAddFriend);
             },
           ),
         ],
@@ -50,7 +48,9 @@ class _ContactsPageState extends State<ContactsPage>
 
           return ListView(
             children: [
-              _buildSpecialItem(Icons.person_add, '新的朋友', () {}),
+              _buildSpecialItem(Icons.person_add, '新的朋友', () {
+                Navigator.pushNamed(context, AppRouter.newFriends);
+              }),
               _buildSpecialItem(Icons.group, '群组', () {
                 Navigator.pushNamed(context, AppRouter.groupCreate);
               }),
