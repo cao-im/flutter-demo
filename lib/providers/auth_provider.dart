@@ -123,37 +123,47 @@ class AuthProvider with ChangeNotifier {
 
     if (token != null && token.isNotEmpty) {
       final userId = await StorageService.getUserId();
-      debugPrint('📍[AuthProvider] userId: $userId');
+      final imUserIdStr = await StorageService.getImUserId();
+      debugPrint('📍[AuthProvider] userId: $userId, imUserId: $imUserIdStr');
 
       if (userId != null) {
         try {
-          debugPrint('📍[AuthProvider] 调用 getUserInfo($userId)...');
-          final user = await _apiService.getUserInfo(userId);
-          _user = user;
-          debugPrint('✅[AuthProvider] 用户信息获取成功: ${user.username}');
-
           final connectionProvider =
               context.read<ConnectionProvider>();
           debugPrint('📍[AuthProvider] isInitialized=${connectionProvider.isInitialized}, isConnected=${connectionProvider.isConnected}');
 
           if (connectionProvider.isInitialized && !connectionProvider.isConnected) {
             final connectToken = imToken ?? token;
-            final imUserIdStr = await StorageService.getImUserId();
             final uid = int.tryParse(imUserIdStr ?? userId) ?? 0;
             debugPrint('📍[AuthProvider] 准备调用 connectionProvider.connect(imToken, userId=$uid)...');
             await connectionProvider.connect(connectToken, userId: uid);
             debugPrint('✅[AuthProvider] connect() 返回');
-          } else if (connectionProvider.isConnected) {
-            debugPrint('⚠️[AuthProvider] 已连接，跳过 connect()');
-          } else {
-            debugPrint('⚠️[AuthProvider] SDK 未初始化，跳过 connect()');
           }
+
+          debugPrint('📍[AuthProvider] 通过 IM Server HTTP API 获取用户信息...');
+          final user = await _apiService.getUserInfo();
+          _user = user;
+          debugPrint('✅[AuthProvider] 通过HTTP API获取用户信息成功: ${_user?.username}');
 
           notifyListeners();
         } catch (e, stack) {
           debugPrint('❌[AuthProvider] 加载用户信息失败: $e');
           debugPrint('❌[AuthProvider] stackTrace: $stack');
-          await logout(context);
+          
+          if (e.toString().contains('401') || e.toString().contains('Token无效')) {
+            debugPrint('⚠️[AuthProvider] Token无效，执行登出');
+            await logout(context);
+          } else {
+            debugPrint('⚠️[AuthProvider] 使用本地存储的基本信息作为降级方案');
+            final username = await StorageService.getUsername();
+            _user = UserModel(
+              id: userId,
+              username: username ?? userId,
+              nickname: username ?? '用户',
+              imUserId: imUserIdStr,
+            );
+            notifyListeners();
+          }
         }
       } else {
         debugPrint('⚠️[AuthProvider] userId 为空');

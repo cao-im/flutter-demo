@@ -15,19 +15,11 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   String? _avatarPath;
-  String _nickname = '';
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      setState(() {
-        _nickname = authProvider.user?.nickname ?? '用户';
-        _avatarPath = authProvider.user?.avatar;
-      });
-    });
   }
 
   Future<void> _pickAvatar() async {
@@ -56,8 +48,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _editNickname() async {
-    final controller = TextEditingController(text: _nickname);
+  Future<void> _editNickname(String currentNickname) async {
+    final controller = TextEditingController(text: currentNickname);
     final result = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -93,7 +85,6 @@ class _ProfilePageState extends State<ProfilePage> {
     controller.dispose();
 
     if (result != null && result.isNotEmpty && mounted) {
-      setState(() => _nickname = result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('昵称已修改为: $result'),
@@ -209,12 +200,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
-                            onTap: _editNickname,
+                            onTap: () => _editNickname(user?.nickname ?? '用户'),
                             child: Row(
                               children: [
                                 Flexible(
                                   child: Text(
-                                    _nickname,
+                                    user?.nickname ?? '用户',
                                     style: const TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,

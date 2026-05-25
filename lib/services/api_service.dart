@@ -72,12 +72,24 @@ class ApiService {
     }
   }
 
-  Future<UserModel> getUserInfo(String userId) async {
+  Future<UserModel> getUserInfo() async {
     try {
-      await _attachToken(_appDio);
-      final response = await _appDio.get('/user/info');
-      return UserModel.fromJson(response.data);
+      await _attachImToken(_imDio);
+      final response = await _imDio.get('/user/info');
+      final data = response.data;
+      
+      if (data is Map<String, dynamic>) {
+        final userData = data['data'];
+        if (userData != null && userData is Map<String, dynamic>) {
+          return UserModel.fromJson(userData);
+        }
+      }
+      
+      throw Exception('用户信息响应格式错误');
     } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw Exception('Token无效或已过期');
+      }
       throw Exception('获取用户信息失败: ${e.message}');
     }
   }
