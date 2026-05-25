@@ -21,7 +21,9 @@ class _ContactsPageState extends State<ContactsPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ContactProvider>(context, listen: false).loadContacts();
+      final provider = Provider.of<ContactProvider>(context, listen: false);
+      provider.loadContacts();
+      provider.loadFriendRequests();
     });
   }
 
@@ -48,9 +50,16 @@ class _ContactsPageState extends State<ContactsPage>
 
           return ListView(
             children: [
-              _buildSpecialItem(Icons.person_add, '新的朋友', () {
-                Navigator.pushNamed(context, AppRouter.newFriends);
-              }),
+              _buildSpecialItem(
+                Icons.person_add,
+                '新的朋友',
+                () {
+                  Provider.of<ContactProvider>(context, listen: false)
+                      .markFriendRequestsAsRead();
+                  Navigator.pushNamed(context, AppRouter.newFriends);
+                },
+                badgeCount: contactProvider.unreadFriendRequestCount,
+              ),
               _buildSpecialItem(Icons.group, '群组', () {
                 Navigator.pushNamed(context, AppRouter.groupCreate);
               }),
@@ -65,7 +74,12 @@ class _ContactsPageState extends State<ContactsPage>
     );
   }
 
-  Widget _buildSpecialItem(IconData icon, String title, VoidCallback onTap) {
+  Widget _buildSpecialItem(
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
+    int badgeCount = 0,
+  }) {
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -83,7 +97,29 @@ class _ContactsPageState extends State<ContactsPage>
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            if (badgeCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 20,
+                  minHeight: 20,
+                ),
+                child: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              const Icon(Icons.chevron_right, color: Colors.grey),
           ],
         ),
       ),
@@ -91,7 +127,9 @@ class _ContactsPageState extends State<ContactsPage>
   }
 
   Widget _buildContactItem(dynamic contact) {
-    final name = contact.nickname ?? contact.username ?? '未知用户';
+    final name = contact.nickname?.isNotEmpty == true
+        ? contact.nickname
+        : (contact.username ?? '未知用户');
     return InkWell(
       onTap: () {
         Navigator.pushNamed(
@@ -122,7 +160,7 @@ class _ContactsPageState extends State<ContactsPage>
                     ),
                   ),
                   Text(
-                    contact.id ?? '',
+                    contact.username ?? '',
                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                 ],

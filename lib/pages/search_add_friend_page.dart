@@ -14,6 +14,7 @@ class SearchAddFriendPage extends StatefulWidget {
 class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+  Map<int, int> _friendStatusMap = {};
 
   @override
   void dispose() {
@@ -24,13 +25,32 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   Future<void> _performSearch(String keyword) async {
     if (keyword.trim().isEmpty) return;
 
-    setState(() => _isSearching = true);
-    
+    setState(() {
+      _isSearching = true;
+      _friendStatusMap.clear();
+    });
+
     try {
       await context.read<ContactProvider>().searchUsers(keyword.trim());
+      _checkAllFriendsStatus();
     } finally {
       if (mounted) {
         setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  Future<void> _checkAllFriendsStatus() async {
+    final contactProvider = context.read<ContactProvider>();
+    for (final user in contactProvider.searchResults) {
+      final friendId = int.tryParse(user.id ?? '');
+      if (friendId != null) {
+        final status = await contactProvider.checkFriendStatus(friendId);
+        if (mounted) {
+          setState(() {
+            _friendStatusMap[friendId] = status;
+          });
+        }
       }
     }
   }
@@ -41,11 +61,14 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
 
     try {
       await context.read<ContactProvider>().sendFriendRequest(friendId);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('好友请求已发送')),
         );
+        setState(() {
+          _friendStatusMap[friendId] = 1;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -53,6 +76,59 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
           SnackBar(content: Text('发送失败: $e')),
         );
       }
+    }
+  }
+
+  Widget _buildActionButton(dynamic user) {
+    final friendId = int.tryParse(user.id ?? '');
+    if (friendId == null) return const SizedBox.shrink();
+
+    final status = _friendStatusMap[friendId] ?? 0;
+
+    if (status == 2) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '已添加',
+          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+        ),
+      );
+    } else if (status == 1) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.access_time, size: 14, color: Colors.orange[400]),
+            const SizedBox(width: 4),
+            Text(
+              '已发送',
+              style: TextStyle(color: Colors.orange[400], fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return ElevatedButton.icon(
+        onPressed: () => _sendFriendRequest(user),
+        icon: const Icon(Icons.person_add, size: 18),
+        label: const Text('添加'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryColor,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      );
     }
   }
 
@@ -88,7 +164,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: _isSearching 
+                  icon: _isSearching
                       ? const SizedBox(
                           width: 20,
                           height: 20,
@@ -104,11 +180,11 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
             child: Consumer<ContactProvider>(
               builder: (context, contactProvider, _) {
                 final results = contactProvider.searchResults;
-                
+
                 if (_isSearching && results.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                
+
                 if (!_isSearching && results.isEmpty && _searchController.text.isNotEmpty) {
                   return const Center(
                     child: Column(
@@ -121,7 +197,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
                     ),
                   );
                 }
-                
+
                 if (results.isEmpty && _searchController.text.isEmpty) {
                   return const Center(
                     child: Column(
@@ -134,7 +210,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
                     ),
                   );
                 }
-                
+
                 return ListView.builder(
                   itemCount: results.length,
                   itemBuilder: (context, index) {
@@ -153,7 +229,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   Widget _buildUserItem(dynamic user) {
     final name = user.nickname?.isNotEmpty == true ? user.nickname : user.username;
     final subtitle = '@${user.username ?? ''}';
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Card(
@@ -187,18 +263,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () => _sendFriendRequest(user),
-                icon: const Icon(Icons.person_add, size: 18),
-                label: const Text('添加'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ),
+              _buildActionButton(user),
             ],
           ),
         ),

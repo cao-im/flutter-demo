@@ -4,6 +4,7 @@ import '../pages/conversation_list_page.dart';
 import '../pages/contacts_page.dart';
 import '../pages/profile_page.dart';
 import '../providers/connection_provider.dart';
+import '../providers/contact_provider.dart';
 import '../services/storage_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -20,6 +21,14 @@ class _HomePageState extends State<HomePage> {
     const ContactsPage(),
     const ProfilePage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ContactProvider>().startListening();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

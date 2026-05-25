@@ -40,12 +40,18 @@ class AuthProvider with ChangeNotifier {
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
+          if (user.imUserId != null) {
+            await StorageService.saveImUserId(user.imUserId!);
+            debugPrint('✅[AuthProvider] 存储 imUserId: ${user.imUserId}');
+          }
 
           final connectionProvider =
               context.read<ConnectionProvider>();
           if (connectionProvider.isInitialized) {
             final connectToken = imToken ?? token;
-            await connectionProvider.connect(connectToken, userId: int.tryParse(user.id) ?? 0);
+            final imUid = int.tryParse(user.imUserId ?? user.id) ?? 0;
+            debugPrint('📍[AuthProvider] 使用 imUserId=$imUid 连接 IM');
+            await connectionProvider.connect(connectToken, userId: imUid);
           }
 
           notifyListeners();
@@ -87,6 +93,10 @@ class AuthProvider with ChangeNotifier {
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
+          if (user.imUserId != null) {
+            await StorageService.saveImUserId(user.imUserId!);
+            debugPrint('✅[AuthProvider] 注册时存储 imUserId: ${user.imUserId}');
+          }
         }
 
         notifyListeners();
@@ -128,7 +138,8 @@ class AuthProvider with ChangeNotifier {
 
           if (connectionProvider.isInitialized && !connectionProvider.isConnected) {
             final connectToken = imToken ?? token;
-            final uid = int.tryParse(userId) ?? 0;
+            final imUserIdStr = await StorageService.getImUserId();
+            final uid = int.tryParse(imUserIdStr ?? userId) ?? 0;
             debugPrint('📍[AuthProvider] 准备调用 connectionProvider.connect(imToken, userId=$uid)...');
             await connectionProvider.connect(connectToken, userId: uid);
             debugPrint('✅[AuthProvider] connect() 返回');

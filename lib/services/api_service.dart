@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import 'storage_service.dart';
 
@@ -45,6 +46,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
+      _appDio.options.headers.remove('Authorization');
       final response = await _appDio.post('/client/login', data: {
         'username': username,
         'password': password,
@@ -58,6 +60,7 @@ class ApiService {
   Future<Map<String, dynamic>> register(
       String username, String password, String nickname) async {
     try {
+      _appDio.options.headers.remove('Authorization');
       final response = await _appDio.post('/client/register', data: {
         'username': username,
         'password': password,
@@ -165,6 +168,24 @@ class ApiService {
       return [];
     } on DioException catch (e) {
       throw Exception('获取好友请求失败: ${e.message}');
+    }
+  }
+
+  Future<int> checkFriendStatus(int userId, int friendId) async {
+    try {
+      await _attachImToken(_imDio);
+      final response = await _imDio.get('/friend/check-status', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
+      final data = response.data;
+      if (data is Map<String, dynamic> && data.containsKey('data')) {
+        return data['data'] as int ?? 0;
+      }
+      return 0;
+    } on DioException catch (e) {
+      debugPrint('检查好友状态失败: $e');
+      return 0;
     }
   }
 }

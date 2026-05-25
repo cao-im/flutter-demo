@@ -4,6 +4,7 @@ class StorageService {
   static const String _tokenKey = 'auth_token';
   static const String _imTokenKey = 'im_token';
   static const String _userIdKey = 'user_id';
+  static const String _imUserIdKey = 'im_user_id';
   static const String _usernameKey = 'username';
   static const String _passwordKey = 'password';
   static const String _autoLoginKey = 'auto_login';
@@ -44,6 +45,16 @@ class StorageService {
   static Future<String?> getUserId() async {
     final prefs = await _prefs;
     return prefs.getString(_userIdKey);
+  }
+
+  static Future<void> saveImUserId(String imUserId) async {
+    final prefs = await _prefs;
+    await prefs.setString(_imUserIdKey, imUserId);
+  }
+
+  static Future<String?> getImUserId() async {
+    final prefs = await _prefs;
+    return prefs.getString(_imUserIdKey);
   }
 
   static Future<void> saveUsername(String username) async {
