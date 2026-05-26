@@ -5,7 +5,9 @@ import '../pages/contacts_page.dart';
 import '../pages/profile_page.dart';
 import '../providers/connection_provider.dart';
 import '../providers/contact_provider.dart';
+import '../providers/chat_provider.dart';
 import '../services/storage_service.dart';
+import 'package:cao_im_sdk_flutter/storage/hive/hive_viewer.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,6 +30,124 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactProvider>().startListening();
     });
+  }
+
+  /// ✅ 查看 Hive 数据（调试功能）
+  Future<void> _viewHiveData() async {
+    try {
+      await HiveViewer.printAllData();
+
+      if (mounted) {
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        
+        scaffoldMessenger.hideCurrentSnackBar();
+        
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text('✅ 数据已打印到控制台（按 F12 查看）'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: '导出',
+              textColor: Colors.white,
+              onPressed: () async {
+                scaffoldMessenger.hideCurrentSnackBar();
+                
+                final path = await HiveViewer.exportToFile();
+                if (mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text('📁 已导出到: $path'),
+                      backgroundColor: Colors.blue,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 查看失败: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// ✅ 清空所有本地存储数据（调试功能）
+  Future<void> _clearAllData() async {
+    // 显示确认对话框
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text('确认清空数据', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          '此操作将删除所有本地存储的：\n\n'
+          '• 📨 聊天消息\n'
+          '• 💬 会话列表\n'
+          '• ⚙️ 应用设置\n\n'
+          '⚠️ 此操作不可恢复！',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认清空', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await HiveViewer.clearAllData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('🗑️ 所有本地数据已清空'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // 刷新会话列表
+        Provider.of<ChatProvider>(context, listen: false).loadConversations();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 清空失败: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -138,6 +258,36 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+
+      // ✅ 调试浮动按钮组：查看/导出/清空本地存储数据
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 清空数据按钮（红色，危险操作）
+          FloatingActionButton.extended(
+            onPressed: _clearAllData,
+            icon: const Icon(Icons.delete_forever),
+            label: const Text('清空数据'),
+            tooltip: '清空所有本地存储数据（消息、会话、设置）',
+            backgroundColor: Colors.red[400],
+            foregroundColor: Colors.white,
+            heroTag: 'hive_clear',
+          ),
+          const SizedBox(height: 10),
+          // 查看数据按钮（紫色）
+          FloatingActionButton.extended(
+            onPressed: _viewHiveData,
+            icon: const Icon(Icons.bug_report_outlined),
+            label: const Text('查看数据'),
+            tooltip: '查看 Hive 本地存储数据',
+            backgroundColor: Colors.purple,
+            foregroundColor: Colors.white,
+            heroTag: 'hive_view',
+          ),
+        ],
+      ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {

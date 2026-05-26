@@ -18,12 +18,25 @@ class _ConversationListPageState extends State<ConversationListPage>
   @override
   bool get wantKeepAlive => true;
 
+  bool _hasLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ChatProvider>(context, listen: false).loadConversations();
+    // ✅ 延迟加载，确保 IMClient 已初始化
+    Future.delayed(Duration(milliseconds: 500), () {
+      if (mounted) {
+        _loadConversationsIfNeeded();
+      }
     });
+  }
+
+  /// 智能加载：只在必要时加载，避免重复请求
+  void _loadConversationsIfNeeded() {
+    if (!_hasLoaded || mounted) {
+      _hasLoaded = true;
+      Provider.of<ChatProvider>(context, listen: false).loadConversations();
+    }
   }
 
   Future<void> _onRefresh() async {
@@ -113,6 +126,12 @@ class _ConversationListPageState extends State<ConversationListPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    
+    // ✅ 每次构建时检查是否需要加载数据（处理页面重新进入的情况）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadConversationsIfNeeded();
+    });
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('消息'),

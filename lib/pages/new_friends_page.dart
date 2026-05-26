@@ -42,7 +42,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
     }
   }
 
-  Future<void> _acceptRequest(int friendId) async {
+  Future<void> _acceptRequest(dynamic friendId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -63,7 +63,8 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
 
     if (confirmed == true) {
       try {
-        await context.read<ContactProvider>().acceptFriendRequest(friendId);
+        final friendIdStr = friendId.toString();
+        await context.read<ContactProvider>().acceptFriendRequestWithString(friendIdStr);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -80,7 +81,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
     }
   }
 
-  Future<void> _rejectRequest(int friendId) async {
+  Future<void> _rejectRequest(dynamic friendId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -104,7 +105,8 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
 
     if (confirmed == true) {
       try {
-        await context.read<ContactProvider>().rejectFriendRequest(friendId);
+        final friendIdStr = friendId.toString();
+        await context.read<ContactProvider>().rejectFriendRequestWithString(friendIdStr);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

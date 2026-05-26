@@ -65,8 +65,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels <= 200) {
       _loadMoreMessages();
     }
   }
@@ -142,7 +141,7 @@ class _ChatPageState extends State<ChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          0.0,
+          _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -280,7 +279,6 @@ class _ChatPageState extends State<ChatPage> {
 
                 return ListView.builder(
                   controller: _scrollController,
-                  reverse: true,
                   itemCount: chatProvider.messages.length + (_hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (_hasMore && index == chatProvider.messages.length) {
@@ -288,12 +286,12 @@ class _ChatPageState extends State<ChatPage> {
                     }
 
                     final message = chatProvider.messages[index];
-                    final isMe =
-                        message.senderId ==
-                        Provider.of<AuthProvider>(
-                          context,
-                          listen: false,
-                        )?.user?.id;
+                    // 优先使用 isSent 字段判断，其次通过 senderId 比较
+                    final authUserId = Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
+                    )?.user?.id;
+                    final isMe = message.isSent || message.senderId == authUserId;
                     return MessageBubble(
                       message: message,
                       isMe: isMe,

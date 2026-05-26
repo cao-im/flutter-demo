@@ -120,6 +120,18 @@ class ApiService {
     }
   }
 
+  Future<void> sendFriendRequestWithString(String userId, String friendId) async {
+    try {
+      await _attachImToken(_imDio);
+      await _imDio.post('/friend/request', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
+    } on DioException catch (e) {
+      throw Exception('发送好友请求失败: ${e.message}');
+    }
+  }
+
   Future<void> acceptFriendRequest(int userId, int friendId) async {
     try {
       await _attachImToken(_imDio);
@@ -132,7 +144,31 @@ class ApiService {
     }
   }
 
+  Future<void> acceptFriendRequestWithString(String userId, String friendId) async {
+    try {
+      await _attachImToken(_imDio);
+      await _imDio.put('/friend/accept', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
+    } on DioException catch (e) {
+      throw Exception('接受好友请求失败: ${e.message}');
+    }
+  }
+
   Future<void> rejectFriendRequest(int userId, int friendId) async {
+    try {
+      await _attachImToken(_imDio);
+      await _imDio.put('/friend/reject', queryParameters: {
+        'userId': userId,
+        'friendId': friendId,
+      });
+    } on DioException catch (e) {
+      throw Exception('拒绝好友请求失败: ${e.message}');
+    }
+  }
+
+  Future<void> rejectFriendRequestWithString(String userId, String friendId) async {
     try {
       await _attachImToken(_imDio);
       await _imDio.put('/friend/reject', queryParameters: {

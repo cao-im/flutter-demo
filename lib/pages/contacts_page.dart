@@ -22,6 +22,7 @@ class _ContactsPageState extends State<ContactsPage>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ContactProvider>(context, listen: false);
+      provider.startListening();
       provider.loadContacts();
       provider.loadFriendRequests();
     });

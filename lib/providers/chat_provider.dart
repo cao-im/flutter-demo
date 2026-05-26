@@ -1,16 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
+import 'package:cao_im_sdk_flutter/event/event_bus.dart';
+import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../sdk/im_sdk_manager.dart';
 
 class ChatProvider with ChangeNotifier {
   final IMSdkManager _sdkManager = IMSdkManager();
+  final EventBus _eventBus = EventBus();
+  
   ConversationModel? _currentConversation;
   List<MessageModel> _messages = [];
   List<ConversationModel> _conversations = [];
   bool _isLoading = false;
   bool _isListening = false;
+  bool _isEventListening = false;
 
   ConversationModel? get currentConversation => _currentConversation;
   List<MessageModel> get messages => _messages;
@@ -21,11 +26,71 @@ class ChatProvider with ChangeNotifier {
     if (_isListening) return;
     _sdkManager.client.addMessageListener(_ChatMessageListener(this));
     _isListening = true;
+    
+    // ✅ 开始监听事件总线
+    startEventListening();
   }
 
   void stopListening() {
     _sdkManager.client.removeMessageListener(_ChatMessageListener(this));
     _isListening = false;
+    
+    // ✅ 停止监听事件总线
+    stopEventListening();
+  }
+
+  /// ✅ 开始监听 EventBus 事件（自动刷新会话列表）
+  void startEventListening() {
+    if (_isEventListening) return;
+    _isEventListening = true;
+
+    // 监听消息发送成功 → 刷新会话列表
+    _eventBus.on<MessageSentEvent>().listen((event) {
+      debugPrint('📍[ChatProvider] 📢 收到 MessageSentEvent, 自动刷新会话列表');
+      loadConversations();
+    });
+
+    // 监听收到新消息 → 刷新会话列表
+    _eventBus.on<MessageReceivedEvent>().listen((event) {
+      debugPrint('📍[ChatProvider] 📢 收到 MessageReceivedEvent, 自动刷新会话列表');
+      loadConversations();
+      
+      // 如果当前正在该会话的聊天页面，也刷新消息列表
+      if (_currentConversation != null) {
+        final msgTargetId = event.message.toId;
+        final convParts = _currentConversation!.id.split('_');
+        final convTargetId = int.tryParse(convParts.last ?? '0') ?? 0;
+        
+        if (msgTargetId == convTargetId || event.message.fromId == convTargetId) {
+          debugPrint('📍[ChatProvider] 消息属于当前会话，刷新消息列表');
+          loadMessages(_currentConversation!.id);
+        }
+      }
+    });
+
+    // 监听会话更新 → 刷新会话列表
+    _eventBus.on<ConversationUpdatedEvent>().listen((event) {
+      debugPrint('📍[ChatProvider] 📢 收到 ConversationUpdatedEvent, 自动刷新会话列表');
+      loadConversations();
+    });
+
+    // 监听消息撤回 → 刷新相关数据
+    _eventBus.on<MessageRecalledEvent>().listen((event) {
+      debugPrint('📍[ChatProvider] 📢 收到 MessageRecalledEvent');
+      loadConversations();
+      if (_currentConversation != null) {
+        loadMessages(_currentConversation!.id);
+      }
+    });
+
+    debugPrint('✅[ChatProvider] 已开始监听 EventBus 事件（自动刷新）');
+  }
+
+  /// 停止监听事件
+  void stopEventListening() {
+    _isEventListening = false;
+    // EventBus 的监听器会在 Provider 销毁时自动清理
+    debugPrint('[ChatProvider] 已停止监听 EventBus 事件');
   }
 
   void setCurrentConversation(ConversationModel conversation) {
@@ -38,10 +103,17 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('📍[ChatProvider] 开始加载会话列表...');
       final sdkConversations = await _sdkManager.client.getConversationList();
+      debugPrint('📍[ChatProvider] 获取到 ${sdkConversations.length} 个会话');
+
       _conversations = sdkConversations.map((conv) {
+        final displayId = (conv.id != null && conv.id! > 0)
+            ? '${conv.targetType.value}_${conv.targetId}'
+            : conv.conversationId;
+            
         return ConversationModel(
-          id: conv.id?.toString() ?? conv.conversationId,
+          id: displayId,
           name: conv.isPrivate ? '用户 ${conv.targetId}' : '群组 ${conv.targetId}',
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
           lastMessage: conv.lastMessage != null
@@ -51,8 +123,14 @@ class ChatProvider with ChangeNotifier {
           isGroup: conv.isGroup,
         );
       }).toList();
-    } catch (e) {
-      debugPrint('加载会话列表失败: $e');
+
+      debugPrint('📍[ChatProvider] 会话列表转换完成, 数量: ${_conversations.length}');
+      if (_conversations.isNotEmpty) {
+        debugPrint('📍[ChatProvider] 第一个会话: id=${_conversations[0].id}, name=${_conversations[0].name}');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌[ChatProvider] 加载会话列表失败: $e');
+      debugPrint('❌[ChatProvider] 堆栈: $stackTrace');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -97,7 +175,7 @@ class ChatProvider with ChangeNotifier {
       final newMessages = sdkMessages
           .map((msg) => _convertSdkMessageToModel(msg))
           .toList();
-      _messages.addAll(newMessages);
+      _messages.insertAll(0, newMessages);
       notifyListeners();
       return newMessages;
     } catch (e) {
@@ -107,7 +185,10 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> sendMessage(String content, {String type = 'text'}) async {
-    if (_currentConversation == null) return;
+    if (_currentConversation == null) {
+      debugPrint('❌[ChatProvider] sendMessage 失败: _currentConversation 为空');
+      return;
+    }
 
     final tempMessage = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -128,6 +209,13 @@ class ChatProvider with ChangeNotifier {
       final parts = _currentConversation!.id.split('_');
       final targetId = int.tryParse(parts.last ?? '0') ?? 0;
       final isGroup = parts.first == '2';
+      
+      debugPrint('📍[ChatProvider] 发送消息: conversationId=${_currentConversation!.id}, targetId=$targetId, isGroup=$isGroup');
+      
+      if (targetId <= 0) {
+        debugPrint('❌[ChatProvider] ⚠️ targetId 无效 ($targetId)，取消发送');
+        return;
+      }
 
       sdk.Message sentMessage;
       if (isGroup) {
@@ -154,6 +242,11 @@ class ChatProvider with ChangeNotifier {
         );
         notifyListeners();
       }
+      
+      // ✅ 发送成功后也主动刷新一次会话列表（双重保障）
+      debugPrint('📍[ChatProvider] 发送成功，主动刷新会话列表');
+      loadConversations();
+      
     } catch (e) {
       debugPrint('发送消息失败: $e');
       final index = _messages.indexWhere((m) => m.id == tempMessage.id);
@@ -221,7 +314,7 @@ class ChatProvider with ChangeNotifier {
   }
 
   void receiveMessage(MessageModel message) {
-    _messages.insert(0, message);
+    _messages.add(message);
     notifyListeners();
   }
 
@@ -237,6 +330,9 @@ class ChatProvider with ChangeNotifier {
   }
 
   MessageModel _convertSdkMessageToModel(sdk.Message msg) {
+    final currentUserId = _sdkManager.client.currentUserId;
+    final isFromMe = currentUserId != null && msg.fromId == currentUserId;
+
     return MessageModel(
       id: msg.id?.toString() ?? msg.timestamp.toString(),
       conversationId: '',
@@ -247,7 +343,7 @@ class ChatProvider with ChangeNotifier {
           : MessageType.text,
       content: msg.content,
       timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
-      isSent: false,
+      isSent: isFromMe,
       status: MessageStatus.delivered,
     );
   }

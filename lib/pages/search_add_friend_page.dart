@@ -56,18 +56,18 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   }
 
   Future<void> _sendFriendRequest(dynamic user) async {
-    final friendId = int.tryParse(user.id ?? '');
-    if (friendId == null) return;
+    final friendId = user.id;  // 保持为String类型
+    if (friendId == null || friendId.isEmpty) return;
 
     try {
-      await context.read<ContactProvider>().sendFriendRequest(friendId);
+      await context.read<ContactProvider>().sendFriendRequestWithString(friendId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('好友请求已发送')),
         );
         setState(() {
-          _friendStatusMap[friendId] = 1;
+          _friendStatusMap[int.tryParse(friendId) ?? 0] = 1;
         });
       }
     } catch (e) {
@@ -80,7 +80,8 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   }
 
   Widget _buildActionButton(dynamic user) {
-    final friendId = int.tryParse(user.id ?? '');
+    final friendIdStr = user.id;  // 保持String
+    final friendId = int.tryParse(friendIdStr ?? '');
     if (friendId == null) return const SizedBox.shrink();
 
     final status = _friendStatusMap[friendId] ?? 0;

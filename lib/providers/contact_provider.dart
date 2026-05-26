@@ -88,6 +88,18 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
+  Future<void> sendFriendRequestWithString(String friendId) async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return;
+
+      await _apiService.sendFriendRequestWithString(imUserIdStr, friendId);
+    } catch (e) {
+      debugPrint('发送好友请求失败（字符串ID）: $e');
+      rethrow;
+    }
+  }
+
   UserModel _convertFriendToUserModel(Map<String, dynamic> json) {
     return UserModel(
       id: json['friendId']?.toString() ?? json['id']?.toString() ?? '',
@@ -172,6 +184,20 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
+  Future<void> acceptFriendRequestWithString(String friendId) async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return;
+
+      await _apiService.acceptFriendRequestWithString(imUserIdStr, friendId);
+      await loadFriendRequests();
+      await loadContacts();
+    } catch (e) {
+      debugPrint('接受好友请求失败（字符串ID）: $e');
+      rethrow;
+    }
+  }
+
   Future<void> rejectFriendRequest(int friendId) async {
     try {
       final imUserIdStr = await StorageService.getImUserId();
@@ -184,6 +210,19 @@ class ContactProvider with ChangeNotifier {
       await loadFriendRequests();
     } catch (e) {
       debugPrint('拒绝好友请求失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> rejectFriendRequestWithString(String friendId) async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return;
+
+      await _apiService.rejectFriendRequestWithString(imUserIdStr, friendId);
+      await loadFriendRequests();
+    } catch (e) {
+      debugPrint('拒绝好友请求失败（字符串ID）: $e');
       rethrow;
     }
   }
@@ -219,6 +258,19 @@ class _ContactFriendRequestListener implements sdk.FriendRequestListener {
   void onFriendRequestReceived(int fromId, int toId) {
     debugPrint('🔔 收到好友请求通知: fromId=$fromId, toId=$toId');
     _provider._unreadFriendRequestCount++;
+    _provider.loadFriendRequests();
+  }
+
+  @override
+  void onFriendAccepted(int fromId, int toId) {
+    debugPrint('✅ 收到好友接受通知: fromId=$fromId (同意者), toId=$toId (你)');
+    _provider.loadContacts();
+    _provider.loadFriendRequests();
+  }
+
+  @override
+  void onFriendRejected(int fromId, int toId) {
+    debugPrint('❌ 收到好友拒绝通知: fromId=$fromId (拒绝者), toId=$toId (你)');
     _provider.loadFriendRequests();
   }
 }
