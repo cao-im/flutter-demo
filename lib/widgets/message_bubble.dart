@@ -64,27 +64,10 @@ class MessageBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildContent(context),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          DateFormat('HH:mm').format(message.timestamp),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: message.status == MessageStatus.recalled
-                                ? Colors.grey[500]
-                                : isMe
-                                    ? Colors.white70
-                                    : AppTheme.textSecondaryColor,
-                          ),
-                        ),
-                        if (isMe) ...[
-                          const SizedBox(width: 4),
-                          _buildStatusIcon(),
-                        ],
-                      ],
-                    ),
+                    if (isMe) ...[
+                      const SizedBox(height: 6),
+                      _buildStatusIcon(),
+                    ],
                   ],
                 ),
               ),

@@ -53,18 +53,27 @@ class ChatProvider with ChangeNotifier {
     // 监听收到新消息 → 刷新会话列表
     _eventBus.on<MessageReceivedEvent>().listen((event) {
       debugPrint('📍[ChatProvider] 📢 收到 MessageReceivedEvent, 自动刷新会话列表');
-      loadConversations();
-      
-      // 如果当前正在该会话的聊天页面，也刷新消息列表
+
+      // 判断当前是否在该会话的聊天页面
+      bool isInCurrentConversation = false;
       if (_currentConversation != null) {
         final msgTargetId = event.message.toId;
         final convParts = _currentConversation!.id.split('_');
         final convTargetId = int.tryParse(convParts.last ?? '0') ?? 0;
-        
+
         if (msgTargetId == convTargetId || event.message.fromId == convTargetId) {
-          debugPrint('📍[ChatProvider] 消息属于当前会话，刷新消息列表');
+          isInCurrentConversation = true;
+          debugPrint('📍[ChatProvider] 消息属于当前会话，刷新消息列表但不增加未读数');
           loadMessages(_currentConversation!.id);
         }
+      }
+
+      // 如果不在当前会话，正常加载会话列表（包含未读数）
+      if (!isInCurrentConversation) {
+        loadConversations();
+      } else {
+        // 在当前会话时，加载会话列表但清零该会话未读数
+        _loadConversationsAndClearUnread();
       }
     });
 
@@ -107,22 +116,48 @@ class ChatProvider with ChangeNotifier {
       final sdkConversations = await _sdkManager.client.getConversationList();
       debugPrint('📍[ChatProvider] 获取到 ${sdkConversations.length} 个会话');
 
-      _conversations = sdkConversations.map((conv) {
+      final List<ConversationModel> conversationModels = [];
+
+      for (final conv in sdkConversations) {
         final displayId = (conv.id != null && conv.id! > 0)
             ? '${conv.targetType.value}_${conv.targetId}'
             : conv.conversationId;
-            
-        return ConversationModel(
+
+        String displayName;
+        DateTime? lastActiveTime;
+
+        if (conv.isGroup) {
+          try {
+            final group = await _sdkManager.client.getGroup(conv.targetId);
+            displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
+          } catch (e) {
+            debugPrint('⚠️[ChatProvider] 获取群组名称失败: $e');
+            displayName = '群组 ${conv.targetId}';
+          }
+        } else {
+          displayName = '用户${conv.targetId}';
+        }
+
+        if (conv.lastMessage != null) {
+          lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.lastMessage!.timestamp);
+        } else if (conv.updateTime != null) {
+          lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.updateTime);
+        }
+
+        conversationModels.add(ConversationModel(
           id: displayId,
-          name: conv.isPrivate ? '用户 ${conv.targetId}' : '群组 ${conv.targetId}',
+          name: displayName,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
           lastMessage: conv.lastMessage != null
               ? _convertSdkMessageToModel(conv.lastMessage!)
               : null,
           unreadCount: conv.unreadCount,
           isGroup: conv.isGroup,
-        );
-      }).toList();
+          lastActiveTime: lastActiveTime,
+        ));
+      }
+
+      _conversations = conversationModels;
 
       debugPrint('📍[ChatProvider] 会话列表转换完成, 数量: ${_conversations.length}');
       if (_conversations.isNotEmpty) {
@@ -134,6 +169,64 @@ class ChatProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadConversationsAndClearUnread() async {
+    try {
+      final sdkConversations = await _sdkManager.client.getConversationList();
+
+      final List<ConversationModel> conversationModels = [];
+
+      for (final conv in sdkConversations) {
+        final displayId = (conv.id != null && conv.id! > 0)
+            ? '${conv.targetType.value}_${conv.targetId}'
+            : conv.conversationId;
+
+        String displayName;
+        DateTime? lastActiveTime;
+
+        if (conv.isGroup) {
+          try {
+            final group = await _sdkManager.client.getGroup(conv.targetId);
+            displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
+          } catch (e) {
+            displayName = '群组 ${conv.targetId}';
+          }
+        } else {
+          displayName = '用户${conv.targetId}';
+        }
+
+        if (conv.lastMessage != null) {
+          lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.lastMessage!.timestamp);
+        } else if (conv.updateTime != null) {
+          lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.updateTime);
+        }
+
+        // 如果是当前会话，清零未读数
+        int unreadCount = conv.unreadCount;
+        if (_currentConversation != null && displayId == _currentConversation!.id) {
+          unreadCount = 0;
+          debugPrint('📍[ChatProvider] 当前会话未读数已清零: $displayId');
+        }
+
+        conversationModels.add(ConversationModel(
+          id: displayId,
+          name: displayName,
+          participantIds: [conv.targetId.toString(), conv.userId.toString()],
+          lastMessage: conv.lastMessage != null
+              ? _convertSdkMessageToModel(conv.lastMessage!)
+              : null,
+          unreadCount: unreadCount,
+          isGroup: conv.isGroup,
+          lastActiveTime: lastActiveTime,
+        ));
+      }
+
+      _conversations = conversationModels;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌[ChatProvider] 加载会话列表(清零未读)失败: $e');
     }
   }
 
@@ -151,6 +244,8 @@ class ChatProvider with ChangeNotifier {
       _messages = sdkMessages
           .map((msg) => _convertSdkMessageToModel(msg))
           .toList();
+
+      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     } catch (e) {
       debugPrint('加载消息失败: $e');
     } finally {
@@ -202,7 +297,7 @@ class ChatProvider with ChangeNotifier {
       status: MessageStatus.sending,
     );
 
-    _messages.insert(0, tempMessage);
+    _messages.add(tempMessage);
     notifyListeners();
 
     try {
@@ -315,7 +410,34 @@ class ChatProvider with ChangeNotifier {
 
   void receiveMessage(MessageModel message) {
     _messages.add(message);
+    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     notifyListeners();
+  }
+
+  Future<void> markConversationAsRead({
+    required int targetId,
+    required bool isGroup,
+  }) async {
+    try {
+      debugPrint('📍[ChatProvider] 标记会话已读: targetId=$targetId, isGroup=$isGroup');
+
+      await _sdkManager.client.markConversationAsRead(targetId);
+
+      final convIndex = _conversations.indexWhere(
+        (c) => c.id.contains(targetId.toString()),
+      );
+
+      if (convIndex != -1 && _conversations[convIndex].unreadCount > 0) {
+        final updatedConv = _conversations[convIndex].copyWith(
+          unreadCount: 0,
+        );
+        _conversations[convIndex] = updatedConv;
+        debugPrint('✅[ChatProvider] 会话已读标记成功, 未读数已清零');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('❌[ChatProvider] 标记会话已读失败: $e');
+    }
   }
 
   void deleteConversation(String conversationId) {

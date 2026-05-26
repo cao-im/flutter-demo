@@ -29,6 +29,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactProvider>().startListening();
+      context.read<ChatProvider>().startListening();
     });
   }
 
@@ -324,7 +325,7 @@ class _HomePageState extends State<HomePage> {
     if (!provider.isInitialized) {
       try {
         debugPrint('📍[HomePage] SDK未初始化，先初始化...');
-        await provider.initialize('ws://localhost/api/ws');
+        await provider.initialize('ws://192.168.0.138/api/ws');
       } catch (e) {
         debugPrint('❌[HomePage] 初始化失败: $e');
         return;

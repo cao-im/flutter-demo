@@ -55,6 +55,30 @@ class ConversationModel {
       'group_owner': groupOwner,
     };
   }
+
+  ConversationModel copyWith({
+    String? id,
+    String? name,
+    String? avatar,
+    List<String>? participantIds,
+    MessageModel? lastMessage,
+    int? unreadCount,
+    DateTime? lastActiveTime,
+    bool? isGroup,
+    String? groupOwner,
+  }) {
+    return ConversationModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      avatar: avatar ?? this.avatar,
+      participantIds: participantIds ?? this.participantIds,
+      lastMessage: lastMessage ?? this.lastMessage,
+      unreadCount: unreadCount ?? this.unreadCount,
+      lastActiveTime: lastActiveTime ?? this.lastActiveTime,
+      isGroup: isGroup ?? this.isGroup,
+      groupOwner: groupOwner ?? this.groupOwner,
+    );
+  }
 }
 
 class ChatModel {

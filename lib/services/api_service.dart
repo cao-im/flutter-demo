@@ -5,8 +5,8 @@ import '../models/user_model.dart';
 import 'storage_service.dart';
 
 class ApiService {
-  static const String _appServerUrl = 'http://localhost:8080/api';
-  static const String _imServerUrl = 'http://localhost:80/api';
+  static const String _appServerUrl = 'http://192.168.0.138:8080/api';
+  static const String _imServerUrl = 'http://192.168.0.138:80/api';
 
   late final Dio _appDio;
   late final Dio _imDio;

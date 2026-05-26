@@ -7,6 +7,7 @@ import '../models/message_model.dart';
 import '../models/chat_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/time_separator.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -37,8 +38,10 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListener);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ChatProvider>(context, listen: false).setCurrentConversation(
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+      chatProvider.setCurrentConversation(
         ConversationModel(
           id: widget.conversationId,
           name: widget.conversationName,
@@ -46,10 +49,19 @@ class _ChatPageState extends State<ChatPage> {
           isGroup: widget.isGroup,
         ),
       );
-      Provider.of<ChatProvider>(
-        context,
-        listen: false,
-      ).loadMessages(widget.conversationId);
+
+      await chatProvider.loadMessages(widget.conversationId);
+
+      _scrollToBottom();
+
+      final parts = widget.conversationId.split('_');
+      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final isGroup = parts.first == '2';
+
+      await chatProvider.markConversationAsRead(
+        targetId: targetId,
+        isGroup: isGroup,
+      );
     });
   }
 
@@ -68,6 +80,14 @@ class _ChatPageState extends State<ChatPage> {
     if (_scrollController.position.pixels <= 200) {
       _loadMoreMessages();
     }
+  }
+
+  bool _isMessageFromMe(MessageModel message, BuildContext context) {
+    final authUserId = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    )?.user?.id;
+    return message.isSent || message.senderId == authUserId;
   }
 
   Future<void> _loadMoreMessages() async {
@@ -277,25 +297,36 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
 
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _scrollToBottom();
+                  }
+                });
+
                 return ListView.builder(
                   controller: _scrollController,
-                  itemCount: chatProvider.messages.length + (_hasMore ? 1 : 0),
+                  itemCount: chatProvider.messages.length,
                   itemBuilder: (context, index) {
-                    if (_hasMore && index == chatProvider.messages.length) {
-                      return _buildLoadingMoreIndicator();
-                    }
-
                     final message = chatProvider.messages[index];
-                    // 优先使用 isSent 字段判断，其次通过 senderId 比较
-                    final authUserId = Provider.of<AuthProvider>(
-                      context,
-                      listen: false,
-                    )?.user?.id;
-                    final isMe = message.isSent || message.senderId == authUserId;
-                    return MessageBubble(
-                      message: message,
-                      isMe: isMe,
-                      onRetry: () => _retryMessage(message),
+                    final previousMessage = index > 0
+                        ? chatProvider.messages[index - 1]
+                        : null;
+
+                    final showTimeSeparator = shouldShowTimeSeparator(
+                      message.timestamp,
+                      previousMessage?.timestamp,
+                    );
+
+                    return Column(
+                      children: [
+                        if (showTimeSeparator)
+                          TimeSeparator(time: message.timestamp),
+                        MessageBubble(
+                          message: message,
+                          isMe: _isMessageFromMe(message, context),
+                          onRetry: () => _retryMessage(message),
+                        ),
+                      ],
                     );
                   },
                 );
