@@ -7,7 +7,6 @@ import '../providers/connection_provider.dart';
 import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
 import '../services/storage_service.dart';
-import 'package:cao_im_sdk_flutter/storage/hive/hive_viewer.dart';
 import '../widgets/badge_navigation_bar_item.dart';
 
 class HomePage extends StatefulWidget {
@@ -34,61 +33,23 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  /// ✅ 查看 Hive 数据（调试功能）
+  /// ✅ 查看 Drift 数据（调试功能）- TODO: 后续可添加 Drift 数据查看
   Future<void> _viewHiveData() async {
-    try {
-      await HiveViewer.printAllData();
-
-      if (mounted) {
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
-        
-        scaffoldMessenger.hideCurrentSnackBar();
-        
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: const Text('✅ 数据已打印到控制台（按 F12 查看）'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: '导出',
-              textColor: Colors.white,
-              onPressed: () async {
-                scaffoldMessenger.hideCurrentSnackBar();
-                
-                final path = await HiveViewer.exportToFile();
-                if (mounted) {
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(
-                      content: Text('📁 已导出到: $path'),
-                      backgroundColor: Colors.blue,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 4),
-                    ),
-                  );
-                }
-              },
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 查看失败: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+    // TODO: 实现 Drift 数据库查看功能
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('📊 数据库查看功能开发中...'),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
   /// ✅ 清空所有本地存储数据（调试功能）
   Future<void> _clearAllData() async {
-    // 显示确认对话框
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -123,20 +84,18 @@ class _HomePageState extends State<HomePage> {
     if (confirm != true || !mounted) return;
 
     try {
-      await HiveViewer.clearAllData();
+      // TODO: 通过 StorageFactory 清空数据
+      // await HiveViewer.clearAllData();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('🗑️ 所有本地数据已清空'),
+          const SnackBar(
+            content: Text('🗑️ 数据清空功能开发中...'),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
-        
-        // 刷新会话列表
-        Provider.of<ChatProvider>(context, listen: false).loadConversations();
       }
     } catch (e) {
       if (mounted) {
