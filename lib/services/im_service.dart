@@ -1,6 +1,6 @@
 @Deprecated('请使用 IMSdkManager 和 IMClient 替代')
 class IMService {
-  static const String wsUrl = 'ws://localhost:8081/api/ws';
+  static const String wsUrl = 'ws://localhost:8080/api/ws';
 
   bool get isConnected => false;
 
