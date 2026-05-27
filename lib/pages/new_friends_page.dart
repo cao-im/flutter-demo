@@ -20,7 +20,9 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentUserId();
-      Provider.of<ContactProvider>(context, listen: false).loadFriendRequests();
+      final contactProvider = Provider.of<ContactProvider>(context, listen: false);
+      contactProvider.loadFriendRequests();
+      contactProvider.markFriendRequestsAsRead();
     });
   }
 

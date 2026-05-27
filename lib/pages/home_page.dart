@@ -8,6 +8,7 @@ import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
 import '../services/storage_service.dart';
 import 'package:cao_im_sdk_flutter/storage/hive/hive_viewer.dart';
+import '../widgets/badge_navigation_bar_item.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -289,30 +290,39 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+      bottomNavigationBar: Consumer2<ChatProvider, ContactProvider>(
+        builder: (context, chatProvider, contactProvider, _) {
+          final messageUnreadCount = chatProvider.totalUnreadCount;
+          final contactUnreadCount = contactProvider.unreadFriendRequestCount;
+
+          return BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            items: [
+              BadgeNavigationBarHelper.create(
+                icon: Icon(Icons.chat_bubble_outline),
+                activeIcon: Icon(Icons.chat_bubble),
+                label: '消息',
+                unreadCount: messageUnreadCount,
+              ),
+              BadgeNavigationBarHelper.create(
+                icon: Icon(Icons.people_outline),
+                activeIcon: Icon(Icons.people),
+                label: '通讯录',
+                unreadCount: contactUnreadCount,
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline),
+                activeIcon: Icon(Icons.person),
+                label: '我的',
+              ),
+            ],
+          );
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: '消息',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outline),
-            activeIcon: Icon(Icons.people),
-            label: '通讯录',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: '我的',
-          ),
-        ],
       ),
     );
   }

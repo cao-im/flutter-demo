@@ -22,6 +22,10 @@ class ChatProvider with ChangeNotifier {
   List<ConversationModel> get conversations => _conversations;
   bool get isLoading => _isLoading;
 
+  int get totalUnreadCount {
+    return _conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
+  }
+
   void startListening() {
     if (_isListening) return;
     _sdkManager.client.addMessageListener(_ChatMessageListener(this));
