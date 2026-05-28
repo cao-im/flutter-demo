@@ -7,8 +7,8 @@ echo ========================================
 echo.
 
 set "WEB_DIR=%~dp0web"
-set "SQLITE3_WASM_URL=https://github.com/simolus3/sqlite3.dart/releases/download/v2.4.3/sqlite3.wasm"
-set "DRIFT_WORKER_URL=https://github.com/simolus3/drift/releases/download/v2.33.0/drift_worker.dart.js"
+set "SQLITE3_WASM_URL=https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-3.3.2/sqlite3.wasm"
+set "DRIFT_WORKER_URL=https://github.com/simolus3/drift/releases/download/drift-2.33.0/drift_worker.js"
 
 echo [1/4] 检查 web 目录...
 if not exist "%WEB_DIR%" (
@@ -31,19 +31,19 @@ if %ERRORLEVEL% NEQ 0 (
 echo ✅ sqlite3.wasm 下载成功
 echo.
 
-echo [3/4] 下载 drift_worker.dart.js (Drift Web Worker)...
+echo [3/4] 下载 drift_worker.js (Drift Web Worker)...
 echo    来源: %DRIFT_WORKER_URL%
-powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DRIFT_WORKER_URL%' -OutFile '%WEB_DIR%\drift_worker.dart.js' -UseBasicParsing }"
+powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DRIFT_WORKER_URL%' -OutFile '%WEB_DIR%\drift_worker.js' -UseBasicParsing }"
 if %ERRORLEVEL% NEQ 0 (
-    echo ❌ drift_worker.dart.js 下载失败
+    echo ❌ drift_worker.js 下载失败
     pause
     exit /b 1
 )
-echo ✅ drift_worker.dart.js 下载成功
+echo ✅ drift_worker.js 下载成功
 echo.
 
 echo [4/4] 验证文件...
-for %%F in ("%WEB_DIR%\sqlite3.wasm" "%WEB_DIR%\drift_worker.dart.js") do (
+for %%F in ("%WEB_DIR%\sqlite3.wasm" "%WEB_DIR%\drift_worker.js") do (
     if exist %%F (
         echo ✅ %%~nxF 存在 (%%~zF bytes)
     ) else (
@@ -64,7 +64,7 @@ echo   ├── favicon.png
 echo   ├── index.html
 echo   ├── manifest.json
 echo   ├── sqlite3.wasm          ← 新增 (SQLite WASM)
-echo   └── drift_worker.dart.js  ← 新增 (Drift Worker)
+echo   └── drift_worker.js       ← 新增 (Drift Worker)
 echo.
 echo 现在可以运行:
 echo   flutter run -d chrome     (Web 端测试)
