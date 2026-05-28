@@ -33,15 +33,20 @@ class _ChatPageState extends State<ChatPage> {
   bool _isLoadingMore = false;
   int _currentPage = 1;
   bool _hasMore = true;
+  ChatProvider? _chatProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chatProvider = Provider.of<ChatProvider>(context, listen: false);
+  }
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-      chatProvider.setCurrentConversation(
+      _chatProvider?.setCurrentConversation(
         ConversationModel(
           id: widget.conversationId,
           name: widget.conversationName,
@@ -50,7 +55,7 @@ class _ChatPageState extends State<ChatPage> {
         ),
       );
 
-      await chatProvider.loadMessages(widget.conversationId);
+      await _chatProvider?.loadMessages(widget.conversationId);
 
       _scrollToBottom();
 
@@ -58,7 +63,7 @@ class _ChatPageState extends State<ChatPage> {
       final targetId = int.tryParse(parts.last ?? '0') ?? 0;
       final isGroup = parts.first == '2';
 
-      await chatProvider.markConversationAsRead(
+      await _chatProvider?.markConversationAsRead(
         targetId: targetId,
         isGroup: isGroup,
       );
@@ -69,10 +74,9 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    Provider.of<ChatProvider>(
-      context,
-      listen: false,
-    ).clearCurrentConversation();
+    Future.microtask(() {
+      _chatProvider?.clearCurrentConversation();
+    });
     super.dispose();
   }
 
