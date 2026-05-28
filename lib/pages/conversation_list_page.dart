@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/connection_provider.dart';
 import '../models/chat_model.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
@@ -139,92 +140,176 @@ class _ConversationListPageState extends State<ConversationListPage>
           IconButton(icon: const Icon(Icons.add), onPressed: _showCreateDialog),
         ],
       ),
-      body: Consumer<ChatProvider>(
-        builder: (context, chatProvider, _) {
-          if (chatProvider.isLoading && chatProvider.conversations.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Column(
+        children: [
+          Consumer<ConnectionProvider>(
+            builder: (context, connectionProvider, _) {
+              final state = connectionProvider.state;
+              final error = connectionProvider.errorMessage;
 
-          if (chatProvider.conversations.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 80,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '暂无会话',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '点击右上角 + 发起聊天',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            );
-          }
+              if (connectionProvider.isConnected) {
+                return const SizedBox.shrink();
+              }
 
-          return RefreshIndicator(
-            onRefresh: _onRefresh,
-            color: AppTheme.primaryColor,
-            backgroundColor: Colors.white,
-            edgeOffset: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
-            child: ListView.builder(
-              itemCount: chatProvider.conversations.length,
-              itemBuilder: (context, index) {
-                final conversation = chatProvider.conversations[index];
-                return Dismissible(
-                  key: Key(conversation.id.toString()),
-                  direction: DismissDirection.endToStart,
-                  confirmDismiss: (direction) => _confirmDelete(conversation),
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    color: AppTheme.errorColor,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(Icons.delete, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text(
-                          '删除',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
+              if (state == ImConnectionState.connecting ||
+                  state == ImConnectionState.reconnecting) {
+                return Container(
+                  color: Colors.orange,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
-                      ],
-                    ),
-                  ),
-                  onDismissed: (direction) {
-                    _handleDelete(conversation.id);
-                  },
-                  child: ConversationItem(
-                    conversation: conversation,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRouter.chat,
-                        arguments: {
-                          'conversationId': conversation.id,
-                          'conversationName': conversation.name,
-                          'isGroup': conversation.isGroup,
-                        },
-                      );
-                    },
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        state == ImConnectionState.connecting
+                            ? '正在连接...'
+                            : '正在重连...',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12),
+                      ),
+                    ],
                   ),
                 );
-              },
+              }
+
+              if (error != null && error.isNotEmpty) {
+                return Container(
+                  color: Colors.red[400],
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          error.length > 50 ? '${error.substring(0, 47)}...' : error,
+                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Container(
+                color: Colors.grey[400],
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off, size: 14, color: Colors.white),
+                    const SizedBox(width: 6),
+                    const Text('未连接', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                ),
+              );
+            },
+          ),
+          Expanded(
+            child: _buildBody(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, _) {
+        if (chatProvider.isLoading && chatProvider.conversations.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (chatProvider.conversations.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline,
+                  size: 80,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '暂无会话',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '点击右上角 + 发起聊天',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
+              ],
             ),
           );
-        },
-      ),
+        }
+
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: AppTheme.primaryColor,
+          backgroundColor: Colors.white,
+          edgeOffset: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+          child: ListView.builder(
+            itemCount: chatProvider.conversations.length,
+            itemBuilder: (context, index) {
+              final conversation = chatProvider.conversations[index];
+              return Dismissible(
+                key: Key(conversation.id.toString()),
+                direction: DismissDirection.endToStart,
+                confirmDismiss: (direction) => _confirmDelete(conversation),
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: AppTheme.errorColor,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Icon(Icons.delete, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        '删除',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                onDismissed: (direction) {
+                  _handleDelete(conversation.id);
+                },
+                child: ConversationItem(
+                  conversation: conversation,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRouter.chat,
+                      arguments: {
+                        'conversationId': conversation.id,
+                        'conversationName': conversation.name,
+                        'isGroup': conversation.isGroup,
+                      },
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

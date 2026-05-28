@@ -21,8 +21,22 @@ class IMSdkManager {
     print('📍[SdkManager] serverUrl: $serverUrl');
 
     try {
+      final config = IMConfig(
+        enableInfiniteReconnect: true,
+        reconnectBaseDelayMs: 5000,
+        reconnectMaxDelayMs: 10000,
+        customReconnectDelayCalculator: (retryCount) {
+          if (retryCount < 5) {
+            return 5000; // 前5次：每5秒重连一次
+          } else {
+            return 10000; // 第6次及以后：每10秒重连一次
+          }
+        },
+      );
+
       print('📍[SdkManager] 调用 IMClient.init()...');
-      await client.init(serverUrl: serverUrl);
+      print('📍[SdkManager] 重连策略: 前5次每5秒, 之后每10秒');
+      await client.init(serverUrl: serverUrl, config: config);
       print('✅[SdkManager] IMClient.init() 成功');
       _isInitialized = true;
     } catch (e, stack) {

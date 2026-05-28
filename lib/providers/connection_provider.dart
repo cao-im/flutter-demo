@@ -141,4 +141,12 @@ class _ConnectionListener implements ConnectionListener {
     debugPrint('❌[ConnListener] 收到 onReconnectFailed 回调');
     _provider._setError('重连失败，请检查网络');
   }
+
+  @override
+  void onReconnectingStateChanged(bool isReconnecting) {
+    debugPrint('📊[ConnListener] 重连状态变更: $isReconnecting');
+    if (isReconnecting) {
+      _provider._setState(ImConnectionState.reconnecting);
+    }
+  }
 }
