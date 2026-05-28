@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../widgets/adaptive_layout.dart';
 import '../pages/conversation_list_page.dart';
 import '../pages/contacts_page.dart';
 import '../pages/profile_page.dart';
+import '../pages/desktop_home_page.dart';
 import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/badge_navigation_bar_item.dart';
@@ -33,6 +35,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    return AdaptiveLayout(
+      mobile: _buildMobileLayout(),
+      desktop: const DesktopHomePage(),
+    );
+  }
+
+  Widget _buildMobileLayout() {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: Consumer2<ChatProvider, ContactProvider>(

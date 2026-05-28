@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
+import '../providers/layout_provider.dart';
 import '../models/chat_model.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/conversation_item.dart';
 
 class ConversationListPage extends StatefulWidget {
-  const ConversationListPage({super.key});
+  final bool isEmbeddedMode;
+  final void Function(String conversationId, String conversationName, bool isGroup)? onConversationSelected;
+
+  const ConversationListPage({
+    super.key,
+    this.isEmbeddedMode = false,
+    this.onConversationSelected,
+  });
 
   @override
   State<ConversationListPage> createState() => _ConversationListPageState();
@@ -74,64 +82,76 @@ class _ConversationListPageState extends State<ConversationListPage>
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     chatProvider.deleteConversation(conversationId);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('会话已删除'),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('会话已删除'),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
   }
 
   void _showCreateDialog() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.person_add,
-                  color: AppTheme.primaryColor,
+    try {
+      showModalBottomSheet(
+        context: context,
+        useRootNavigator: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.person_add,
+                    color: AppTheme.primaryColor,
+                  ),
+                  title: const Text('发起单聊'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    final messenger = ScaffoldMessenger.maybeOf(context);
+                    if (messenger != null) {
+                      messenger.showSnackBar(const SnackBar(content: Text('功能开发中...')));
+                    }
+                  },
                 ),
-                title: const Text('发起单聊'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('功能开发中...')));
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.group_add,
-                  color: AppTheme.primaryColor,
+                ListTile(
+                  leading: const Icon(
+                    Icons.group_add,
+                    color: AppTheme.primaryColor,
+                  ),
+                  title: const Text('发起群聊'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRouter.groupCreate);
+                  },
                 ),
-                title: const Text('发起群聊'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, AppRouter.groupCreate);
-                },
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('显示底部弹窗失败: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     
-    // ✅ 每次构建时检查是否需要加载数据（处理页面重新进入的情况）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadConversationsIfNeeded();
     });
+    
+    if (widget.isEmbeddedMode) {
+      return _buildEmbeddedBody();
+    }
     
     return Scaffold(
       appBar: AppBar(
@@ -224,6 +244,111 @@ class _ConversationListPageState extends State<ConversationListPage>
     );
   }
 
+  Widget _buildEmbeddedBody() {
+    return Material(
+      color: AppTheme.surfaceColor,
+      child: Column(
+        children: [
+          Consumer<ConnectionProvider>(
+            builder: (context, connectionProvider, _) {
+              final state = connectionProvider.state;
+              final error = connectionProvider.errorMessage;
+
+              if (connectionProvider.isConnected) {
+                return const SizedBox.shrink();
+              }
+
+              if (state == ImConnectionState.connecting ||
+                  state == ImConnectionState.reconnecting) {
+                return Container(
+                  color: Colors.orange,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        state == ImConnectionState.connecting
+                            ? '正在连接...'
+                            : '正在重连...',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (error != null && error.isNotEmpty) {
+                return Container(
+                  color: Colors.red[400],
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          error.length > 50 ? '${error.substring(0, 47)}...' : error,
+                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Container(
+                color: Colors.grey[400],
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off, size: 14, color: Colors.white),
+                    const SizedBox(width: 6),
+                    const Text('未连接', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                ),
+              );
+            },
+          ),
+          _buildEmbeddedSearchBox(),
+          Expanded(child: _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmbeddedSearchBox() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: '搜索',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody() {
     return Consumer<ChatProvider>(
       builder: (context, chatProvider, _) {
@@ -256,55 +381,139 @@ class _ConversationListPageState extends State<ConversationListPage>
           );
         }
 
+        if (widget.isEmbeddedMode) {
+          return Consumer<LayoutProvider>(
+            builder: (context, layoutProvider, _) {
+              final selectedId = layoutProvider.currentConversationId;
+
+              return ListView.builder(
+                itemCount: chatProvider.conversations.length,
+                itemBuilder: (context, index) {
+                  final conversation = chatProvider.conversations[index];
+                  final isSelected = conversation.id == selectedId;
+
+                  return Dismissible(
+                    key: Key(conversation.id.toString()),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (direction) => _confirmDelete(conversation),
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: AppTheme.errorColor,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(Icons.delete, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            '删除',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    onDismissed: (direction) {
+                      _handleDelete(conversation.id);
+                    },
+                    child: ConversationItem(
+                      conversation: conversation,
+                      isSelected: isSelected,
+                      onTap: () {
+                        if (widget.onConversationSelected != null) {
+                          layoutProvider.selectConversation(
+                            conversation.id,
+                            conversation.name,
+                            conversation.isGroup,
+                          );
+                          widget.onConversationSelected!(
+                            conversation.id,
+                            conversation.name,
+                            conversation.isGroup,
+                          );
+                        }
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        }
+
         return RefreshIndicator(
           onRefresh: _onRefresh,
           color: AppTheme.primaryColor,
           backgroundColor: Colors.white,
           edgeOffset: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
-          child: ListView.builder(
-            itemCount: chatProvider.conversations.length,
-            itemBuilder: (context, index) {
-              final conversation = chatProvider.conversations[index];
-              return Dismissible(
-                key: Key(conversation.id.toString()),
-                direction: DismissDirection.endToStart,
-                confirmDismiss: (direction) => _confirmDelete(conversation),
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  color: AppTheme.errorColor,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Icon(Icons.delete, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text(
-                        '删除',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
+          child: Consumer<LayoutProvider>(
+            builder: (context, layoutProvider, _) {
+              final selectedId = layoutProvider.currentConversationId;
+
+              return ListView.builder(
+                itemCount: chatProvider.conversations.length,
+                itemBuilder: (context, index) {
+                  final conversation = chatProvider.conversations[index];
+                  final isSelected = widget.isEmbeddedMode && conversation.id == selectedId;
+
+                  return Dismissible(
+                    key: Key(conversation.id.toString()),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (direction) => _confirmDelete(conversation),
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: AppTheme.errorColor,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(Icons.delete, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            '删除',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                onDismissed: (direction) {
-                  _handleDelete(conversation.id);
-                },
-                child: ConversationItem(
-                  conversation: conversation,
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRouter.chat,
-                      arguments: {
-                        'conversationId': conversation.id,
-                        'conversationName': conversation.name,
-                        'isGroup': conversation.isGroup,
+                    ),
+                    onDismissed: (direction) {
+                      _handleDelete(conversation.id);
+                    },
+                    child: ConversationItem(
+                      conversation: conversation,
+                      isSelected: isSelected,
+                      onTap: () {
+                        if (widget.isEmbeddedMode && widget.onConversationSelected != null) {
+                          layoutProvider.selectConversation(
+                            conversation.id,
+                            conversation.name,
+                            conversation.isGroup,
+                          );
+                          widget.onConversationSelected!(
+                            conversation.id,
+                            conversation.name,
+                            conversation.isGroup,
+                          );
+                        } else {
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.chat,
+                            arguments: {
+                              'conversationId': conversation.id,
+                              'conversationName': conversation.name,
+                              'isGroup': conversation.isGroup,
+                            },
+                          );
+                        }
                       },
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),

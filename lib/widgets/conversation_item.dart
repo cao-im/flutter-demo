@@ -8,12 +8,14 @@ class ConversationItem extends StatelessWidget {
   final ConversationModel conversation;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
+  final bool isSelected;
 
   const ConversationItem({
     super.key,
     required this.conversation,
     required this.onTap,
     this.onDelete,
+    this.isSelected = false,
   });
 
   @override
@@ -23,6 +25,7 @@ class ConversationItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
           border: Border(
             bottom: BorderSide(color: AppTheme.dividerColor, width: 0.5),
           ),
