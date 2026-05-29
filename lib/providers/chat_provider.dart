@@ -449,6 +449,37 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearAllChatData() async {
+    debugPrint('🗑️[ChatProvider] 开始清空所有聊天数据（物理删除）...');
+
+    try {
+      for (final conv in _conversations) {
+        final parts = conv.id.split('_');
+        final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+        if (targetId > 0) {
+          try {
+            await _sdkManager.client.deleteConversation(targetId);
+            debugPrint('✅[ChatProvider] 已物理删除会话: ${conv.name} ($targetId)');
+          } catch (e) {
+            debugPrint('⚠️[ChatProvider] 删除会话失败 $targetId: $e');
+          }
+        }
+      }
+
+      _conversations.clear();
+      _messages.clear();
+      _currentConversation = null;
+
+      debugPrint('✅[ChatProvider] 所有聊天数据已清空');
+    } catch (e, stackTrace) {
+      debugPrint('❌[ChatProvider] 清空聊天数据失败: $e');
+      debugPrint('❌[ChatProvider] 堆栈: $stackTrace');
+      rethrow;
+    } finally {
+      notifyListeners();
+    }
+  }
+
   void clearCurrentConversation() {
     _currentConversation = null;
     _messages = [];
