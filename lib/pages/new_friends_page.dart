@@ -136,7 +136,10 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
       return 'accepted';
     }
 
-    if (userId == _currentUserId) {
+    final currentUserIdStr = _currentUserId.toString();
+    final userIdStr = userId?.toString();
+
+    if (userIdStr == currentUserIdStr) {
       return 'sent';
     } else {
       return 'received';
