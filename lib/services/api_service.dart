@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:cao_im_sdk_flutter/utils/network_log_interceptor.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' show NetworkLogInterceptor;
 import '../models/user_model.dart';
 import 'storage_service.dart';
 
@@ -17,12 +19,30 @@ class ApiService {
   }
 
   Dio _createDio(String baseUrl) {
-    return Dio(BaseOptions(
+    final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {'Content-Type': 'application/json'},
+      responseType: ResponseType.plain,
     ));
+
+    dio.interceptors.add(NetworkLogInterceptor());
+
+    return dio;
+  }
+
+  dynamic _parseResponse(dynamic responseData) {
+    if (responseData is String) {
+      try {
+        return jsonDecode(responseData);
+      } catch (e) {
+        debugPrint('JSON 解析失败: $e');
+        debugPrint('原始响应数据: $responseData');
+        throw Exception('服务器响应格式错误');
+      }
+    }
+    return responseData;
   }
 
   Future<void> _attachToken(Dio dio) async {
@@ -51,7 +71,8 @@ class ApiService {
         'username': username,
         'password': password,
       });
-      return response.data as Map<String, dynamic>;
+      final data = _parseResponse(response.data);
+      return data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw Exception('登录失败: ${e.message}');
     }
@@ -66,7 +87,8 @@ class ApiService {
         'password': password,
         'nickname': nickname,
       });
-      return response.data as Map<String, dynamic>;
+      final data = _parseResponse(response.data);
+      return data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw Exception('注册失败: ${e.message}');
     }
@@ -76,15 +98,15 @@ class ApiService {
     try {
       await _attachImToken(_imDio);
       final response = await _imDio.get('/user/info');
-      final data = response.data;
-      
+      final data = _parseResponse(response.data);
+
       if (data is Map<String, dynamic>) {
         final userData = data['data'];
         if (userData != null && userData is Map<String, dynamic>) {
           return UserModel.fromJson(userData);
         }
       }
-      
+
       throw Exception('用户信息响应格式错误');
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -98,7 +120,7 @@ class ApiService {
     try {
       await _attachImToken(_imDio);
       final response = await _imDio.get('/friend/list', queryParameters: {'userId': userId});
-      final data = response.data;
+      final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as List<dynamic>;
       }
@@ -195,7 +217,7 @@ class ApiService {
       final response = await _imDio.get('/friend/search-users', queryParameters: {
         'keyword': keyword,
       });
-      final data = response.data;
+      final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as List<dynamic>;
       }
@@ -209,7 +231,7 @@ class ApiService {
     try {
       await _attachImToken(_imDio);
       final response = await _imDio.get('/friend/requests', queryParameters: {'userId': userId});
-      final data = response.data;
+      final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as List<dynamic>;
       }
@@ -226,7 +248,7 @@ class ApiService {
         'userId': userId,
         'friendId': friendId,
       });
-      final data = response.data;
+      final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as int ?? 0;
       }

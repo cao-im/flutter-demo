@@ -8,6 +8,7 @@ class UserModel {
   final DateTime? createdAt;
   final bool isOnline;
   final String? imUserId;
+  final int friendStatus;
 
   UserModel({
     required this.id,
@@ -19,6 +20,7 @@ class UserModel {
     this.createdAt,
     this.isOnline = false,
     this.imUserId,
+    this.friendStatus = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class UserModel {
           : null,
       isOnline: json['is_online'] ?? false,
       imUserId: json['im_user_id']?.toString() ?? json['imUserId']?.toString(),
+      friendStatus: json['friend_status'] ?? json['friendStatus'] ?? 0,
     );
   }
 
@@ -48,6 +51,7 @@ class UserModel {
       'created_at': createdAt?.toIso8601String(),
       'is_online': isOnline,
       'im_user_id': imUserId,
+      'friend_status': friendStatus,
     };
   }
 
@@ -61,6 +65,7 @@ class UserModel {
     DateTime? createdAt,
     bool? isOnline,
     String? imUserId,
+    int? friendStatus,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -72,6 +77,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       isOnline: isOnline ?? this.isOnline,
       imUserId: imUserId ?? this.imUserId,
+      friendStatus: friendStatus ?? this.friendStatus,
     );
   }
 }

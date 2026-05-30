@@ -61,7 +61,7 @@ class ContactProvider with ChangeNotifier {
       debugPrint('🔍 搜索关键词: $keyword');
       debugPrint('🔍 服务端返回 ${allResults.length} 条结果');
       for (final u in allResults) {
-        debugPrint('🔍   用户: id=${u.id}, username=${u.username}');
+        debugPrint('🔍   用户: id=${u.id}, username=${u.username}, friendStatus=${u.friendStatus}');
       }
       _searchResults = allResults;
       debugPrint('🔍 最终结果数: ${_searchResults.length}');
@@ -69,6 +69,14 @@ class ContactProvider with ChangeNotifier {
       debugPrint('搜索用户失败: $e');
       _searchResults = [];
     } finally {
+      notifyListeners();
+    }
+  }
+
+  void updateSearchResultFriendStatus(String friendId, int status) {
+    final index = _searchResults.indexWhere((u) => u.id == friendId);
+    if (index != -1) {
+      _searchResults[index] = _searchResults[index].copyWith(friendStatus: status);
       notifyListeners();
     }
   }

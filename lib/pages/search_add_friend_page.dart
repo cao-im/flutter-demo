@@ -14,7 +14,14 @@ class SearchAddFriendPage extends StatefulWidget {
 class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-  Map<int, int> _friendStatusMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ContactProvider>().clearSearchResults();
+    });
+  }
 
   @override
   void dispose() {
@@ -27,36 +34,21 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
 
     setState(() {
       _isSearching = true;
-      _friendStatusMap.clear();
     });
 
     try {
       await context.read<ContactProvider>().searchUsers(keyword.trim());
-      _checkAllFriendsStatus();
     } finally {
       if (mounted) {
-        setState(() => _isSearching = false);
-      }
-    }
-  }
-
-  Future<void> _checkAllFriendsStatus() async {
-    final contactProvider = context.read<ContactProvider>();
-    for (final user in contactProvider.searchResults) {
-      final friendId = int.tryParse(user.id ?? '');
-      if (friendId != null) {
-        final status = await contactProvider.checkFriendStatus(friendId);
-        if (mounted) {
-          setState(() {
-            _friendStatusMap[friendId] = status;
-          });
-        }
+        setState(() {
+          _isSearching = false;
+        });
       }
     }
   }
 
   Future<void> _sendFriendRequest(dynamic user) async {
-    final friendId = user.id;  // 保持为String类型
+    final friendId = user.id;
     if (friendId == null || friendId.isEmpty) return;
 
     try {
@@ -66,9 +58,8 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('好友请求已发送')),
         );
-        setState(() {
-          _friendStatusMap[int.tryParse(friendId) ?? 0] = 1;
-        });
+
+        context.read<ContactProvider>().updateSearchResultFriendStatus(friendId, 1);
       }
     } catch (e) {
       if (mounted) {
@@ -80,11 +71,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
   }
 
   Widget _buildActionButton(dynamic user) {
-    final friendIdStr = user.id;  // 保持String
-    final friendId = int.tryParse(friendIdStr ?? '');
-    if (friendId == null) return const SizedBox.shrink();
-
-    final status = _friendStatusMap[friendId] ?? 0;
+    final status = user.friendStatus ?? 0;
 
     if (status == 2) {
       return Container(
