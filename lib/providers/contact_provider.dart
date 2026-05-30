@@ -3,9 +3,11 @@ import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/contact_database_service.dart';
 
 class ContactProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
+  final ContactDatabaseService _dbService = ContactDatabaseService();
   final sdk.IMClient _imClient = sdk.IMClient.instance;
   List<UserModel> _contacts = [];
   List<UserModel> _searchResults = [];
@@ -20,10 +22,82 @@ class ContactProvider with ChangeNotifier {
   int get unreadFriendRequestCount => _unreadFriendRequestCount;
   bool get isLoading => _isLoading;
 
+  Map<String, List<UserModel>> get groupedContacts {
+    final Map<String, List<UserModel>> grouped = {};
+    for (final contact in _contacts) {
+      final initial = _getPinyinInitial(contact.nickname.isNotEmpty ? contact.nickname : contact.username);
+      if (!grouped.containsKey(initial)) {
+        grouped[initial] = [];
+      }
+      grouped[initial]!.add(contact);
+    }
+
+    final sortedKeys = grouped.keys.toList()..sort();
+    return Map.fromEntries(
+      sortedKeys.map((key) => MapEntry(key, grouped[key]!)),
+    );
+  }
+
+  String _getPinyinInitial(String name) {
+    if (name.isEmpty) return '#';
+
+    final firstChar = name[0];
+    final codeUnit = firstChar.codeUnitAt(0);
+
+    if (codeUnit >= 0x4E00 && codeUnit <= 0x9FFF) {
+      return firstChar.toUpperCase();
+    } else if (codeUnit >= 0x41 && codeUnit <= 0x5A) {
+      return firstChar;
+    } else if (codeUnit >= 0x61 && codeUnit <= 0x7A) {
+        return firstChar.toUpperCase();
+    } else {
+      return '#';
+    }
+  }
+
   Future<void> loadContacts() async {
     _isLoading = true;
     notifyListeners();
 
+    try {
+      await _initDatabaseIfNeeded();
+
+      final localContacts = await loadContactsFromLocal();
+      if (localContacts.isNotEmpty) {
+        _contacts = localContacts;
+        debugPrint('📱 从本地数据库加载了 ${_contacts.length} 个联系人');
+        notifyListeners();
+      }
+
+      syncContactsFromServer().then((_) {
+        debugPrint('🔄 后台同步完成');
+      }).catchError((e) {
+        debugPrint('⚠️ 后台同步失败（使用本地数据）: $e');
+      });
+    } catch (e) {
+      debugPrint('加载联系人失败: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _initDatabaseIfNeeded() async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return;
+
+      final userId = int.tryParse(imUserIdStr);
+      if (userId == null || userId <= 0) return;
+
+      await _dbService.init(userId: userId);
+      debugPrint('✅ 数据库初始化完成 (userId=$userId)');
+    } catch (e) {
+      debugPrint('⚠️ 数据库初始化失败: $e');
+    }
+  }
+
+  Future<void> syncContactsFromServer() async {
     try {
       final imUserIdStr = await StorageService.getImUserId();
       if (imUserIdStr == null) return;
@@ -32,14 +106,83 @@ class ContactProvider with ChangeNotifier {
       if (userId == null) return;
 
       final data = await _apiService.getFriendList(userId);
-      _contacts = data
+      final serverContacts = data
           .map((json) => _convertFriendToUserModel(json as Map<String, dynamic>))
           .toList();
+
+      if (serverContacts.isNotEmpty) {
+        await _dbService.upsertContacts(serverContacts);
+        debugPrint('🔄 已从服务器同步 ${serverContacts.length} 个联系人到本地数据库');
+
+        _contacts = await loadContactsFromLocal();
+        notifyListeners();
+      }
     } catch (e) {
-      debugPrint('加载联系人失败: $e');
-    } finally {
-      _isLoading = false;
+      debugPrint('❌ 从服务器同步联系人失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<UserModel>> loadContactsFromLocal() async {
+    try {
+      final contacts = await _dbService.getAllContacts();
+      debugPrint('📖 从本地数据库读取 ${contacts.length} 个联系人');
+      return contacts;
+    } catch (e) {
+      debugPrint('❌ 从本地数据库加载联系人失败: $e');
+      return [];
+    }
+  }
+
+  Future<void> addContactToLocal(UserModel contact) async {
+    try {
+      await _dbService.upsertContacts([contact]);
+      debugPrint('➕ 联系人已添加到本地: ${contact.nickname} (${contact.id})');
+
+      final existingIndex = _contacts.indexWhere((c) => c.id == contact.id);
+      if (existingIndex != -1) {
+        _contacts[existingIndex] = contact;
+      } else {
+        _contacts.add(contact);
+      }
       notifyListeners();
+    } catch (e) {
+      debugPrint('❌ 添加联系人到本地数据库失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteContactFromLocal(String contactId) async {
+    try {
+      await _dbService.deleteContact(contactId);
+      debugPrint('🗑️ 已从本地数据库删除联系人: $contactId');
+
+      _contacts.removeWhere((c) => c.id == contactId);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ 从本地数据库删除联系人失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteFriend(String contactId) async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return;
+
+      final userId = int.tryParse(imUserIdStr);
+      if (userId == null) return;
+
+      final friendIdInt = int.tryParse(contactId);
+      if (friendIdInt == null) return;
+
+      await _apiService.deleteFriend(userId, friendIdInt);
+      debugPrint('🗑️ 已从服务器删除好友: $contactId');
+
+      await deleteContactFromLocal(contactId);
+    } catch (e) {
+      debugPrint('❌ 删除好友失败: $e');
+      rethrow;
     }
   }
 
@@ -184,8 +327,13 @@ class ContactProvider with ChangeNotifier {
       if (userId == null) return;
 
       await _apiService.acceptFriendRequest(friendId, userId);
+
+      final newContact = await _fetchAndConvertFriend(friendId.toString());
+      if (newContact != null) {
+        await addContactToLocal(newContact);
+      }
+
       await loadFriendRequests();
-      await loadContacts();
     } catch (e) {
       debugPrint('接受好友请求失败: $e');
       rethrow;
@@ -198,11 +346,44 @@ class ContactProvider with ChangeNotifier {
       if (imUserIdStr == null) return;
 
       await _apiService.acceptFriendRequestWithString(imUserIdStr, friendId);
+
+      final newContact = await _fetchAndConvertFriend(friendId);
+      if (newContact != null) {
+        await addContactToLocal(newContact);
+      }
+
       await loadFriendRequests();
-      await loadContacts();
     } catch (e) {
       debugPrint('接受好友请求失败（字符串ID）: $e');
       rethrow;
+    }
+  }
+
+  Future<UserModel?> _fetchAndConvertFriend(String friendId) async {
+    try {
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) return null;
+
+      final userId = int.tryParse(imUserIdStr);
+      if (userId == null) return null;
+
+      final data = await _apiService.getFriendList(userId);
+      final friendData = data.firstWhere(
+        (json) {
+          final jsonMap = json as Map<String, dynamic>;
+          return jsonMap['friendId']?.toString() == friendId ||
+              jsonMap['id']?.toString() == friendId;
+        },
+        orElse: () => null,
+      );
+
+      if (friendData != null) {
+        return _convertFriendToUserModel(friendData as Map<String, dynamic>);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ 获取新好友信息失败: $e');
+      return null;
     }
   }
 

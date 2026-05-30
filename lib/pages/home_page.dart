@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../widgets/adaptive_layout.dart';
 import '../pages/conversation_list_page.dart';
@@ -30,7 +31,20 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactProvider>().startListening();
       context.read<ChatProvider>().startListening();
+
+      _syncContactsAutomatically();
     });
+  }
+
+  Future<void> _syncContactsAutomatically() async {
+    try {
+      final contactProvider = context.read<ContactProvider>();
+      debugPrint('🚀 HomePage: 开始自动同步联系人...');
+      await contactProvider.syncContactsFromServer();
+      debugPrint('✅ HomePage: 联系人自动同步完成');
+    } catch (e) {
+      debugPrint('⚠️ HomePage: 联系人自动同步失败（不影响用户体验）: $e');
+    }
   }
 
   @override

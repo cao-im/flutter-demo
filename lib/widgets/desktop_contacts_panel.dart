@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user_model.dart';
 import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/layout_provider.dart';
@@ -21,6 +22,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   String _searchText = '';
   _PanelView _currentView = _PanelView.contacts;
   int? _currentUserId;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -63,16 +66,33 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
   Widget _buildSearchBar() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
+      ),
       child: TextField(
         controller: _searchController,
+        style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
-          hintText: '搜索',
+          hintText: '搜索联系人',
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
           prefixIcon: Icon(Icons.search, size: 20, color: Colors.grey[500]),
+          suffixIcon: _searchText.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, size: 18, color: Colors.grey[500]),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchText = '');
+                  },
+                )
+              : null,
           filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         ),
       ),
     );
@@ -81,60 +101,265 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   Widget _buildContactsContent() {
     return Consumer<ContactProvider>(
       builder: (context, contactProvider, _) {
-        return ListView(padding: EdgeInsets.zero, children: [
-          _buildSpecialSection(icon: Icons.person_add_outlined, title: '新的朋友', badgeCount: contactProvider.unreadFriendRequestCount, onTap: () => setState(() => _currentView = _PanelView.newFriends)),
-          _buildExpandableSection(icon: Icons.group_outlined, title: '群聊', count: null, isExpanded: false, onTap: () {}),
-          _buildExpandableSection(icon: Icons.article_outlined, title: '公众号', count: null, isExpanded: false, onTap: () {}),
-          _buildExpandableSection(icon: Icons.support_agent_outlined, title: '服务号', count: null, isExpanded: false, onTap: () {}),
-          Divider(height: 1, indent: 56),
-          _buildContactHeader(contactProvider.contacts.length),
-          ..._buildContactList(contactProvider),
-        ]);
+        final groupedContacts = contactProvider.groupedContacts;
+        final allContacts = contactProvider.contacts;
+
+        if (allContacts.isEmpty && !contactProvider.isLoading) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text('暂无联系人', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                const SizedBox(height: 8),
+                Text('添加好友开始聊天吧', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+              ],
+            ),
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                padding: EdgeInsets.zero,
+                children: [
+                  _buildSpecialSection(
+                    icon: Icons.person_add_outlined,
+                    title: '新的朋友',
+                    badgeCount: contactProvider.unreadFriendRequestCount,
+                    onTap: () => setState(() => _currentView = _PanelView.newFriends),
+                  ),
+                  _buildExpandableSection(icon: Icons.group_outlined, title: '群聊', count: null, isExpanded: false, onTap: () {}),
+                  _buildExpandableSection(icon: Icons.article_outlined, title: '公众号', count: null, isExpanded: false, onTap: () {}),
+                  _buildExpandableSection(icon: Icons.support_agent_outlined, title: '服务号', count: null, isExpanded: false, onTap: () {}),
+                  Divider(height: 1, indent: 56, color: Colors.grey[200]),
+                  ..._buildContactList(contactProvider),
+                ],
+              ),
+            ),
+            if (_searchText.isEmpty && groupedContacts.isNotEmpty)
+              _buildAlphabetIndex(groupedContacts.keys.toList()),
+          ],
+        );
       },
+    );
+  }
+
+  List<Widget> _buildContactList(ContactProvider contactProvider) {
+    final contacts = contactProvider.contacts;
+    final groupedContacts = contactProvider.groupedContacts;
+
+    if (contacts.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            child: Text('暂无联系人', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+          ),
+        )
+      ];
+    }
+
+    if (_searchText.isNotEmpty) {
+      return _buildSearchResults(contacts);
+    }
+
+    return _buildGroupedContactList(groupedContacts);
+  }
+
+  List<Widget> _buildSearchResults(List<dynamic> contacts) {
+    final filtered = contacts.where((c) {
+      final name = c.nickname?.isNotEmpty == true ? c.nickname : (c.username ?? '');
+      final searchLower = _searchText.toLowerCase();
+      return name.toLowerCase().contains(searchLower) ||
+             (c.username ?? '').toLowerCase().contains(searchLower);
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+                const SizedBox(height: 12),
+                Text('无匹配结果', style: TextStyle(color: Colors.grey[500], fontSize: 15)),
+                const SizedBox(height: 4),
+                Text('尝试其他关键词', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+              ],
+            ),
+          ),
+        )
+      ];
+    }
+
+    return [
+      Padding(
+        padding: const EdgeInsets.only(left: 56, top: 12, bottom: 8),
+        child: Text(
+          '搜索结果 (${filtered.length})',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor),
+        ),
+      ),
+      ...filtered.map((c) => _buildContactItem(c)),
+    ];
+  }
+
+  List<Widget> _buildGroupedContactList(Map<String, List<UserModel>> groupedContacts) {
+    List<Widget> result = [];
+
+    for (final entry in groupedContacts.entries) {
+      result.add(_buildGroupHeader(entry.key, entry.value.length));
+      result.addAll(entry.value.map((contact) => _buildContactItem(contact)));
+    }
+
+    return result;
+  }
+
+  Widget _buildGroupHeader(String letter, int count) {
+    return Container(
+      padding: const EdgeInsets.only(left: 56, top: 14, bottom: 6),
+      child: Row(
+        children: [
+          Text(
+            letter,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primaryColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$count',
+              style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlphabetIndex(List<String> letters) {
+    return Container(
+      width: 28,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: ListView.builder(
+        itemCount: letters.length,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemBuilder: (context, index) {
+          final letter = letters[index];
+          return InkWell(
+            onTap: () => _scrollToLetter(letter),
+            child: Container(
+              height: 22,
+              alignment: Alignment.center,
+              child: Text(
+                letter,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryColor.withOpacity(0.7),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _scrollToLetter(String letter) {
+    // 查找对应字母的分组标题位置并滚动
+    // 这里可以通过 GlobalKey 或计算偏移量实现精确滚动
+    // 简化实现：提示用户可以使用搜索功能
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text('跳转到 $letter 分组'),
+        duration: const Duration(milliseconds: 800),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        backgroundColor: AppTheme.primaryColor,
+      ),
     );
   }
 
   Widget _buildNewFriendsContent() {
     return Consumer<ContactProvider>(
       builder: (context, contactProvider, _) {
-        WidgetsBinding.instance.addPostFrameCallback((_) { contactProvider.markFriendRequestsAsRead(); });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          contactProvider.markFriendRequestsAsRead();
+        });
         final requests = contactProvider.friendRequests;
 
         if (requests.isEmpty) {
-          return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.mail_outline, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
-            Text('暂无好友请求', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-            SizedBox(height: 8),
-            Text('当有人添加你为好友时会显示在这里', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-          ]));
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.mail_outline, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text('暂无好友请求', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                const SizedBox(height: 8),
+                Text('当有人添加你为好友时会显示在这里', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+              ],
+            ),
+          );
         }
 
         final receivedRequests = _filterRequestsByType(requests, 'received');
         final sentRequests = _filterRequestsByType(requests, 'sent');
         final acceptedRequests = _filterRequestsByType(requests, 'accepted');
 
-        return ListView(padding: EdgeInsets.zero, children: [
-          InkWell(onTap: () => setState(() => _currentView = _PanelView.contacts), child: Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), child: Row(children: [
-            Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.primaryColor),
-            SizedBox(width: 8),
-            Text('返回通讯录', style: TextStyle(fontSize: 15, color: AppTheme.primaryColor)),
-          ]))),
-          Divider(height: 1, indent: 12, endIndent: 12),
-          if (receivedRequests.isNotEmpty) ...[
-            _buildNewFriendsSectionHeader('收到的好友请求', receivedRequests.length),
-            ...receivedRequests.map((r) => _buildRequestItem(r)),
+        return ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _currentView = _PanelView.contacts),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text('返回通讯录', style: TextStyle(fontSize: 15, color: AppTheme.primaryColor)),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 1, indent: 16, endIndent: 16, color: Colors.grey[200]),
+            if (receivedRequests.isNotEmpty) ...[
+              _buildNewFriendsSectionHeader('收到的好友请求', receivedRequests.length),
+              ...receivedRequests.map((r) => _buildRequestItem(r)),
+            ],
+            if (sentRequests.isNotEmpty) ...[
+              _buildNewFriendsSectionHeader('我发起的请求', sentRequests.length),
+              ...sentRequests.map((r) => _buildRequestItem(r)),
+            ],
+            if (acceptedRequests.isNotEmpty) ...[
+              _buildNewFriendsSectionHeader('已添加的好友', acceptedRequests.length),
+              ...acceptedRequests.map((r) => _buildRequestItem(r)),
+            ],
+            const SizedBox(height: 20),
           ],
-          if (sentRequests.isNotEmpty) ...[
-            _buildNewFriendsSectionHeader('我发起的请求', sentRequests.length),
-            ...sentRequests.map((r) => _buildRequestItem(r)),
-          ],
-          if (acceptedRequests.isNotEmpty) ...[
-            _buildNewFriendsSectionHeader('已添加的好友', acceptedRequests.length),
-            ...acceptedRequests.map((r) => _buildRequestItem(r)),
-          ],
-          SizedBox(height: 20),
-        ]);
+        );
       },
     );
   }
@@ -149,73 +374,277 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     return 'sent';
   }
 
-  List<Map<String, dynamic>> _filterRequestsByType(List<Map<String, dynamic>> requests, String type) => requests.where((r) => _getRequestType(r) == type).toList();
+  List<Map<String, dynamic>> _filterRequestsByType(List<Map<String, dynamic>> requests, String type) =>
+      requests.where((r) => _getRequestType(r) == type).toList();
 
-  Widget _buildSpecialSection({required IconData icon, required String title, int? badgeCount, required VoidCallback onTap}) {
-    return InkWell(onTap: onTap, child: Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), child: Row(children: [
-      SizedBox(width: 44), Icon(icon, size: 22, color: AppTheme.primaryColor), SizedBox(width: 14),
-      Expanded(child: Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor))),
-      if (badgeCount != null && badgeCount! > 0)
-        Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppTheme.errorColor, borderRadius: BorderRadius.circular(10)), child: Text('$badgeCount', style: TextStyle(fontSize: 11, color: Colors.white)))
-      else
-        Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
-    ])));
+  Widget _buildSpecialSection({
+    required IconData icon,
+    required String title,
+    int? badgeCount,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      hoverColor: AppTheme.primaryColor.withOpacity(0.05),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 22, color: AppTheme.primaryColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor, fontWeight: FontWeight.w500),
+              ),
+            ),
+            if (badgeCount != null && badgeCount! > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('$badgeCount', style: const TextStyle(fontSize: 11, color: Colors.white)),
+              )
+            else
+              Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _buildExpandableSection({required IconData icon, required String title, int? count, required bool isExpanded, required VoidCallback onTap}) {
-    return InkWell(onTap: onTap, child: Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), child: Row(children: [
-      SizedBox(width: 44), Icon(icon, size: 22, color: Colors.grey[600]), SizedBox(width: 14),
-      Expanded(child: Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor))),
-      if (count != null) Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500])) else Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
-    ])));
-  }
-
-  Widget _buildContactHeader(int totalCount) => Padding(padding: EdgeInsets.only(left: 56, top: 8, bottom: 6), child: Text('联系人', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor)));
-
-  List<Widget> _buildContactList(ContactProvider provider) {
-    final contacts = provider.contacts;
-    if (_searchText.isNotEmpty) {
-      final filtered = contacts.where((c) {
-        final name = c.nickname?.isNotEmpty == true ? c.nickname : (c.username ?? '');
-        return name.toLowerCase().contains(_searchText.toLowerCase());
-      }).toList();
-      if (filtered.isEmpty) return [Padding(padding: EdgeInsets.all(20), child: Center(child: Text('无匹配结果', style: TextStyle(color: Colors.grey[400]))))];
-      return filtered.map((c) => _buildContactItem(c)).toList();
-    }
-    if (contacts.isEmpty) return [Padding(padding: EdgeInsets.all(20), child: Center(child: Text('暂无联系人', style: TextStyle(color: Colors.grey[400]))))];
-    final grouped = <String, List<dynamic>>{};
-    for (final contact in contacts) {
-      final name = contact.nickname?.isNotEmpty == true ? contact.nickname : (contact.username ?? '?');
-      final firstChar = name.substring(0, 1).toUpperCase();
-      if (!grouped.containsKey(firstChar)) grouped[firstChar] = [];
-      grouped[firstChar]!.add(contact);
-    }
-    final sortedKeys = grouped.keys.toList()..sort();
-    List<Widget> result = [];
-    for (final key in sortedKeys) {
-      result.add(Padding(padding: EdgeInsets.only(left: 56, top: 12, bottom: 4), child: Text(key, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor))));
-      result.addAll(grouped[key]!.map((c) => _buildContactItem(c)));
-    }
-    return result;
+  Widget _buildExpandableSection({
+    required IconData icon,
+    required String title,
+    int? count,
+    required bool isExpanded,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      hoverColor: Colors.grey[100],
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 22, color: Colors.grey[600]),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor, fontWeight: FontWeight.w500),
+              ),
+            ),
+            if (count != null)
+              Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
+            else
+              Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildContactItem(dynamic contact) {
     final name = contact.nickname?.isNotEmpty == true ? contact.nickname : (contact.username ?? '未知用户');
-    return InkWell(onTap: () => Provider.of<LayoutProvider>(context, listen: false).selectConversation(contact.id ?? '', name, false), child: Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: Row(children: [
-      AvatarWidget(imageUrl: contact.avatar, name: name, size: 40), SizedBox(width: 12),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-        if ((contact.username ?? '').isNotEmpty && contact.username != contact.nickname)
-          Text(contact.username ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[500]), maxLines: 1, overflow: TextOverflow.ellipsis),
-      ])),
-    ])));
+
+    return InkWell(
+      onTap: () {
+        Provider.of<LayoutProvider>(context, listen: false)
+            .selectConversation(contact.id ?? '', name, false);
+      },
+      onLongPress: () => _showContactContextMenu(contact, context),
+      hoverColor: AppTheme.primaryColor.withOpacity(0.04),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            AvatarWidget(imageUrl: contact.avatar, name: name, size: 46),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimaryColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if ((contact.username ?? '').isNotEmpty && contact.username != contact.nickname)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        contact.username ?? '',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.more_vert, size: 18, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _buildNewFriendsSectionHeader(String title, int count) => Padding(padding: EdgeInsets.only(left: 56, top: 12, bottom: 4), child: Row(children: [
-    Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor)),
-    SizedBox(width: 8),
-    Container(padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Text('$count', style: TextStyle(fontSize: 12, color: AppTheme.primaryColor))),
-  ]));
+  void _showContactContextMenu(dynamic contact, BuildContext context) {
+    final name = contact.nickname?.isNotEmpty == true ? contact.nickname : (contact.username ?? '未知用户');
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        overlay.size.width * 0.3,
+        overlay.size.height * 0.3,
+        overlay.size.width * 0.3,
+        overlay.size.height * 0.3,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'chat',
+          child: ListTile(
+            leading: Icon(Icons.chat_bubble_outline, color: AppTheme.primaryColor),
+            title: const Text('发送消息'),
+            dense: true,
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'profile',
+          child: ListTile(
+            leading: Icon(Icons.person_outline, color: Colors.blue),
+            title: const Text('查看资料'),
+            dense: true,
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'delete',
+          child: ListTile(
+            leading: Icon(Icons.delete_outline, color: AppTheme.errorColor),
+            title: Text(
+              '删除好友',
+              style: TextStyle(color: AppTheme.errorColor),
+            ),
+            dense: true,
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'chat') {
+        Provider.of<LayoutProvider>(context, listen: false)
+            .selectConversation(contact.id ?? '', name, false);
+      } else if (value == 'delete') {
+        _confirmDeleteContact(contact, name);
+      }
+    });
+  }
+
+  void _confirmDeleteContact(dynamic contact, String name) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('确认删除'),
+          content: Text('确定要删除好友 "$name" 吗？\n删除后将无法看到对方的动态和消息记录。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text('取消', style: TextStyle(color: Colors.grey[600])),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _deleteContact(contact.id, name);
+              },
+              style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteContact(String? contactId, String name) async {
+    if (contactId == null || contactId.isEmpty) return;
+
+    try {
+      await context.read<ContactProvider>().deleteFriend(contactId);
+
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('✅ 已删除好友 $name'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('❌ 删除失败: $e'),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildNewFriendsSectionHeader(String title, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 56, top: 16, bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textSecondaryColor),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('$count', style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor)),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildRequestItem(Map<String, dynamic> request) {
     final type = _getRequestType(request);
@@ -229,22 +658,106 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     final isPendingSent = type == 'sent';
     final isAccepted = type == 'accepted';
 
-    return Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade200)), child: Padding(padding: EdgeInsets.all(10), child: Row(children: [
-      AvatarWidget(imageUrl: avatar, name: displayName, size: 44), SizedBox(width: 10),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(displayName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-        SizedBox(height: 2),
-        Text(isPendingReceived ? '$fromUsername 请求添加你为好友' : isPendingSent ? '已向 $fromUsername 发送请求' : '$fromUsername 已成为好友', style: TextStyle(fontSize: 12, color: isPendingReceived ? AppTheme.primaryColor : Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
-      ])),
-      if (isPendingReceived) ...[
-        InkWell(onTap: () => _rejectRequest(fromUserId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.errorColor.withValues(alpha: 0.5))), child: Text('拒绝', style: TextStyle(fontSize: 12, color: AppTheme.errorColor)))),
-        SizedBox(width: 6),
-        InkWell(onTap: () => _acceptRequest(fromUserId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: AppTheme.primaryColor), child: Text('接受', style: TextStyle(fontSize: 12, color: Colors.white)))),
-      ] else if (isPendingSent)
-        Container(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.orange.withValues(alpha: 0.08)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.access_time, size: 12, color: Colors.orange), SizedBox(width: 3), Text('等待对方', style: TextStyle(fontSize: 11, color: Colors.orange))]))
-      else
-        Container(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.green.withValues(alpha: 0.08)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, size: 14, color: Colors.green), SizedBox(width: 3), Text('已添加', style: TextStyle(fontSize: 11, color: Colors.green))])),
-    ]))));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              AvatarWidget(imageUrl: avatar, name: displayName, size: 48),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isPendingReceived
+                          ? '$fromUsername 请求添加你为好友'
+                          : isPendingSent
+                              ? '已向 $fromUsername 发送请求'
+                              : '$fromUsername 已成为好友',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: isPendingReceived ? AppTheme.primaryColor : Colors.grey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isPendingReceived) ...[
+                InkWell(
+                  onTap: () => _rejectRequest(fromUserId),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.errorColor.withOpacity(0.5)),
+                    ),
+                    child: const Text('拒绝', style: TextStyle(fontSize: 12, color: AppTheme.errorColor)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _acceptRequest(fromUserId),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: AppTheme.primaryColor,
+                    ),
+                    child: const Text('接受', style: TextStyle(fontSize: 12, color: Colors.white)),
+                  ),
+                ),
+              ] else if (isPendingSent)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.orange.withOpacity(0.08),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.access_time, size: 13, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      const Text('等待对方', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.green.withOpacity(0.08),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, size: 15, color: Colors.green),
+                      const SizedBox(width: 4),
+                      const Text('已添加', style: TextStyle(fontSize: 12, color: Colors.green)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _acceptRequest(dynamic friendId) async {
@@ -253,8 +766,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       if (mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content: Text('✅ 已接受好友请求'),
-            duration: Duration(seconds: 2),
+            content: const Text('✅ 已接受好友请求'),
+            duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             backgroundColor: AppTheme.successColor,
@@ -266,7 +779,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
             content: Text('❌ 操作失败: $e'),
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             backgroundColor: AppTheme.errorColor,
@@ -282,8 +795,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       if (mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content: Text('已拒绝好友请求'),
-            duration: Duration(seconds: 2),
+            content: const Text('已拒绝好友请求'),
+            duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
@@ -294,7 +807,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
             content: Text('操作失败: $e'),
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             backgroundColor: AppTheme.errorColor,
