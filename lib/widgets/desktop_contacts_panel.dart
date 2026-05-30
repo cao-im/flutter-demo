@@ -140,11 +140,13 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   }
 
   String _getRequestType(Map<String, dynamic> request) {
-    final userId = request['userId'];
+    final toUserId = request['toUserId']?.toString();
     final status = request['status']?.toString() ?? '0';
     if (_currentUserId == null) return 'unknown';
     if (status == '1') return 'accepted';
-    return userId == _currentUserId ? 'sent' : 'received';
+    final currentUserIdStr = _currentUserId.toString();
+    if (toUserId == currentUserIdStr) return 'received';
+    return 'sent';
   }
 
   List<Map<String, dynamic>> _filterRequestsByType(List<Map<String, dynamic>> requests, String type) => requests.where((r) => _getRequestType(r) == type).toList();
@@ -217,11 +219,11 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
   Widget _buildRequestItem(Map<String, dynamic> request) {
     final type = _getRequestType(request);
-    final userId = request['userId'];
-    final username = request['username']?.toString() ?? request['friendUsername']?.toString() ?? '未知用户';
-    final nickname = request['nickname']?.toString() ?? request['friendNickname']?.toString() ?? '';
-    final displayName = nickname.isNotEmpty ? nickname : username;
-    final avatar = request['avatar'];
+    final fromUserId = request['fromUserId'];
+    final fromUsername = request['fromUsername']?.toString() ?? '未知用户';
+    final fromNickname = request['fromNickname']?.toString() ?? '';
+    final displayName = fromNickname.isNotEmpty ? fromNickname : fromUsername;
+    final avatar = type == 'received' ? request['fromAvatar'] : request['toAvatar'];
 
     final isPendingReceived = type == 'received';
     final isPendingSent = type == 'sent';
@@ -232,12 +234,12 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(displayName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
         SizedBox(height: 2),
-        Text(isPendingReceived ? '$username 请求添加你为好友' : isPendingSent ? '已向 $username 发送请求' : '$username 已成为好友', style: TextStyle(fontSize: 12, color: isPendingReceived ? AppTheme.primaryColor : Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(isPendingReceived ? '$fromUsername 请求添加你为好友' : isPendingSent ? '已向 $fromUsername 发送请求' : '$fromUsername 已成为好友', style: TextStyle(fontSize: 12, color: isPendingReceived ? AppTheme.primaryColor : Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
       ])),
       if (isPendingReceived) ...[
-        InkWell(onTap: () => _rejectRequest(userId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.errorColor.withValues(alpha: 0.5))), child: Text('拒绝', style: TextStyle(fontSize: 12, color: AppTheme.errorColor)))),
+        InkWell(onTap: () => _rejectRequest(fromUserId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.errorColor.withValues(alpha: 0.5))), child: Text('拒绝', style: TextStyle(fontSize: 12, color: AppTheme.errorColor)))),
         SizedBox(width: 6),
-        InkWell(onTap: () => _acceptRequest(userId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: AppTheme.primaryColor), child: Text('接受', style: TextStyle(fontSize: 12, color: Colors.white)))),
+        InkWell(onTap: () => _acceptRequest(fromUserId), borderRadius: BorderRadius.circular(16), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: AppTheme.primaryColor), child: Text('接受', style: TextStyle(fontSize: 12, color: Colors.white)))),
       ] else if (isPendingSent)
         Container(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.orange.withValues(alpha: 0.08)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.access_time, size: 12, color: Colors.orange), SizedBox(width: 3), Text('等待对方', style: TextStyle(fontSize: 11, color: Colors.orange))]))
       else
@@ -248,18 +250,57 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   Future<void> _acceptRequest(dynamic friendId) async {
     try {
       await context.read<ContactProvider>().acceptFriendRequestWithString(friendId.toString());
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ 已接受好友请求'), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), backgroundColor: AppTheme.successColor));
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('✅ 已接受好友请求'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ 操作失败: $e'), duration: Duration(seconds: 3), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), backgroundColor: AppTheme.errorColor));
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('❌ 操作失败: $e'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _rejectRequest(dynamic friendId) async {
     try {
       await context.read<ContactProvider>().rejectFriendRequestWithString(friendId.toString());
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已拒绝好友请求'), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))));
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('已拒绝好友请求'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e'), duration: Duration(seconds: 3), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), backgroundColor: AppTheme.errorColor));
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('操作失败: $e'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
   }
 }

@@ -183,7 +183,7 @@ class ContactProvider with ChangeNotifier {
       final userId = int.tryParse(imUserIdStr);
       if (userId == null) return;
 
-      await _apiService.acceptFriendRequest(userId, friendId);
+      await _apiService.acceptFriendRequest(friendId, userId);
       await loadFriendRequests();
       await loadContacts();
     } catch (e) {
@@ -214,7 +214,7 @@ class ContactProvider with ChangeNotifier {
       final userId = int.tryParse(imUserIdStr);
       if (userId == null) return;
 
-      await _apiService.rejectFriendRequest(userId, friendId);
+      await _apiService.rejectFriendRequest(friendId, userId);
       await loadFriendRequests();
     } catch (e) {
       debugPrint('拒绝好友请求失败: $e');
@@ -235,14 +235,14 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
-  Future<int> checkFriendStatus(int friendId) async {
+  Future<int> checkFriendStatus(int targetUserId) async {
     final imUserIdStr = await StorageService.getImUserId();
     if (imUserIdStr == null) return 0;
 
     final userId = int.tryParse(imUserIdStr);
     if (userId == null) return 0;
 
-    return _apiService.checkFriendStatus(userId, friendId);
+    return _apiService.checkFriendStatus(userId, targetUserId);
   }
 
   void startListening() {

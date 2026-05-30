@@ -69,13 +69,13 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
         await context.read<ContactProvider>().acceptFriendRequestWithString(friendIdStr);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             const SnackBar(content: Text('已接受好友请求')),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             SnackBar(content: Text('操作失败: $e')),
           );
         }
@@ -111,13 +111,13 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
         await context.read<ContactProvider>().rejectFriendRequestWithString(friendIdStr);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             const SnackBar(content: Text('已拒绝好友请求')),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             SnackBar(content: Text('操作失败: $e')),
           );
         }
@@ -126,8 +126,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
   }
 
   String _getRequestType(Map<String, dynamic> request) {
-    final userId = request['userId'];
-    final friendId = request['friendId'];
+    final toUserId = request['toUserId']?.toString();
     final status = request['status']?.toString() ?? '0';
 
     if (_currentUserId == null) return 'unknown';
@@ -137,12 +136,11 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
     }
 
     final currentUserIdStr = _currentUserId.toString();
-    final userIdStr = userId?.toString();
 
-    if (userIdStr == currentUserIdStr) {
-      return 'sent';
-    } else {
+    if (toUserId == currentUserIdStr) {
       return 'received';
+    } else {
+      return 'sent';
     }
   }
 
@@ -160,17 +158,16 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
   }
 
   String _getRequestSubtitle(String type, Map<String, dynamic> request) {
-    final username = request['username']?.toString() ?? 
-                    request['friendUsername']?.toString() ?? 
-                    '未知用户';
+    final fromUsername = request['fromUsername']?.toString() ?? '未知用户';
+    final toUsername = request['toUsername']?.toString() ?? '未知用户';
 
     switch (type) {
       case 'received':
-        return '$username 请求添加你为好友';
+        return '$fromUsername 请求添加你为好友';
       case 'sent':
-        return '你已向 $username 发送好友请求，等待对方同意';
+        return '你已向 $toUsername 发送好友请求，等待对方同意';
       case 'accepted':
-        return '你和 $username 已经是好友了';
+        return '你和 $fromUsername 已经是好友了';
       default:
         return '';
     }
@@ -275,14 +272,12 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
 
   Widget _buildRequestItem(Map<String, dynamic> request) {
     final type = _getRequestType(request);
-    final userId = request['userId'];
-    final username = request['username']?.toString() ?? 
-                    request['friendUsername']?.toString() ?? 
-                    '未知用户';
-    final nickname = request['nickname']?.toString() ?? 
-                     request['friendNickname']?.toString() ?? '';
-    final displayName = nickname.isNotEmpty ? nickname : username;
-    final avatar = request['avatar'];
+    final fromUserId = request['fromUserId'];
+    final toUserId = request['toUserId'];
+    final fromUsername = request['fromUsername']?.toString() ?? '未知用户';
+    final fromNickname = request['fromNickname']?.toString() ?? '';
+    final displayName = fromNickname.isNotEmpty ? fromNickname : fromUsername;
+    final avatar = type == 'received' ? request['fromAvatar'] : request['toAvatar'];
 
     final isPendingReceived = type == 'received';
     final isPendingSent = type == 'sent';
@@ -326,7 +321,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
               ),
               if (isPendingReceived) ...[
                 OutlinedButton.icon(
-                  onPressed: () => _rejectRequest(userId),
+                  onPressed: () => _rejectRequest(fromUserId),
                   icon: const Icon(Icons.close, size: 18),
                   label: const Text('拒绝'),
                   style: OutlinedButton.styleFrom(
@@ -339,7 +334,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: () => _acceptRequest(userId),
+                  onPressed: () => _acceptRequest(fromUserId),
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('接受'),
                   style: ElevatedButton.styleFrom(

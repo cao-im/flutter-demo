@@ -119,102 +119,102 @@ class ApiService {
   Future<List<dynamic>> getFriendList(int userId) async {
     try {
       await _attachImToken(_imDio);
-      final response = await _imDio.get('/friend/list', queryParameters: {'userId': userId});
+      final response = await _imDio.get('/contact/list', queryParameters: {'userId': userId});
       final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as List<dynamic>;
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('获取好友列表失败: ${e.message}');
+      throw Exception('获取联系人列表失败: ${e.message}');
     }
   }
 
-  Future<void> sendFriendRequest(int userId, int friendId) async {
+  Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.post('/friend/request', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.post('/friend-request/request', queryParameters: {
+        'fromUserId': fromUserId,
+        'toUserId': toUserId,
       });
     } on DioException catch (e) {
       throw Exception('发送好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> sendFriendRequestWithString(String userId, String friendId) async {
+  Future<void> sendFriendRequestWithString(String fromUserId, String toUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.post('/friend/request', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.post('/friend-request/request', queryParameters: {
+        'fromUserId': fromUserId,
+        'toUserId': toUserId,
       });
     } on DioException catch (e) {
       throw Exception('发送好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> acceptFriendRequest(int userId, int friendId) async {
+  Future<void> acceptFriendRequest(int toUserId, int fromUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.put('/friend/accept', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.put('/friend-request/accept', queryParameters: {
+        'toUserId': toUserId,
+        'fromUserId': fromUserId,
       });
     } on DioException catch (e) {
       throw Exception('接受好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> acceptFriendRequestWithString(String userId, String friendId) async {
+  Future<void> acceptFriendRequestWithString(String toUserId, String fromUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.put('/friend/accept', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.put('/friend-request/accept', queryParameters: {
+        'toUserId': toUserId,
+        'fromUserId': fromUserId,
       });
     } on DioException catch (e) {
       throw Exception('接受好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> rejectFriendRequest(int userId, int friendId) async {
+  Future<void> rejectFriendRequest(int toUserId, int fromUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.put('/friend/reject', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.put('/friend-request/reject', queryParameters: {
+        'toUserId': toUserId,
+        'fromUserId': fromUserId,
       });
     } on DioException catch (e) {
       throw Exception('拒绝好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> rejectFriendRequestWithString(String userId, String friendId) async {
+  Future<void> rejectFriendRequestWithString(String toUserId, String fromUserId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.put('/friend/reject', queryParameters: {
-        'userId': userId,
-        'friendId': friendId,
+      await _imDio.put('/friend-request/reject', queryParameters: {
+        'toUserId': toUserId,
+        'fromUserId': fromUserId,
       });
     } on DioException catch (e) {
       throw Exception('拒绝好友请求失败: ${e.message}');
     }
   }
 
-  Future<void> deleteFriend(int userId, int friendId) async {
+  Future<void> deleteFriend(int userId, int contactId) async {
     try {
       await _attachImToken(_imDio);
-      await _imDio.delete('/friend/$friendId', queryParameters: {'userId': userId});
+      await _imDio.delete('/contact/$contactId', queryParameters: {'userId': userId});
     } on DioException catch (e) {
-      throw Exception('删除好友失败: ${e.message}');
+      throw Exception('删除联系人失败: ${e.message}');
     }
   }
 
   Future<List<dynamic>> searchUsers(String keyword) async {
     try {
       await _attachImToken(_imDio);
-      final response = await _imDio.get('/friend/search-users', queryParameters: {
+      final response = await _imDio.get('/contact/search-users', queryParameters: {
         'keyword': keyword,
       });
       final data = _parseResponse(response.data);
@@ -230,7 +230,7 @@ class ApiService {
   Future<List<dynamic>> getFriendRequests(int userId) async {
     try {
       await _attachImToken(_imDio);
-      final response = await _imDio.get('/friend/requests', queryParameters: {'userId': userId});
+      final response = await _imDio.get('/friend-request/pending', queryParameters: {'userId': userId});
       final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
         return data['data'] as List<dynamic>;
@@ -241,12 +241,12 @@ class ApiService {
     }
   }
 
-  Future<int> checkFriendStatus(int userId, int friendId) async {
+  Future<int> checkFriendStatus(int userId, int targetUserId) async {
     try {
       await _attachImToken(_imDio);
-      final response = await _imDio.get('/friend/check-status', queryParameters: {
+      final response = await _imDio.get('/contact/check-status', queryParameters: {
         'userId': userId,
-        'friendId': friendId,
+        'targetUserId': targetUserId,
       });
       final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
