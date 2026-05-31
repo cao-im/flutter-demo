@@ -64,10 +64,6 @@ class MessageBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildContent(context),
-                    if (isMe) ...[
-                      const SizedBox(height: 6),
-                      _buildStatusIcon(),
-                    ],
                   ],
                 ),
               ),
