@@ -5,6 +5,7 @@ import '../providers/chat_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
+import '../models/contact_info_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/time_separator.dart';
@@ -335,8 +336,8 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildMessageList() {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, _) {
+    return Consumer2<ChatProvider, AuthProvider>(
+      builder: (context, chatProvider, authProvider, _) {
         if (chatProvider.isLoading && chatProvider.messages.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -378,35 +379,80 @@ class _ChatPageState extends State<ChatPage> {
           }
         });
 
-        return ListView.builder(
-          controller: _scrollController,
-          itemCount: chatProvider.messages.length,
-          itemBuilder: (context, index) {
-            final message = chatProvider.messages[index];
-            final previousMessage = index > 0
-                ? chatProvider.messages[index - 1]
-                : null;
+        final currentUser = authProvider.user;
 
-            final showTimeSeparator = shouldShowTimeSeparator(
-              message.timestamp,
-              previousMessage?.timestamp,
-            );
+        return FutureBuilder<ContactInfo?>(
+          future: _getContactInfo(chatProvider),
+          builder: (context, snapshot) {
+            String? contactAvatar;
+            String? contactName;
 
-            return Column(
-              children: [
-                if (showTimeSeparator)
-                  TimeSeparator(time: message.timestamp),
-                MessageBubble(
-                  message: message,
-                  isMe: _isMessageFromMe(message, context),
-                  onRetry: () => _retryMessage(message),
-                ),
-              ],
+            if (snapshot.hasData && snapshot.data != null) {
+              contactAvatar = snapshot.data!.avatar.isNotEmpty ? snapshot.data!.avatar : null;
+              contactName = snapshot.data!.nickname.isNotEmpty ? snapshot.data!.nickname : snapshot.data!.username;
+            }
+
+            return ListView.builder(
+              controller: _scrollController,
+              itemCount: chatProvider.messages.length,
+              itemBuilder: (context, index) {
+                final message = chatProvider.messages[index];
+                final previousMessage = index > 0
+                    ? chatProvider.messages[index - 1]
+                    : null;
+
+                final showTimeSeparator = shouldShowTimeSeparator(
+                  message.timestamp,
+                  previousMessage?.timestamp,
+                );
+
+                final isMe = _isMessageFromMe(message, context);
+
+                String? senderAvatar;
+                String? senderName;
+
+                if (isMe) {
+                  senderAvatar = currentUser?.avatar;
+                  senderName = currentUser?.nickname ?? currentUser?.username;
+                } else {
+                  senderAvatar = contactAvatar;
+                  senderName = contactName;
+                }
+
+                return Column(
+                  children: [
+                    if (showTimeSeparator)
+                      TimeSeparator(time: message.timestamp),
+                    MessageBubble(
+                      message: message,
+                      isMe: isMe,
+                      senderAvatar: senderAvatar,
+                      senderName: senderName,
+                      showName: widget.isGroup && !isMe,
+                      onRetry: () => _retryMessage(message),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  Future<ContactInfo?> _getContactInfo(ChatProvider chatProvider) async {
+    try {
+      final parts = widget.conversationId.split('_');
+      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+
+      if (targetId <= 0) return null;
+
+      return await chatProvider.getContactInfoById(targetId);
+    } catch (e) {
+      debugPrint('获取联系人信息失败: $e');
+      return null;
+    }
   }
 
   Widget _buildInputToolbar() {

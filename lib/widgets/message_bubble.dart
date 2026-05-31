@@ -5,10 +5,14 @@ import 'package:intl/intl.dart';
 import 'package:photo_view/photo_view.dart';
 import '../models/message_model.dart';
 import '../theme/app_theme.dart';
+import 'avatar_widget.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
+  final String? senderAvatar;
+  final String? senderName;
+  final bool showName;
   final VoidCallback? onRetry;
   final VoidCallback? onImageTap;
 
@@ -16,6 +20,9 @@ class MessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMe,
+    this.senderAvatar,
+    this.senderName,
+    this.showName = false,
     this.onRetry,
     this.onImageTap,
   });
@@ -27,49 +34,85 @@ class MessageBubble extends StatelessWidget {
       child: Row(
         mainAxisAlignment:
             isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isMe) const SizedBox(width: 40),
+          if (!isMe) ...[
+            AvatarWidget(
+              imageUrl: senderAvatar,
+              name: senderName,
+              size: 40,
+            ),
+            const SizedBox(width: 8),
+          ],
           Flexible(
-            child: GestureDetector(
-              onLongPress: () => _showMessageContextMenu(context),
-              child: Container(
-                constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: message.status == MessageStatus.recalled
-                      ? Colors.grey[200]
-                      : isMe
-                          ? AppTheme.primaryColor
-                          : Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: Radius.circular(isMe ? 16 : 4),
-                    bottomRight: Radius.circular(isMe ? 4 : 16),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+            child: Column(
+              crossAxisAlignment:
+                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showName && !isMe && senderName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
+                  ),
+                GestureDetector(
+                  onLongPress: () => _showMessageContextMenu(context),
+                  child: Container(
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.65),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: message.status == MessageStatus.recalled
+                          ? Colors.grey[200]
+                          : isMe
+                              ? AppTheme.primaryColor
+                              : Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(16),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: Radius.circular(isMe ? 16 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 16),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildContent(context),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildContent(context),
-                  ],
-                ),
-              ),
+              ],
             ),
           ),
-          if (isMe) const SizedBox(width: 40),
+          if (isMe) ...[
+            const SizedBox(width: 8),
+            AvatarWidget(
+              imageUrl: senderAvatar,
+              name: senderName,
+              size: 40,
+            ),
+          ],
         ],
       ),
     );

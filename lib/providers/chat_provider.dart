@@ -595,6 +595,11 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  /// 公共方法：根据ID获取联系人信息（供UI层调用）
+  Future<ContactInfo?> getContactInfoById(int targetId) async {
+    return _getContactInfo(targetId);
+  }
+
   /// 清空联系人信息缓存（在联系人变更时调用）
   void _clearContactInfoCache() {
     final count = _contactInfoCache.length;

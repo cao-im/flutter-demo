@@ -129,7 +129,12 @@ class _GroupChatPageState extends State<GroupChatPage> {
                     itemBuilder: (context, index) {
                       final message = _messages[index];
                       final isMe = message.senderId == 'me';
-                      return MessageBubble(message: message, isMe: isMe);
+                      return MessageBubble(
+                        message: message,
+                        isMe: isMe,
+                        showName: !isMe,
+                        senderName: isMe ? '我' : '用户${message.senderId}',
+                      );
                     },
                   ),
           ),
