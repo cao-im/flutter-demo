@@ -5,6 +5,7 @@ import '../providers/layout_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
 import '../providers/auth_provider.dart';
+import '../models/chat_model.dart';
 import '../widgets/desktop_navigation_rail.dart';
 import '../widgets/desktop_contacts_panel.dart';
 import '../theme/app_theme.dart';
@@ -33,8 +34,23 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted && !_initialized) {
           setState(() => _initialized = true);
-          context.read<ChatProvider>().loadConversations();
+          
+          debugPrint('🖥️ [DesktopHomePage] 初始化开始...');
+          
+          context.read<ChatProvider>().startListening();
           context.read<ContactProvider>().startListening();
+          
+          // ✅ 先同步联系人数据，确保会话列表能显示正确的姓名
+          try {
+            await context.read<ContactProvider>().syncContactsFromServer();
+            debugPrint('✅ [DesktopHomePage] 联系人同步完成');
+          } catch (e) {
+            debugPrint('⚠️ [DesktopHomePage] 联系人同步失败: $e');
+          }
+          
+          // 联系人数据就绪后再加载会话列表
+          context.read<ChatProvider>().loadConversations();
+          debugPrint('✅ [DesktopHomePage] 初始化完成');
         }
       });
     }
@@ -108,6 +124,19 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
             isEmbeddedMode: true,
             onConversationSelected: (id, name, isGroup) {
               layoutProvider.selectConversation(id, name, isGroup);
+              
+              // ✅ 同时设置ChatProvider的当前会话，确保发送消息时能正确获取
+              final chatProvider = context.read<ChatProvider>();
+              final conversation = chatProvider.conversations.firstWhere(
+                (c) => c.id == id,
+                orElse: () => ConversationModel(
+                  id: id,
+                  name: name,
+                  isGroup: isGroup,
+                  participantIds: [],
+                ),
+              );
+              chatProvider.setCurrentConversation(conversation);
             },
           ),
         );

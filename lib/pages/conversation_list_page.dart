@@ -40,9 +40,9 @@ class _ConversationListPageState extends State<ConversationListPage>
     });
   }
 
-  /// 智能加载：只在必要时加载，避免重复请求
+  /// 智能加载：只在首次加载时执行，避免重复请求
   void _loadConversationsIfNeeded() {
-    if (!_hasLoaded || mounted) {
+    if (!_hasLoaded) {
       _hasLoaded = true;
       Provider.of<ChatProvider>(context, listen: false).loadConversations();
     }
@@ -145,9 +145,7 @@ class _ConversationListPageState extends State<ConversationListPage>
   Widget build(BuildContext context) {
     super.build(context);
     
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadConversationsIfNeeded();
-    });
+    // ✅ 只在首次build时延迟加载，避免死循环
     
     if (widget.isEmbeddedMode) {
       return _buildEmbeddedBody();
