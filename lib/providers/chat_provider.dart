@@ -4,18 +4,24 @@ import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
+import '../models/contact_info_model.dart';
+import '../services/contact_database_service.dart';
+import '../utils/display_name_helper.dart';
 import '../sdk/im_sdk_manager.dart';
 
 class ChatProvider with ChangeNotifier {
   final IMSdkManager _sdkManager = IMSdkManager();
   final EventBus _eventBus = EventBus();
-  
+
   ConversationModel? _currentConversation;
   List<MessageModel> _messages = [];
   List<ConversationModel> _conversations = [];
   bool _isLoading = false;
   bool _isListening = false;
   bool _isEventListening = false;
+
+  // 联系人信息本地缓存（避免重复查询数据库）
+  final Map<int, ContactInfo> _contactInfoCache = {};
 
   ConversationModel? get currentConversation => _currentConversation;
   List<MessageModel> get messages => _messages;
@@ -96,6 +102,16 @@ class ChatProvider with ChangeNotifier {
       }
     });
 
+    // 监听联系人数据变更 → 刷新会话列表
+    _eventBus.on<ContactDataChangedEvent>().listen((event) {
+      debugPrint('📍[ChatProvider] 📢 收到 ContactDataChangedEvent, changeType=${event.changeType}, contactId=${event.contactId}, 刷新会话列表');
+
+      // 清空联系人信息缓存，确保获取最新数据
+      _clearContactInfoCache();
+
+      loadConversations();
+    });
+
     debugPrint('✅[ChatProvider] 已开始监听 EventBus 事件（自动刷新）');
   }
 
@@ -120,6 +136,18 @@ class ChatProvider with ChangeNotifier {
       final sdkConversations = await _sdkManager.client.getConversationList();
       debugPrint('📍[ChatProvider] 获取到 ${sdkConversations.length} 个会话');
 
+      // 性能优化：收集所有私聊会话的targetId，一次性批量查询
+      final privateTargetIds = sdkConversations
+          .where((c) => !c.isGroup)
+          .map((c) => c.targetId)
+          .toSet()
+          .toList();
+
+      // 批量预加载所有联系人信息到缓存
+      if (privateTargetIds.isNotEmpty) {
+        await _batchPreloadContacts(privateTargetIds);
+      }
+
       final List<ConversationModel> conversationModels = [];
 
       for (final conv in sdkConversations) {
@@ -128,6 +156,7 @@ class ChatProvider with ChangeNotifier {
             : conv.conversationId;
 
         String displayName;
+        String? displayAvatar;
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
@@ -139,7 +168,10 @@ class ChatProvider with ChangeNotifier {
             displayName = '群组 ${conv.targetId}';
           }
         } else {
-          displayName = '用户${conv.targetId}';
+          // 从缓存中获取联系人信息（已通过批量预加载）
+          final contactInfo = _contactInfoCache[conv.targetId];
+          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
         }
 
         if (conv.lastMessage != null) {
@@ -151,6 +183,7 @@ class ChatProvider with ChangeNotifier {
         conversationModels.add(ConversationModel(
           id: displayId,
           name: displayName,
+          avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
           lastMessage: conv.lastMessage != null
               ? _convertSdkMessageToModel(conv.lastMessage!)
@@ -176,9 +209,50 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  /// 批量预加载联系人信息到缓存（性能优化）
+  Future<void> _batchPreloadContacts(List<int> targetIds) async {
+    if (targetIds.isEmpty) return;
+
+    // 过滤出缓存中不存在的ID
+    final uncachedIds = targetIds.where((id) => !_contactInfoCache.containsKey(id)).toList();
+    if (uncachedIds.isEmpty) {
+      debugPrint('📍[ChatProvider] 💾 批量预加载: 全部命中缓存 (${targetIds.length}/${targetIds.length})');
+      return;
+    }
+
+    final hitCount = targetIds.length - uncachedIds.length;
+    debugPrint('📍[ChatProvider] 📥 批量预加载联系人: 总数=${targetIds.length}, 缓存命中=$hitCount, 需查询=${uncachedIds.length}');
+
+    try {
+      final contactService = ContactDatabaseService();
+      await contactService.init(userId: _sdkManager.client.currentUserId ?? 0);
+      final contactsMap = await contactService.getContactsByIds(uncachedIds);
+
+      // 将查询结果加入缓存
+      for (final entry in contactsMap.entries) {
+        _contactInfoCache[entry.key] = entry.value;
+      }
+
+      debugPrint('📍[ChatProvider] ✅ 批量预加载完成: 成功加载 ${contactsMap.length} 个联系人到缓存');
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 批量预加载联系人失败: $e');
+    }
+  }
+
   Future<void> _loadConversationsAndClearUnread() async {
     try {
       final sdkConversations = await _sdkManager.client.getConversationList();
+
+      // 性能优化：批量预加载联系人信息
+      final privateTargetIds = sdkConversations
+          .where((c) => !c.isGroup)
+          .map((c) => c.targetId)
+          .toSet()
+          .toList();
+
+      if (privateTargetIds.isNotEmpty) {
+        await _batchPreloadContacts(privateTargetIds);
+      }
 
       final List<ConversationModel> conversationModels = [];
 
@@ -188,6 +262,7 @@ class ChatProvider with ChangeNotifier {
             : conv.conversationId;
 
         String displayName;
+        String? displayAvatar;
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
@@ -198,7 +273,10 @@ class ChatProvider with ChangeNotifier {
             displayName = '群组 ${conv.targetId}';
           }
         } else {
-          displayName = '用户${conv.targetId}';
+          // 从缓存中获取联系人信息
+          final contactInfo = _contactInfoCache[conv.targetId];
+          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
         }
 
         if (conv.lastMessage != null) {
@@ -217,6 +295,7 @@ class ChatProvider with ChangeNotifier {
         conversationModels.add(ConversationModel(
           id: displayId,
           name: displayName,
+          avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
           lastMessage: conv.lastMessage != null
               ? _convertSdkMessageToModel(conv.lastMessage!)
@@ -484,6 +563,43 @@ class ChatProvider with ChangeNotifier {
     _currentConversation = null;
     _messages = [];
     notifyListeners();
+  }
+
+  Future<ContactInfo?> _getContactInfo(int targetId) async {
+    debugPrint('📍[ChatProvider] 查询联系人信息: targetId=$targetId');
+
+    try {
+      // 优先从本地缓存获取
+      if (_contactInfoCache.containsKey(targetId)) {
+        final cached = _contactInfoCache[targetId]!;
+        debugPrint('📍[ChatProvider] 💾 联系人信息缓存命中: targetId=$targetId, nickname=${cached.nickname}');
+        return cached;
+      }
+
+      // 缓存未命中，查询数据库
+      final contactService = ContactDatabaseService();
+      await contactService.init(userId: _sdkManager.client.currentUserId ?? 0);
+      final contactMap = await contactService.getContactsByIds([targetId]);
+      final contactInfo = contactMap[targetId];
+
+      if (contactInfo != null) {
+        // 查询成功后加入缓存
+        _contactInfoCache[targetId] = contactInfo;
+        debugPrint('📍[ChatProvider] 📥 联系人信息已缓存: targetId=$targetId, nickname=${contactInfo.nickname}');
+      }
+
+      return contactInfo;
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 查询联系人信息失败: targetId=$targetId, error=$e');
+      return null;
+    }
+  }
+
+  /// 清空联系人信息缓存（在联系人变更时调用）
+  void _clearContactInfoCache() {
+    final count = _contactInfoCache.length;
+    _contactInfoCache.clear();
+    debugPrint('📍[ChatProvider] 🗑️ 已清空联系人信息缓存，共移除 $count 条记录');
   }
 
   MessageModel _convertSdkMessageToModel(sdk.Message msg) {

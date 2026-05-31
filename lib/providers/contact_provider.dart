@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
+import 'package:cao_im_sdk_flutter/event/event_bus.dart';
+import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/user_model.dart';
+import '../models/contact_info_model.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../services/contact_database_service.dart';
@@ -9,6 +12,7 @@ class ContactProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final ContactDatabaseService _dbService = ContactDatabaseService();
   final sdk.IMClient _imClient = sdk.IMClient.instance;
+  final EventBus _eventBus = EventBus();
   List<UserModel> _contacts = [];
   List<UserModel> _searchResults = [];
   List<Map<String, dynamic>> _friendRequests = [];
@@ -16,11 +20,16 @@ class ContactProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isListening = false;
 
+  final Map<int, ContactInfo> _contactCache = {};
+  bool _isCacheInitialized = false;
+
   List<UserModel> get contacts => _contacts;
   List<UserModel> get searchResults => _searchResults;
   List<Map<String, dynamic>> get friendRequests => _friendRequests;
   int get unreadFriendRequestCount => _unreadFriendRequestCount;
   bool get isLoading => _isLoading;
+
+  Map<int, ContactInfo> get contactCache => Map.unmodifiable(_contactCache);
 
   Map<String, List<UserModel>> get groupedContacts {
     final Map<String, List<UserModel>> grouped = {};
@@ -115,6 +124,19 @@ class ContactProvider with ChangeNotifier {
         debugPrint('🔄 已从服务器同步 ${serverContacts.length} 个联系人到本地数据库');
 
         _contacts = await loadContactsFromLocal();
+
+        clearCache();
+        final allContactIds = _contacts.map((c) => int.tryParse(c.id) ?? 0).where((id) => id > 0).toList();
+        if (allContactIds.isNotEmpty) {
+          await batchLoadContactsToCache(allContactIds);
+        }
+
+        // 触发联系人变更事件（同步完成）
+        _eventBus.fire(ContactDataChangedEvent(
+          changeType: 'synced',
+        ));
+        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (synced), 同步了 ${serverContacts.length} 个联系人');
+
         notifyListeners();
       }
     } catch (e) {
@@ -145,6 +167,26 @@ class ContactProvider with ChangeNotifier {
       } else {
         _contacts.add(contact);
       }
+
+      final contactId = int.tryParse(contact.id);
+      if (contactId != null && contactId > 0) {
+        final contactInfo = ContactInfo(
+          id: contactId,
+          username: contact.username,
+          nickname: contact.nickname,
+          avatar: contact.avatar ?? '',
+          remark: '',
+        );
+        updateCache(contactInfo);
+
+        // 触发联系人变更事件
+        _eventBus.fire(ContactDataChangedEvent(
+          contactId: contactId,
+          changeType: 'added',
+        ));
+        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (added), contactId=$contactId');
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('❌ 添加联系人到本地数据库失败: $e');
@@ -158,6 +200,19 @@ class ContactProvider with ChangeNotifier {
       debugPrint('🗑️ 已从本地数据库删除联系人: $contactId');
 
       _contacts.removeWhere((c) => c.id == contactId);
+
+      final id = int.tryParse(contactId);
+      if (id != null && id > 0) {
+        removeFromCache(id);
+
+        // 触发联系人变更事件
+        _eventBus.fire(ContactDataChangedEvent(
+          contactId: id,
+          changeType: 'deleted',
+        ));
+        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (deleted), contactId=$id');
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('❌ 从本地数据库删除联系人失败: $e');
@@ -253,7 +308,7 @@ class ContactProvider with ChangeNotifier {
 
   UserModel _convertFriendToUserModel(Map<String, dynamic> json) {
     return UserModel(
-      id: json['friendId']?.toString() ?? json['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? '',
       username: json['username']?.toString() ??
           json['friendUsername']?.toString() ?? '',
       nickname: json['nickname']?.toString() ??
@@ -261,6 +316,7 @@ class ContactProvider with ChangeNotifier {
       avatar: json['avatar'] ?? json['friendAvatar'],
       email: json['email'],
       phone: json['phone'],
+      imUserId: json['contactUserId']?.toString() ?? json['friendId']?.toString(),
     );
   }
 
@@ -435,6 +491,97 @@ class ContactProvider with ChangeNotifier {
   void stopListening() {
     _imClient.removeFriendRequestListener(_ContactFriendRequestListener(this));
     _isListening = false;
+  }
+
+  ContactInfo? getContactFromCache(int id) {
+    final contact = _contactCache[id];
+    if (contact != null) {
+      debugPrint('💾 缓存命中: id=$id, nickname=${contact.nickname}');
+    } else {
+      debugPrint('💾 缓存未命中: id=$id');
+    }
+    return contact;
+  }
+
+  Future<void> batchLoadContactsToCache(List<int> ids) async {
+    if (ids.isEmpty) {
+      debugPrint('💾 batchLoadContactsToCache: 传入空列表');
+      return;
+    }
+
+    final uncachedIds = ids.where((id) => !_contactCache.containsKey(id)).toList();
+    if (uncachedIds.isEmpty) {
+      debugPrint('💾 batchLoadContactsToCache: 全部命中缓存 (${ids.length}/${ids.length})，无需查询数据库');
+      return;
+    }
+
+    final hitCount = ids.length - uncachedIds.length;
+    debugPrint('💾 batchLoadContactsToCache: 缓存命中率 ${hitCount}/${ids.length} (${(hitCount / ids.length * 100).toStringAsFixed(1)}%)');
+
+    try {
+      final contactsFromDb = await _dbService.getContactsByIds(uncachedIds);
+      for (final entry in contactsFromDb.entries) {
+        _contactCache[entry.key] = entry.value;
+      }
+
+      if (!_isCacheInitialized && _contactCache.isNotEmpty) {
+        _isCacheInitialized = true;
+      }
+
+      debugPrint('💾 batchLoadContactsToCache: 从数据库加载 ${contactsFromDb.length} 个联系人到缓存，当前缓存总数: ${_contactCache.length}');
+    } catch (e) {
+      debugPrint('❌ batchLoadContactsToCache: 批量加载失败 - $e');
+      rethrow;
+    }
+  }
+
+  Future<ContactInfo?> getContactWithCache(int id) async {
+    final cachedContact = getContactFromCache(id);
+    if (cachedContact != null) {
+      return cachedContact;
+    }
+
+    try {
+      final contactsFromDb = await _dbService.getContactsByIds([id]);
+      if (contactsFromDb.containsKey(id)) {
+        final contact = contactsFromDb[id]!;
+        _contactCache[id] = contact;
+
+        if (!_isCacheInitialized) {
+          _isCacheInitialized = true;
+        }
+
+        debugPrint('💾 getContactWithCache: 从数据库加载并缓存联系人 id=$id, 当前缓存总数: ${_contactCache.length}');
+        return contact;
+      }
+
+      debugPrint('⚠️ getContactWithCache: 数据库中未找到联系人 id=$id');
+      return null;
+    } catch (e) {
+      debugPrint('❌ getContactWithCache: 查询失败 - $e');
+      rethrow;
+    }
+  }
+
+  void updateCache(ContactInfo contact) {
+    _contactCache[contact.id] = contact;
+    debugPrint('💾 updateCache: 已更新缓存 id=${contact.id}, nickname=${contact.nickname}, 当前缓存总数: ${_contactCache.length}');
+  }
+
+  void removeFromCache(int id) {
+    final removed = _contactCache.remove(id);
+    if (removed != null) {
+      debugPrint('💾 removeFromCache: 已从缓存移除 id=$id, nickname=${removed.nickname}, 剩余缓存数: ${_contactCache.length}');
+    } else {
+      debugPrint('⚠️ removeFromCache: 缓存中未找到 id=$id');
+    }
+  }
+
+  void clearCache() {
+    final count = _contactCache.length;
+    _contactCache.clear();
+    _isCacheInitialized = false;
+    debugPrint('💾 clearCache: 已清空缓存，共移除 $count 个联系人');
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' hide Value;
 import 'package:cao_im_sdk_flutter/storage/drift/app_database.dart';
 import 'package:cao_im_sdk_flutter/storage/drift/tables/contacts_table.dart';
 import '../models/user_model.dart';
+import '../models/contact_info_model.dart';
 
 class ContactDatabaseService {
   static final ContactDatabaseService _instance = ContactDatabaseService._internal();
@@ -46,6 +47,7 @@ class ContactDatabaseService {
 
         final companion = ContactsCompanion(
           id: Value(contactId),
+          userId: Value(int.tryParse(user.imUserId ?? '') ?? int.tryParse(user.id) ?? 0),
           username: Value(user.username),
           nickname: Value(user.nickname),
           avatar: Value(user.avatar ?? ''),
@@ -99,6 +101,45 @@ class ContactDatabaseService {
 
     if (row == null) return null;
     return _toUserModel(row);
+  }
+
+  Future<Map<int, ContactInfo>> getContactsByIds(List<int> ids) async {
+    if (ids.isEmpty) {
+      print('[ContactDatabaseService] ℹ️ getContactsByIds: 传入空列表，返回空Map');
+      return {};
+    }
+
+    final db = database;
+
+    try {
+      final validIds = ids.where((id) => id > 0).toList();
+      if (validIds.isEmpty) {
+        print('[ContactDatabaseService] ⚠️ getContactsByIds: 所有ID均无效');
+        return {};
+      }
+
+      print('[ContactDatabaseService] 🔍 getContactsByIds: 开始批量查询 ${validIds.length} 个联系人 (使用userId字段)');
+
+      final query = db.select(db.contacts)
+        ..where((tbl) => tbl.userId.isIn(validIds));
+
+      final rows = await query.get();
+
+      final result = <int, ContactInfo>{};
+      for (final row in rows) {
+        if (row.userId != null && row.userId! > 0) {
+          result[row.userId!] = _toContactInfo(row);
+        }
+      }
+
+      print('[ContactDatabaseService] ✅ getContactsByIds: 查询完成，找到 ${result.length}/${validIds.length} 个联系人');
+
+      return result;
+    } catch (e, stackTrace) {
+      print('[ContactDatabaseService] ❌ getContactsByIds: 查询失败 - $e');
+      print('[ContactDatabaseService] 📍 堆栈: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<void> deleteContact(String id) async {
@@ -187,6 +228,16 @@ class ContactDatabaseService {
       isOnline: row.onlineStatus == 1,
       imUserId: row.id.toString(),
       friendStatus: row.status,
+    );
+  }
+
+  ContactInfo _toContactInfo(Contact row) {
+    return ContactInfo(
+      id: row.id,
+      username: row.username,
+      nickname: row.nickname,
+      avatar: row.avatar,
+      remark: row.remark,
     );
   }
 
