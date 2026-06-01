@@ -415,8 +415,8 @@ class _ChatPageState extends State<ChatPage> {
               itemBuilder: (context, index) {
                 final reversedIndex = chatProvider.messages.length - 1 - index;
                 final message = chatProvider.messages[reversedIndex];
-                final previousMessage = (reversedIndex < chatProvider.messages.length - 1)
-                    ? chatProvider.messages[reversedIndex + 1]
+                final previousMessage = (reversedIndex > 0)
+                    ? chatProvider.messages[reversedIndex - 1]
                     : null;
 
                 final showTimeSeparator = shouldShowTimeSeparator(
