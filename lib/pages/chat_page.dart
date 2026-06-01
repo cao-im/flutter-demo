@@ -37,6 +37,7 @@ class _ChatPageState extends State<ChatPage> {
   int _currentPage = 1;
   bool _hasMore = true;
   ChatProvider? _chatProvider;
+  int _lastMessageCount = 0;
 
   @override
   void didChangeDependencies() {
@@ -48,6 +49,7 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListener);
+    _lastMessageCount = 0;
     
     if (widget.conversationId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -62,7 +64,7 @@ class _ChatPageState extends State<ChatPage> {
 
         await _chatProvider?.loadMessages(widget.conversationId);
 
-        _scrollToBottom();
+        _scrollToBottom(animate: false);  // 首次加载使用无动画跳转
 
         final parts = widget.conversationId.split('_');
         final targetId = int.tryParse(parts.last ?? '0') ?? 0;
@@ -88,6 +90,7 @@ class _ChatPageState extends State<ChatPage> {
   void _onConversationChanged() {
     _currentPage = 1;
     _hasMore = true;
+    _lastMessageCount = 0;
 
     if (widget.conversationId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -102,7 +105,7 @@ class _ChatPageState extends State<ChatPage> {
 
         await _chatProvider?.loadMessages(widget.conversationId);
 
-        _scrollToBottom();
+        _scrollToBottom(animate: false);  // 切换会话时也使用无动画跳转
 
         final parts = widget.conversationId.split('_');
         final targetId = int.tryParse(parts.last ?? '0') ?? 0;
@@ -213,15 +216,26 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      if (!_scrollController.hasClients) return;
+
+      if (!animate) {
+        _scrollController.jumpTo(0);
+        return;
       }
+
+      final currentOffset = _scrollController.offset;
+      
+      if (currentOffset <= 1) {
+        return; 
+      }
+
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -373,11 +387,13 @@ class _ChatPageState extends State<ChatPage> {
           );
         }
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
+        final currentMessageCount = chatProvider.messages.length;
+        if (currentMessageCount > _lastMessageCount && _lastMessageCount > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottom();
-          }
-        });
+          });
+        }
+        _lastMessageCount = currentMessageCount;
 
         final currentUser = authProvider.user;
 
@@ -394,11 +410,13 @@ class _ChatPageState extends State<ChatPage> {
 
             return ListView.builder(
               controller: _scrollController,
+              reverse: true,
               itemCount: chatProvider.messages.length,
               itemBuilder: (context, index) {
-                final message = chatProvider.messages[index];
-                final previousMessage = index > 0
-                    ? chatProvider.messages[index - 1]
+                final reversedIndex = chatProvider.messages.length - 1 - index;
+                final message = chatProvider.messages[reversedIndex];
+                final previousMessage = (reversedIndex < chatProvider.messages.length - 1)
+                    ? chatProvider.messages[reversedIndex + 1]
                     : null;
 
                 final showTimeSeparator = shouldShowTimeSeparator(

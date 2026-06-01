@@ -321,14 +321,57 @@ class ChatProvider with ChangeNotifier {
       final parts = conversationId.split('_');
       final targetId = int.tryParse(parts.last ?? '0') ?? 0;
 
-      final sdkMessages = await _sdkManager.client.getHistoryMessages(
-        targetId: targetId,
-      );
+      debugPrint('📍[ChatProvider] 📥 开始加载所有历史消息...');
+      
+      // ✅ 自动分页加载：循环查询直到获取所有消息
+      List<sdk.Message> allMessages = [];
+      int currentPage = 1;
+      const pageSize = 100; // SDK最大允许值
+      bool hasMore = true;
+      
+      while (hasMore) {
+        final pageMessages = await _sdkManager.client.getHistoryMessages(
+          targetId: targetId,
+          page: currentPage,
+          size: pageSize,
+        );
+        
+        if (pageMessages.isEmpty) {
+          hasMore = false;
+        } else {
+          allMessages.addAll(pageMessages);
+          debugPrint('📍[ChatProvider] 📄 第${currentPage}页加载了 ${pageMessages.length} 条, 累计 ${allMessages.length} 条');
+          
+          if (pageMessages.length < pageSize) {
+            hasMore = false; // 这一页没满，说明没有更多数据了
+          } else {
+            currentPage++;
+          }
+        }
+      }
+      
+      final sdkMessages = allMessages;
+      
+      debugPrint('📍[ChatProvider] ✅ 历史消息全部加载完成，共 ${sdkMessages.length} 条');
+      
+      debugPrint('📍[ChatProvider] 📥 加载消息完成，共 ${sdkMessages.length} 条');
+      debugPrint('📍[ChatProvider] 🔍 SDK返回的原始顺序（前10条）：');
+      for (var i = 0; i < (sdkMessages.length < 10 ? sdkMessages.length : 10); i++) {
+        final msg = sdkMessages[i];
+        debugPrint('  [$i] id=${msg.id}, from=${msg.fromId}, to=${msg.toId}, timestamp=${msg.timestamp}, content="${msg.content.toString().substring(0, msg.content.toString().length > 20 ? 20 : msg.content.toString().length)}"');
+      }
+      
       _messages = sdkMessages
           .map((msg) => _convertSdkMessageToModel(msg))
           .toList();
 
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      
+      debugPrint('📍[ChatProvider] ✅ 排序后的顺序（前10条）：');
+      for (var i = 0; i < (_messages.length < 10 ? _messages.length : 10); i++) {
+        final msg = _messages[i];
+        debugPrint('  [$i] id=${msg.id}, from=${msg.senderId}, timestamp=${msg.timestamp.millisecondsSinceEpoch}, content="${msg.content.substring(0, msg.content.length > 20 ? 20 : msg.content.length)}"');
+      }
     } catch (e) {
       debugPrint('加载消息失败: $e');
     } finally {
@@ -377,6 +420,7 @@ class ChatProvider with ChangeNotifier {
       content: content,
       timestamp: DateTime.now(),
       isSending: true,
+      isSent: true,
       status: MessageStatus.sending,
     );
 
@@ -445,6 +489,7 @@ class ChatProvider with ChangeNotifier {
     if (retryIndex != -1) {
       _messages[retryIndex] = _messages[retryIndex].copyWith(
         isSending: true,
+        isSent: true,
         status: MessageStatus.sending,
       );
       notifyListeners();
