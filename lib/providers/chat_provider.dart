@@ -185,6 +185,7 @@ class ChatProvider with ChangeNotifier {
 
         conversationModels.add(ConversationModel(
           id: displayId,
+          dbId: conv.id,
           name: displayName,
           avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
@@ -297,6 +298,7 @@ class ChatProvider with ChangeNotifier {
 
         conversationModels.add(ConversationModel(
           id: displayId,
+          dbId: conv.id,
           name: displayName,
           avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
@@ -575,9 +577,26 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  void deleteConversation(String conversationId) {
-    _conversations.removeWhere((c) => c.id == conversationId);
-    notifyListeners();
+  Future<void> deleteConversation(String conversationId) async {
+    try {
+      final conversation = _conversations.where((c) => c.id == conversationId).firstOrNull;
+
+      if (conversation?.dbId != null && conversation!.dbId! > 0) {
+        debugPrint('🗑️[ChatProvider] 开始删除会话: $conversationId (dbId=${conversation.dbId})');
+        await _sdkManager.client.deleteConversation(conversation.dbId!);
+        debugPrint('✅[ChatProvider] 会话删除成功: $conversationId (dbId=${conversation.dbId})');
+      } else {
+        debugPrint('⚠️[ChatProvider] 会话 dbId 为空，只从内存移除: $conversationId');
+      }
+
+      _conversations.removeWhere((c) => c.id == conversationId);
+      notifyListeners();
+      debugPrint('✅[ChatProvider] 会话已从列表移除: $conversationId');
+    } catch (e, stackTrace) {
+      debugPrint('❌[ChatProvider] 删除会话失败: $e');
+      debugPrint('❌[ChatProvider] 堆栈: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<void> clearAllChatData() async {

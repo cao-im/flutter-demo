@@ -80,7 +80,7 @@ class _ConversationListPageState extends State<ConversationListPage>
 
   void _handleDelete(String conversationId) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    chatProvider.deleteConversation(conversationId);
+    await chatProvider.deleteConversation(conversationId);
 
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger != null) {
@@ -92,6 +92,42 @@ class _ConversationListPageState extends State<ConversationListPage>
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
+    }
+  }
+
+  void _showContextMenu(ConversationModel conversation, Offset position) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        MediaQuery.of(context).size.width - position.dx,
+        MediaQuery.of(context).size.height - position.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'delete',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete, color: AppTheme.errorColor, size: 20),
+              SizedBox(width: 8),
+              Text('删除会话', style: TextStyle(color: AppTheme.errorColor)),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (result == 'delete') {
+      _confirmAndDelete(conversation);
+    }
+  }
+
+  Future<void> _confirmAndDelete(ConversationModel conversation) async {
+    final confirmed = await _confirmDelete(conversation);
+    if (confirmed) {
+      _handleDelete(conversation.id);
     }
   }
 
@@ -390,50 +426,24 @@ class _ConversationListPageState extends State<ConversationListPage>
                   final conversation = chatProvider.conversations[index];
                   final isSelected = conversation.id == selectedId;
 
-                  return Dismissible(
-                    key: Key(conversation.id.toString()),
-                    direction: DismissDirection.endToStart,
-                    confirmDismiss: (direction) => _confirmDelete(conversation),
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      color: AppTheme.errorColor,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Icon(Icons.delete, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            '删除',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    onDismissed: (direction) {
-                      _handleDelete(conversation.id);
+                  return ConversationItem(
+                    conversation: conversation,
+                    isSelected: isSelected,
+                    onTap: () {
+                      if (widget.onConversationSelected != null) {
+                        layoutProvider.selectConversation(
+                          conversation.id,
+                          conversation.name,
+                          conversation.isGroup,
+                        );
+                        widget.onConversationSelected!(
+                          conversation.id,
+                          conversation.name,
+                          conversation.isGroup,
+                        );
+                      }
                     },
-                    child: ConversationItem(
-                      conversation: conversation,
-                      isSelected: isSelected,
-                      onTap: () {
-                        if (widget.onConversationSelected != null) {
-                          layoutProvider.selectConversation(
-                            conversation.id,
-                            conversation.name,
-                            conversation.isGroup,
-                          );
-                          widget.onConversationSelected!(
-                            conversation.id,
-                            conversation.name,
-                            conversation.isGroup,
-                          );
-                        }
-                      },
-                    ),
+                    onLongPress: (position) => _showContextMenu(conversation, position),
                   );
                 },
               );
@@ -456,60 +466,34 @@ class _ConversationListPageState extends State<ConversationListPage>
                   final conversation = chatProvider.conversations[index];
                   final isSelected = widget.isEmbeddedMode && conversation.id == selectedId;
 
-                  return Dismissible(
-                    key: Key(conversation.id.toString()),
-                    direction: DismissDirection.endToStart,
-                    confirmDismiss: (direction) => _confirmDelete(conversation),
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      color: AppTheme.errorColor,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Icon(Icons.delete, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            '删除',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    onDismissed: (direction) {
-                      _handleDelete(conversation.id);
+                  return ConversationItem(
+                    conversation: conversation,
+                    isSelected: isSelected,
+                    onTap: () {
+                      if (widget.isEmbeddedMode && widget.onConversationSelected != null) {
+                        layoutProvider.selectConversation(
+                          conversation.id,
+                          conversation.name,
+                          conversation.isGroup,
+                        );
+                        widget.onConversationSelected!(
+                          conversation.id,
+                          conversation.name,
+                          conversation.isGroup,
+                        );
+                      } else {
+                        Navigator.pushNamed(
+                          context,
+                          AppRouter.chat,
+                          arguments: {
+                            'conversationId': conversation.id,
+                            'conversationName': conversation.name,
+                            'isGroup': conversation.isGroup,
+                          },
+                        );
+                      }
                     },
-                    child: ConversationItem(
-                      conversation: conversation,
-                      isSelected: isSelected,
-                      onTap: () {
-                        if (widget.isEmbeddedMode && widget.onConversationSelected != null) {
-                          layoutProvider.selectConversation(
-                            conversation.id,
-                            conversation.name,
-                            conversation.isGroup,
-                          );
-                          widget.onConversationSelected!(
-                            conversation.id,
-                            conversation.name,
-                            conversation.isGroup,
-                          );
-                        } else {
-                          Navigator.pushNamed(
-                            context,
-                            AppRouter.chat,
-                            arguments: {
-                              'conversationId': conversation.id,
-                              'conversationName': conversation.name,
-                              'isGroup': conversation.isGroup,
-                            },
-                          );
-                        }
-                      },
-                    ),
+                    onLongPress: (position) => _showContextMenu(conversation, position),
                   );
                 },
               );

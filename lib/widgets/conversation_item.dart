@@ -7,6 +7,7 @@ import 'avatar_widget.dart';
 class ConversationItem extends StatelessWidget {
   final ConversationModel conversation;
   final VoidCallback onTap;
+  final void Function(Offset position)? onLongPress;
   final VoidCallback? onDelete;
   final bool isSelected;
 
@@ -14,14 +15,20 @@ class ConversationItem extends StatelessWidget {
     super.key,
     required this.conversation,
     required this.onTap,
+    this.onLongPress,
     this.onDelete,
     this.isSelected = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
+      onLongPressStart: (details) {
+        if (onLongPress != null) {
+          onLongPress!(details.globalPosition);
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(

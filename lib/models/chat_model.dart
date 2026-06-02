@@ -3,6 +3,7 @@ import 'user_model.dart';
 
 class ConversationModel {
   final String id;
+  final int? dbId;
   final String name;
   final String? avatar;
   final List<String> participantIds;
@@ -14,6 +15,7 @@ class ConversationModel {
 
   ConversationModel({
     required this.id,
+    this.dbId,
     required this.name,
     this.avatar,
     required this.participantIds,
@@ -58,6 +60,7 @@ class ConversationModel {
 
   ConversationModel copyWith({
     String? id,
+    int? dbId,
     String? name,
     String? avatar,
     List<String>? participantIds,
@@ -69,6 +72,7 @@ class ConversationModel {
   }) {
     return ConversationModel(
       id: id ?? this.id,
+      dbId: dbId ?? this.dbId,
       name: name ?? this.name,
       avatar: avatar ?? this.avatar,
       participantIds: participantIds ?? this.participantIds,
