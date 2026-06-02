@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const String _tokenKey = 'auth_token';
   static const String _imTokenKey = 'im_token';
+  static const String _imRefreshTokenKey = 'im_refresh_token';
   static const String _userIdKey = 'user_id';
   static const String _imUserIdKey = 'im_user_id';
   static const String _usernameKey = 'username';
@@ -35,6 +36,22 @@ class StorageService {
   static Future<String?> getImToken() async {
     final prefs = await _prefs;
     return prefs.getString(_imTokenKey);
+  }
+
+  static Future<void> saveImRefreshToken(String refreshToken) async {
+    final prefs = await _prefs;
+    await prefs.setString(_imRefreshTokenKey, refreshToken);
+  }
+
+  static Future<String?> getImRefreshToken() async {
+    final prefs = await _prefs;
+    return prefs.getString(_imRefreshTokenKey);
+  }
+
+  static Future<void> removeImTokens() async {
+    final prefs = await _prefs;
+    await prefs.remove(_imTokenKey);
+    await prefs.remove(_imRefreshTokenKey);
   }
 
   static Future<void> saveUserId(String userId) async {

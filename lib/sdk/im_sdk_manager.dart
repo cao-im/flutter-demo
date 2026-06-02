@@ -48,7 +48,7 @@ class IMSdkManager {
     print('📍[SdkManager] ====== initialize() 结束 ======');
   }
 
-  Future<void> connect(String token, {int? userId}) async {
+  Future<void> connect(String token, {int? userId, String? refreshToken}) async {
     if (!_isInitialized) {
       print('⚠️[SdkManager] SDK 未初始化');
       throw Exception('SDK 未初始化，请先调用 initialize');
@@ -57,11 +57,12 @@ class IMSdkManager {
     print('');
     print('📍[SdkManager] ====== connect() 开始 ======');
     print('📍[SdkManager] token前20字符: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+    print('📍[SdkManager] refreshToken: ${refreshToken != null ? "有" : "无"}');
     print('📍[SdkManager] userId: $userId');
 
     try {
-      print('📍[SdkManager] 调用 IMClient.connect(token, userId: $userId)...');
-      await client.connect(token, userId: userId);
+      print('📍[SdkManager] 调用 IMClient.connect(token, userId: $userId, refreshToken: ${refreshToken != null ? "有" : "无"})...');
+      await client.connect(token, userId: userId, refreshToken: refreshToken);
       print('✅[SdkManager] IMClient.connect() 返回成功');
     } catch (e, stack) {
       print('❌[SdkManager] IMClient.connect() 失败: $e');

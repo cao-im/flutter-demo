@@ -14,17 +14,57 @@ class ApiService {
   late final Dio _imDio;
 
   ApiService() {
-    _appDio = _createDio(_appServerUrl);
-    _imDio = _createDio(_imServerUrl);
+    _appDio = _createAppDio();
+    _imDio = _createImDio();
   }
 
-  Dio _createDio(String baseUrl) {
+  Dio _createAppDio() {
     final dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl: _appServerUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {'Content-Type': 'application/json'},
       responseType: ResponseType.plain,
+    ));
+
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final token = await StorageService.getToken();
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        handler.next(options);
+      },
+      onError: (e, handler) async {
+        if (e.response?.statusCode == 401) {
+          debugPrint('⚠️[ApiService] App API 返回401，Token可能已过期');
+        }
+        handler.next(e);
+      },
+    ));
+
+    dio.interceptors.add(NetworkLogInterceptor());
+
+    return dio;
+  }
+
+  Dio _createImDio() {
+    final dio = Dio(BaseOptions(
+      baseUrl: _imServerUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      headers: {'Content-Type': 'application/json'},
+      responseType: ResponseType.plain,
+    ));
+
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final imToken = await StorageService.getImToken();
+        if (imToken != null && imToken.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $imToken';
+        }
+        handler.next(options);
+      },
     ));
 
     dio.interceptors.add(NetworkLogInterceptor());
@@ -43,25 +83,6 @@ class ApiService {
       }
     }
     return responseData;
-  }
-
-  Future<void> _attachToken(Dio dio) async {
-    final token = await StorageService.getToken();
-    if (token != null && token.isNotEmpty) {
-      dio.options.headers['Authorization'] = 'Bearer $token';
-    }
-  }
-
-  Future<void> _attachImToken(Dio dio) async {
-    final token = await StorageService.getImToken();
-    if (token != null && token.isNotEmpty) {
-      dio.options.headers['Authorization'] = 'Bearer $token';
-    } else {
-      final appToken = await StorageService.getToken();
-      if (appToken != null && appToken.isNotEmpty) {
-        dio.options.headers['Authorization'] = 'Bearer $appToken';
-      }
-    }
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
@@ -94,31 +115,10 @@ class ApiService {
     }
   }
 
-  Future<UserModel> getUserInfo() async {
-    try {
-      await _attachImToken(_imDio);
-      final response = await _imDio.get('/user/info');
-      final data = _parseResponse(response.data);
-
-      if (data is Map<String, dynamic>) {
-        final userData = data['data'];
-        if (userData != null && userData is Map<String, dynamic>) {
-          return UserModel.fromJson(userData);
-        }
-      }
-
-      throw Exception('用户信息响应格式错误');
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw Exception('Token无效或已过期');
-      }
-      throw Exception('获取用户信息失败: ${e.message}');
-    }
-  }
+  // ==================== IM API 方法 ====================
 
   Future<List<dynamic>> getFriendList(int userId) async {
     try {
-      await _attachImToken(_imDio);
       final response = await _imDio.get('/contact/list', queryParameters: {'userId': userId});
       final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
@@ -132,7 +132,6 @@ class ApiService {
 
   Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.post('/friend-request/request', queryParameters: {
         'fromUserId': fromUserId,
         'toUserId': toUserId,
@@ -144,7 +143,6 @@ class ApiService {
 
   Future<void> sendFriendRequestWithString(String fromUserId, String toUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.post('/friend-request/request', queryParameters: {
         'fromUserId': fromUserId,
         'toUserId': toUserId,
@@ -156,7 +154,6 @@ class ApiService {
 
   Future<void> acceptFriendRequest(int toUserId, int fromUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.put('/friend-request/accept', queryParameters: {
         'toUserId': toUserId,
         'fromUserId': fromUserId,
@@ -168,7 +165,6 @@ class ApiService {
 
   Future<void> acceptFriendRequestWithString(String toUserId, String fromUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.put('/friend-request/accept', queryParameters: {
         'toUserId': toUserId,
         'fromUserId': fromUserId,
@@ -180,7 +176,6 @@ class ApiService {
 
   Future<void> rejectFriendRequest(int toUserId, int fromUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.put('/friend-request/reject', queryParameters: {
         'toUserId': toUserId,
         'fromUserId': fromUserId,
@@ -192,7 +187,6 @@ class ApiService {
 
   Future<void> rejectFriendRequestWithString(String toUserId, String fromUserId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.put('/friend-request/reject', queryParameters: {
         'toUserId': toUserId,
         'fromUserId': fromUserId,
@@ -204,7 +198,6 @@ class ApiService {
 
   Future<void> deleteFriend(int userId, int contactId) async {
     try {
-      await _attachImToken(_imDio);
       await _imDio.delete('/contact/$contactId', queryParameters: {'userId': userId});
     } on DioException catch (e) {
       throw Exception('删除联系人失败: ${e.message}');
@@ -213,7 +206,6 @@ class ApiService {
 
   Future<List<dynamic>> searchUsers(String keyword) async {
     try {
-      await _attachImToken(_imDio);
       final response = await _imDio.get('/contact/search-users', queryParameters: {
         'keyword': keyword,
       });
@@ -229,7 +221,6 @@ class ApiService {
 
   Future<List<dynamic>> getFriendRequests(int userId) async {
     try {
-      await _attachImToken(_imDio);
       final response = await _imDio.get('/friend-request/pending', queryParameters: {'userId': userId});
       final data = _parseResponse(response.data);
       if (data is Map<String, dynamic> && data.containsKey('data')) {
@@ -243,7 +234,6 @@ class ApiService {
 
   Future<int> checkFriendStatus(int userId, int targetUserId) async {
     try {
-      await _attachImToken(_imDio);
       final response = await _imDio.get('/contact/check-status', queryParameters: {
         'userId': userId,
         'targetUserId': targetUserId,

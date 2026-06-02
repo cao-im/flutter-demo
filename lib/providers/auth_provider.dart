@@ -32,14 +32,25 @@ class AuthProvider with ChangeNotifier {
 
         if (token != null && userData != null) {
           await StorageService.saveToken(token);
+          
           final imToken = data['imToken'] as String?;
+          final imRefreshToken = data['imRefreshToken'] as String?;
+          
           if (imToken != null) {
             await StorageService.saveImToken(imToken);
+            debugPrint('✅[AuthProvider] 保存 IM Token');
           }
+          
+          if (imRefreshToken != null) {
+            await StorageService.saveImRefreshToken(imRefreshToken);
+            debugPrint('✅[AuthProvider] 保存 IM RefreshToken');
+          }
+          
           final user = UserModel.fromJson(userData);
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
+          
           if (user.imUserId != null) {
             await StorageService.saveImUserId(user.imUserId!);
             debugPrint('✅[AuthProvider] 存储 imUserId: ${user.imUserId}');
@@ -50,8 +61,12 @@ class AuthProvider with ChangeNotifier {
           if (connectionProvider.isInitialized) {
             final connectToken = imToken ?? token;
             final imUid = int.tryParse(user.imUserId ?? user.id) ?? 0;
-            debugPrint('📍[AuthProvider] 使用 imUserId=$imUid 连接 IM');
-            await connectionProvider.connect(connectToken, userId: imUid);
+            debugPrint('📍[AuthProvider] 使用 imUid=$imUid 连接 IM (含RefreshToken)');
+            await connectionProvider.connect(
+              connectToken,
+              userId: imUid,
+              refreshToken: imRefreshToken,
+            );
           }
 
           notifyListeners();
@@ -85,14 +100,25 @@ class AuthProvider with ChangeNotifier {
 
         if (token != null && userData != null) {
           await StorageService.saveToken(token);
+          
           final imToken = data['imToken'] as String?;
+          final imRefreshToken = data['imRefreshToken'] as String?;
+          
           if (imToken != null) {
             await StorageService.saveImToken(imToken);
+            debugPrint('✅[AuthProvider] 注册时保存 IM Token');
           }
+          
+          if (imRefreshToken != null) {
+            await StorageService.saveImRefreshToken(imRefreshToken);
+            debugPrint('✅[AuthProvider] 注册时保存 IM RefreshToken');
+          }
+          
           final user = UserModel.fromJson(userData);
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
+          
           if (user.imUserId != null) {
             await StorageService.saveImUserId(user.imUserId!);
             debugPrint('✅[AuthProvider] 注册时存储 imUserId: ${user.imUserId}');
@@ -118,8 +144,11 @@ class AuthProvider with ChangeNotifier {
 
     final token = await StorageService.getToken();
     final imToken = await StorageService.getImToken();
-    debugPrint('📍[AuthProvider] token: ${token != null ? "有 (长度=${token.length})" : "无"}');
-    debugPrint('📍[AuthProvider] imToken: ${imToken != null ? "有 (长度=${imToken.length})" : "无"}');
+    final imRefreshToken = await StorageService.getImRefreshToken();
+    
+    debugPrint('📍[AuthProvider] token: ${token != null ? "有" : "无"}');
+    debugPrint('📍[AuthProvider] imToken: ${imToken != null ? "有" : "无"}');
+    debugPrint('📍[AuthProvider] imRefreshToken: ${imRefreshToken != null ? "有" : "无"}');
 
     if (token != null && token.isNotEmpty) {
       final userId = await StorageService.getUserId();
@@ -135,19 +164,28 @@ class AuthProvider with ChangeNotifier {
           if (connectionProvider.isInitialized && !connectionProvider.isConnected) {
             final connectToken = imToken ?? token;
             final uid = int.tryParse(imUserIdStr ?? userId) ?? 0;
-            debugPrint('📍[AuthProvider] 准备调用 connectionProvider.connect(imToken, userId=$uid)...');
-            await connectionProvider.connect(connectToken, userId: uid);
+            debugPrint('📍[AuthProvider] 准备连接IM (SDK会自动处理Token刷新)...');
+            await connectionProvider.connect(
+              connectToken,
+              userId: uid,
+              refreshToken: imRefreshToken,
+            );
             debugPrint('✅[AuthProvider] connect() 返回');
           }
 
-          debugPrint('📍[AuthProvider] 通过 IM Server HTTP API 获取用户信息...');
-          final user = await _apiService.getUserInfo();
-          _user = user;
-          debugPrint('✅[AuthProvider] 通过HTTP API获取用户信息成功: ${_user?.username}');
-
+          debugPrint('ℹ️[AuthProvider] SDK已接管用户信息获取和Token管理');
+          
+          final username = await StorageService.getUsername();
+          _user = UserModel(
+            id: userId,
+            username: username ?? userId,
+            nickname: username ?? '用户',
+            imUserId: imUserIdStr,
+          );
+          
           notifyListeners();
         } catch (e, stack) {
-          debugPrint('❌[AuthProvider] 加载用户信息失败: $e');
+          debugPrint('❌[AuthProvider] 加载失败: $e');
           debugPrint('❌[AuthProvider] stackTrace: $stack');
           
           if (e.toString().contains('401') || e.toString().contains('Token无效')) {

@@ -49,10 +49,11 @@ class ConnectionProvider with ChangeNotifier {
     debugPrint('📍[ConnProvider] ====== initialize() 结束, 最终状态: $_state ======');
   }
 
-  Future<void> connect(String token, {int? userId}) async {
+  Future<void> connect(String token, {int? userId, String? refreshToken}) async {
     debugPrint('');
     debugPrint('📍[ConnProvider] ====== connect() 开始 ======');
     debugPrint('📍[ConnProvider] token长度: ${token?.length ?? 0}');
+    debugPrint('📍[ConnProvider] refreshToken: ${refreshToken != null ? "有" : "无"}');
     debugPrint('📍[ConnProvider] userId: $userId');
     debugPrint('📍[ConnProvider] isInitialized: ${_sdkManager.isInitialized}');
     debugPrint('📍[ConnProvider] 当前状态: $_state');
@@ -65,8 +66,8 @@ class ConnectionProvider with ChangeNotifier {
     _setState(ImConnectionState.connecting);
 
     try {
-      debugPrint('📍[ConnProvider] 调用 IMSdkManager.connect(token, userId: $userId)...');
-      await _sdkManager.connect(token, userId: userId);
+      debugPrint('📍[ConnProvider] 调用 IMSdkManager.connect(token, userId: $userId, refreshToken: ${refreshToken != null ? "有" : "无"})...');
+      await _sdkManager.connect(token, userId: userId, refreshToken: refreshToken);
       debugPrint('✅[ConnProvider] IMSdkManager.connect() 返回成功');
     } catch (e, stack) {
       debugPrint('❌[ConnProvider] connect 失败: $e');
