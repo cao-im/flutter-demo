@@ -38,22 +38,44 @@ class _ChatPageState extends State<ChatPage> {
   bool _hasMore = true;
   ChatProvider? _chatProvider;
   int _lastMessageCount = 0;
+  bool _currentConversationNotSetInInit = false; // 标记 initState 中是否成功设置会话
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+    // ✅ 备用逻辑：如果 initState 中设置会话失败，在这里重试
+    // 原因：某些情况下 initState 中可能无法访问 InheritedWidget
+    if (widget.conversationId.isNotEmpty && _currentConversationNotSetInInit) {
+      debugPrint('🔄[ChatPage] didChangeDependencies: 重试设置当前会话 ${widget.conversationId}');
+      _chatProvider?.setCurrentConversation(
+        ConversationModel(
+          id: widget.conversationId,
+          name: widget.conversationName,
+          participantIds: [],
+          isGroup: widget.isGroup,
+        ),
+      );
+      _currentConversationNotSetInInit = false;
+    }
   }
 
   @override
   void initState() {
     super.initState();
+    debugPrint('🔄[ChatPage] initState 被调用: conversationId=${widget.conversationId}, conversationName=${widget.conversationName}');
     _scrollController.addListener(_scrollListener);
     _lastMessageCount = 0;
-    
+
     if (widget.conversationId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        _chatProvider?.setCurrentConversation(
+      // ✅ 同步设置当前会话（不使用 postFrameCallback）
+      // 注意：必须使用 Provider.of 直接获取，不能使用 _chatProvider 字段
+      // 原因：initState() 在 didChangeDependencies() 之前执行，此时 _chatProvider 还是 null
+      debugPrint('🔄[ChatPage] initState: 同步设置当前会话 ${widget.conversationId}');
+      try {
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        chatProvider.setCurrentConversation(
           ConversationModel(
             id: widget.conversationId,
             name: widget.conversationName,
@@ -61,7 +83,17 @@ class _ChatPageState extends State<ChatPage> {
             isGroup: widget.isGroup,
           ),
         );
+        debugPrint('✅[ChatPage] initState: 成功设置当前会话');
+        _currentConversationNotSetInInit = false;
+      } catch (e) {
+        debugPrint('⚠️[ChatPage] initState: 设置当前会话失败（可能 context 未就绪）: $e');
+        // 如果在 initState 中无法获取 Provider，将在 didChangeDependencies 中重试
+        _currentConversationNotSetInInit = true;
+      }
 
+      // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        debugPrint('🔄[ChatPage] initState postFrameCallback 执行: 加载消息');
         await _chatProvider?.loadMessages(widget.conversationId);
 
         _scrollToBottom(animate: false);  // 首次加载使用无动画跳转
@@ -75,34 +107,44 @@ class _ChatPageState extends State<ChatPage> {
           isGroup: isGroup,
         );
       });
+    } else {
+      debugPrint('⚠️[ChatPage] initState: conversationId 为空，不设置当前会话');
     }
   }
 
   @override
   void didUpdateWidget(covariant ChatPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    debugPrint('🔄[ChatPage] didUpdateWidget 被调用: oldId=${oldWidget.conversationId}, newId=${widget.conversationId}');
 
     if (oldWidget.conversationId != widget.conversationId) {
+      debugPrint('🔄[ChatPage] 会话ID发生变化，调用 _onConversationChanged');
       _onConversationChanged();
     }
   }
 
   void _onConversationChanged() {
+    debugPrint('🔄[ChatPage] _onConversationChanged 被调用: conversationId=${widget.conversationId}');
     _currentPage = 1;
     _hasMore = true;
     _lastMessageCount = 0;
 
     if (widget.conversationId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        _chatProvider?.setCurrentConversation(
-          ConversationModel(
-            id: widget.conversationId,
-            name: widget.conversationName,
-            participantIds: [],
-            isGroup: widget.isGroup,
-          ),
-        );
+      // ✅ 同步设置当前会话（不使用 postFrameCallback）
+      // 原因：避免时序问题，确保会话切换时立即生效
+      debugPrint('🔄[ChatPage] _onConversationChanged: 同步设置当前会话 ${widget.conversationId}');
+      _chatProvider?.setCurrentConversation(
+        ConversationModel(
+          id: widget.conversationId,
+          name: widget.conversationName,
+          participantIds: [],
+          isGroup: widget.isGroup,
+        ),
+      );
 
+      // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        debugPrint('🔄[ChatPage] _onConversationChanged postFrameCallback 执行: 加载消息');
         await _chatProvider?.loadMessages(widget.conversationId);
 
         _scrollToBottom(animate: false);  // 切换会话时也使用无动画跳转
@@ -117,6 +159,7 @@ class _ChatPageState extends State<ChatPage> {
         );
       });
     } else {
+      debugPrint('⚠️[ChatPage] _onConversationChanged: conversationId 为空，清空当前会话');
       _chatProvider?.clearCurrentConversation();
     }
 
@@ -127,11 +170,30 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    debugPrint('🗑️[ChatPage] dispose 被调用: conversationId=${widget.conversationId}');
+    final shouldClear = widget.conversationId.isEmpty;
+    debugPrint('🗑️[ChatPage] dispose: shouldClear=$shouldClear');
+
     _messageController.dispose();
     _scrollController.dispose();
-    Future.microtask(() {
-      _chatProvider?.clearCurrentConversation();
-    });
+
+    // ✅ 改进的清理逻辑：
+    // 1. 只在占位符页面（conversationId 为空）销毁时才考虑清空
+    // 2. 使用延迟检查，避免在会话切换时误清空新设置的会话
+    if (shouldClear) {
+      Future.microtask(() {
+        // 再次检查：如果当前会话已经被新 Widget 设置过，就不清空
+        if (_chatProvider?.currentConversation != null) {
+          debugPrint('🗑️[ChatPage] dispose microtask: 当前已有会话 ${_chatProvider?.currentConversation?.id}，跳过清空');
+          return;
+        }
+        debugPrint('🗑️[ChatPage] dispose microtask: 确认清空当前会话');
+        _chatProvider?.clearCurrentConversation();
+      });
+    } else {
+      debugPrint('🗑️[ChatPage] dispose: 聊天页面被销毁，不清空会话');
+    }
+
     super.dispose();
   }
 

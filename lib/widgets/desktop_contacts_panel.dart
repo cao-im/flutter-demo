@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
+import '../models/chat_model.dart';
 import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/layout_provider.dart';
+import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_widget.dart';
 
@@ -104,21 +106,6 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         final groupedContacts = contactProvider.groupedContacts;
         final allContacts = contactProvider.contacts;
 
-        if (allContacts.isEmpty && !contactProvider.isLoading) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text('暂无联系人', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-                const SizedBox(height: 8),
-                Text('添加好友开始聊天吧', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-              ],
-            ),
-          );
-        }
-
         return Row(
           children: [
             Expanded(
@@ -126,17 +113,60 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
                 controller: _scrollController,
                 padding: EdgeInsets.zero,
                 children: [
+                  // ✅ 菜单项始终显示，不受联系人数量影响
                   _buildSpecialSection(
                     icon: Icons.person_add_outlined,
                     title: '新的朋友',
                     badgeCount: contactProvider.unreadFriendRequestCount,
                     onTap: () => setState(() => _currentView = _PanelView.newFriends),
                   ),
+                  // ✅ 新增：搜索并添加好友（常驻入口）
+                  _buildSpecialSection(
+                    icon: Icons.person_search_outlined,
+                    title: '添加好友',
+                    badgeCount: null,
+                    onTap: () => Navigator.of(context).pushNamed(AppRouter.searchAddFriend),
+                  ),
                   _buildExpandableSection(icon: Icons.group_outlined, title: '群聊', count: null, isExpanded: false, onTap: () {}),
                   _buildExpandableSection(icon: Icons.article_outlined, title: '公众号', count: null, isExpanded: false, onTap: () {}),
                   _buildExpandableSection(icon: Icons.support_agent_outlined, title: '服务号', count: null, isExpanded: false, onTap: () {}),
                   Divider(height: 1, indent: 56, color: Colors.grey[200]),
-                  ..._buildContactList(contactProvider),
+
+                  // ✅ 联系人列表或空状态提示
+                  if (allContacts.isEmpty && !contactProvider.isLoading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                            const SizedBox(height: 16),
+                            Text('暂无联系人', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                            const SizedBox(height: 8),
+                            Text('添加好友开始聊天吧', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                            const SizedBox(height: 24),
+                            // ✅ 添加"搜索添加好友"按钮
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.of(context).pushNamed(AppRouter.searchAddFriend),
+                              icon: const Icon(Icons.person_add, size: 20),
+                              label: const Text('搜索并添加好友'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                                elevation: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ..._buildContactList(contactProvider),
                 ],
               ),
             ),
@@ -470,8 +500,26 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
     return InkWell(
       onTap: () {
-        Provider.of<LayoutProvider>(context, listen: false)
-            .selectConversation(contact.id ?? '', name, false);
+        debugPrint('👆[DesktopContactsPanel] 点击联系人: id=${contact.id}, name=$name');
+        final contactId = contact.id ?? '';
+        final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
+        layoutProvider.selectConversation(contactId, name, false);
+        debugPrint('👆[DesktopContactsPanel] 已调用 layoutProvider.selectConversation');
+
+        // ✅ 同时设置 ChatProvider 的当前会话，确保发送消息时能正确获取
+        // 即使会话列表中没有该联系人的会话记录，也需要创建临时的会话对象
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        final conversationId = contactId.isNotEmpty ? '1_$contactId' : '';
+        debugPrint('👆[DesktopContactsPanel] 准备设置 ChatProvider 当前会话: conversationId=$conversationId');
+        chatProvider.setCurrentConversation(
+          ConversationModel(
+            id: conversationId,
+            name: name,
+            isGroup: false,
+            participantIds: [],
+          ),
+        );
+        debugPrint('✅[DesktopContactsPanel] 联系人点击处理完成');
       },
       onLongPress: () => _showContactContextMenu(contact, context),
       hoverColor: AppTheme.primaryColor.withOpacity(0.04),
@@ -556,8 +604,21 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       ],
     ).then((value) {
       if (value == 'chat') {
+        final contactId = contact.id ?? '';
         Provider.of<LayoutProvider>(context, listen: false)
-            .selectConversation(contact.id ?? '', name, false);
+            .selectConversation(contactId, name, false);
+
+        // ✅ 同时设置 ChatProvider 的当前会话
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        final conversationId = contactId.isNotEmpty ? '1_$contactId' : '';
+        chatProvider.setCurrentConversation(
+          ConversationModel(
+            id: conversationId,
+            name: name,
+            isGroup: false,
+            participantIds: [],
+          ),
+        );
       } else if (value == 'delete') {
         _confirmDeleteContact(contact, name);
       }

@@ -123,7 +123,10 @@ class ChatProvider with ChangeNotifier {
   }
 
   void setCurrentConversation(ConversationModel conversation) {
+    debugPrint('🔧[ChatProvider] setCurrentConversation 被调用: id=${conversation.id}, name=${conversation.name}');
+    debugPrint('🔧[ChatProvider] 设置前 _currentConversation: ${_currentConversation?.id ?? "null"}');
     _currentConversation = conversation;
+    debugPrint('🔧[ChatProvider] 设置后 _currentConversation: ${_currentConversation?.id ?? "null"}');
     notifyListeners();
   }
 
@@ -406,8 +409,12 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> sendMessage(String content, {String type = 'text'}) async {
+    debugPrint('📤[ChatProvider] sendMessage 被调用: content=$content, type=$type');
+    debugPrint('📤[ChatProvider] 当前 _currentConversation: ${_currentConversation?.id ?? "null"}');
+
     if (_currentConversation == null) {
       debugPrint('❌[ChatProvider] sendMessage 失败: _currentConversation 为空');
+      debugPrint('❌[ChatProvider] 调用栈: ${StackTrace.current}');
       return;
     }
 
@@ -605,6 +612,7 @@ class ChatProvider with ChangeNotifier {
   }
 
   void clearCurrentConversation() {
+    debugPrint('🗑️[ChatProvider] clearCurrentConversation 被调用，清空前: ${_currentConversation?.id ?? "null"}');
     _currentConversation = null;
     _messages = [];
     notifyListeners();
