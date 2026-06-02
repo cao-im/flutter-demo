@@ -439,8 +439,8 @@ class ChatProvider with ChangeNotifier {
     try {
       final parts = _currentConversation!.id.split('_');
       final targetId = int.tryParse(parts.last ?? '0') ?? 0;
-      final isGroup = parts.first == '2';
-      
+      final isGroup = _currentConversation!.isGroup;
+
       debugPrint('📍[ChatProvider] 发送消息: conversationId=${_currentConversation!.id}, targetId=$targetId, isGroup=$isGroup');
       
       if (targetId <= 0) {
@@ -507,7 +507,7 @@ class ChatProvider with ChangeNotifier {
     try {
       final parts = _currentConversation!.id.split('_');
       final targetId = int.tryParse(parts.last ?? '0') ?? 0;
-      final isGroup = parts.first == '2';
+      final isGroup = _currentConversation!.isGroup;
 
       sdk.Message sentMessage;
       if (isGroup) {

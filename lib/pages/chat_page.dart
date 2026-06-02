@@ -100,11 +100,10 @@ class _ChatPageState extends State<ChatPage> {
 
         final parts = widget.conversationId.split('_');
         final targetId = int.tryParse(parts.last ?? '0') ?? 0;
-        final isGroup = parts.first == '2';
 
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
-          isGroup: isGroup,
+          isGroup: widget.isGroup,
         );
       });
     } else {
@@ -151,11 +150,10 @@ class _ChatPageState extends State<ChatPage> {
 
         final parts = widget.conversationId.split('_');
         final targetId = int.tryParse(parts.last ?? '0') ?? 0;
-        final isGroup = parts.first == '2';
 
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
-          isGroup: isGroup,
+          isGroup: widget.isGroup,
         );
       });
     } else {

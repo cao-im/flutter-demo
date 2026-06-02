@@ -350,11 +350,12 @@ class _ContactsPageState extends State<ContactsPage>
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
+          final contactId = contact.id ?? '';
           Navigator.pushNamed(
             context,
             AppRouter.chat,
             arguments: {
-              'conversationId': contact.id ?? '',
+              'conversationId': contactId.isNotEmpty ? '1_$contactId' : '',
               'conversationName': name,
               'isGroup': false,
             },
