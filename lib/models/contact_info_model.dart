@@ -1,5 +1,6 @@
 class ContactInfo {
   final int id;
+  final int userId;
   final String username;
   final String nickname;
   final String avatar;
@@ -7,15 +8,17 @@ class ContactInfo {
 
   ContactInfo({
     required this.id,
+    required this.userId,
     required this.username,
     required this.nickname,
     required this.avatar,
-    required this.remark,
+    this.remark = '',
   });
 
   factory ContactInfo.fromJson(Map<String, dynamic> json) {
     return ContactInfo(
       id: json['id'] as int? ?? 0,
+      userId: json['contactUserId'] as int? ?? json['userId'] as int? ?? json['id'] as int? ?? 0,
       username: json['username']?.toString() ?? '',
       nickname: json['nickname']?.toString() ?? '',
       avatar: json['avatar']?.toString() ?? '',
@@ -26,6 +29,7 @@ class ContactInfo {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'userId': userId,
       'username': username,
       'nickname': nickname,
       'avatar': avatar,
@@ -35,6 +39,7 @@ class ContactInfo {
 
   ContactInfo copyWith({
     int? id,
+    int? userId,
     String? username,
     String? nickname,
     String? avatar,
@@ -42,6 +47,7 @@ class ContactInfo {
   }) {
     return ContactInfo(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       username: username ?? this.username,
       nickname: nickname ?? this.nickname,
       avatar: avatar ?? this.avatar,
@@ -51,15 +57,15 @@ class ContactInfo {
 
   @override
   String toString() {
-    return 'ContactInfo(id: $id, username: $username, nickname: $nickname, avatar: $avatar, remark: $remark)';
+    return 'ContactInfo(id: $id, userId: $userId, username: $username, nickname: $nickname, avatar: $avatar, remark: $remark)';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is ContactInfo && other.id == id;
+    return other is ContactInfo && other.userId == userId;
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => userId.hashCode;
 }

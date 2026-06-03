@@ -489,6 +489,7 @@ class _ConversationListPageState extends State<ConversationListPage>
                             'conversationId': conversation.id,
                             'conversationName': conversation.name,
                             'isGroup': conversation.isGroup,
+                            'targetId': conversation.targetId,
                           },
                         );
                       }

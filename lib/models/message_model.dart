@@ -1,3 +1,5 @@
+import 'sender_info_model.dart';
+
 enum MessageType { text, image, video, audio, file }
 
 enum MessageStatus { sending, sent, delivered, read, failed, recalled }
@@ -16,6 +18,8 @@ class MessageModel {
   final bool isSending;
   final MessageStatus status;
   final bool canRecall;
+  final SenderInfoModel? senderInfo;
+  final GroupInfoModel? groupInfo;
 
   MessageModel({
     required this.id,
@@ -31,6 +35,8 @@ class MessageModel {
     this.isSending = false,
     this.status = MessageStatus.sent,
     this.canRecall = false,
+    this.senderInfo,
+    this.groupInfo,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -58,6 +64,12 @@ class MessageModel {
             )
           : MessageStatus.sent,
       canRecall: json['can_recall'] ?? false,
+      senderInfo: json['senderInfo'] != null
+          ? SenderInfoModel.fromJson(json['senderInfo'])
+          : null,
+      groupInfo: json['groupInfo'] != null
+          ? GroupInfoModel.fromJson(json['groupInfo'])
+          : null,
     );
   }
 
@@ -75,6 +87,8 @@ class MessageModel {
       'is_sent': isSent,
       'status': status.name,
       'can_recall': canRecall,
+      if (senderInfo != null) 'senderInfo': senderInfo!.toJson(),
+      if (groupInfo != null) 'groupInfo': groupInfo!.toJson(),
     };
   }
 
@@ -94,6 +108,26 @@ class MessageModel {
     }
   }
 
+  String get senderDisplayName {
+    if (senderInfo != null) {
+      if (senderInfo!.groupNickname != null && senderInfo!.groupNickname!.isNotEmpty) {
+        return senderInfo!.groupNickname!;
+      }
+      if (senderInfo!.nickname.isNotEmpty) {
+        return senderInfo!.nickname;
+      }
+    }
+    return '用户$senderId';
+  }
+
+  String? get senderDisplayAvatar {
+    return senderInfo?.avatar;
+  }
+
+  String? get groupDisplayName {
+    return groupInfo?.groupName;
+  }
+
   MessageModel copyWith({
     String? id,
     String? conversationId,
@@ -108,6 +142,8 @@ class MessageModel {
     bool? isSending,
     MessageStatus? status,
     bool? canRecall,
+    SenderInfoModel? senderInfo,
+    GroupInfoModel? groupInfo,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -123,6 +159,8 @@ class MessageModel {
       isSending: isSending ?? this.isSending,
       status: status ?? this.status,
       canRecall: canRecall ?? this.canRecall,
+      senderInfo: senderInfo ?? this.senderInfo,
+      groupInfo: groupInfo ?? this.groupInfo,
     );
   }
 }

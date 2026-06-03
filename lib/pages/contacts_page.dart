@@ -350,14 +350,15 @@ class _ContactsPageState extends State<ContactsPage>
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          final contactId = contact.id ?? '';
+          final contactId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
           Navigator.pushNamed(
             context,
             AppRouter.chat,
             arguments: {
-              'conversationId': contactId.isNotEmpty ? '1_$contactId' : '',
+              'conversationId': contactId > 0 ? '$contactId' : '',
               'conversationName': name,
               'isGroup': false,
+              'targetId': contactId, // 直接传真正的用户ID
             },
           );
         },
@@ -471,7 +472,7 @@ class _ContactsPageState extends State<ContactsPage>
                 final contactProvider = Provider.of<ContactProvider>(
                     context,
                     listen: false);
-                contactProvider.deleteFriend(contact.id);
+                contactProvider.deleteFriend(int.tryParse(contact.imUserId ?? contact.id)?.toString() ?? contact.id);
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

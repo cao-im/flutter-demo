@@ -34,37 +34,56 @@ class ContactDatabaseService {
     return _db!;
   }
 
+  /// 批量插入或更新联系人
+  /// 核心规则：id字段为本地记录ID（不存服务端任何值），userId为业务键（存服务端contactUserId）
+  /// upsert逻辑：先按userId查是否存在 → 存在则更新 | 不存在则插入（id自增）
   Future<void> upsertContacts(List<UserModel> users) async {
     if (users.isEmpty) return;
 
     final db = database;
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
-    await db.batch((batch) {
-      for (final user in users) {
-        final contactId = int.tryParse(user.id) ?? int.tryParse(user.imUserId ?? '') ?? 0;
-        if (contactId <= 0) continue;
+    for (final user in users) {
+      // 解析真正的用户ID（优先使用 imUserId，即服务端 contactUserId）
+      final imUserId = int.tryParse(user.imUserId ?? '') ?? int.tryParse(user.id) ?? 0;
+      if (imUserId <= 0) continue;
 
-        final companion = ContactsCompanion(
-          id: Value(contactId),
-          userId: Value(int.tryParse(user.imUserId ?? '') ?? int.tryParse(user.id) ?? 0),
-          username: Value(user.username),
-          nickname: Value(user.nickname),
-          avatar: Value(user.avatar ?? ''),
-          phone: Value(user.phone ?? ''),
-          email: Value(user.email ?? ''),
-          onlineStatus: Value(user.isOnline ? 1 : 0),
-          status: Value(user.friendStatus),
-          createTime: Value(user.createdAt != null ? (user.createdAt!.millisecondsSinceEpoch ~/ 1000) : now),
-        );
+      // 按业务键 userId 查询是否已存在
+      final existing = await (db.select(db.contacts)
+            ..where((tbl) => tbl.userId.equals(imUserId)))
+          .getSingleOrNull();
 
-        batch.insertAll(
-          db.contacts,
-          [companion],
-          onConflict: DoUpdate((old) => companion),
-        );
+      final baseCompanion = ContactsCompanion(
+        // 注意：不设 id！id 由数据库分配（本地记录ID）
+        userId: Value(imUserId),
+        username: Value(user.username),
+        nickname: Value(user.nickname),
+        avatar: Value(user.avatar ?? ''),
+        location: const Value(''),
+        remark: const Value(''),
+        phone: Value(user.phone ?? ''),
+        email: Value(user.email ?? ''),
+        onlineStatus: Value(user.isOnline ? 1 : 0),
+        status: Value(user.friendStatus),
+        createTime: Value(user.createdAt != null ? (user.createdAt!.millisecondsSinceEpoch ~/ 1000) : now),
+      );
+
+      if (existing != null) {
+        // 已存在 → 用本地 id 更新（id 不变，只更新业务字段）
+        await (db.update(db.contacts)..where((tbl) => tbl.id.equals(existing.id)))
+            .write(baseCompanion);
+      } else {
+        // 不存在 → 插入新记录（id 用 max(id)+1 实现自增）
+        final maxIdResult = await db.selectOnly(db.contacts)
+          ..addColumns([db.contacts.id]);
+        final maxIdRows = await maxIdResult.get();
+        final nextId = maxIdRows.isEmpty ? 1 : (maxIdRows.first.read(db.contacts.id) ?? 0) + 1;
+
+        await db.into(db.contacts).insert(baseCompanion.copyWith(
+          id: Value(nextId),
+        ));
       }
-    });
+    }
 
     print('[ContactDatabaseService] ✅ 批量upsert完成: ${users.length} 个联系人');
   }
@@ -90,19 +109,20 @@ class ContactDatabaseService {
     return rows.map((row) => _toUserModel(row)).toList();
   }
 
-  Future<UserModel?> getContactById(String id) async {
+  /// 根据 userId（真正的用户ID）查询联系人
+  Future<UserModel?> getContactByUserId(int userId) async {
     final db = database;
-    final contactId = int.tryParse(id);
-    if (contactId == null || contactId <= 0) return null;
+    if (userId <= 0) return null;
 
     final row = await (db.select(db.contacts)
-          ..where((tbl) => tbl.id.equals(contactId)))
+          ..where((tbl) => tbl.userId.equals(userId)))
         .getSingleOrNull();
 
     if (row == null) return null;
     return _toUserModel(row);
   }
 
+  /// 批量根据 userId 列表查询联系人，返回 Map<userId, ContactInfo>
   Future<Map<int, ContactInfo>> getContactsByIds(List<int> ids) async {
     if (ids.isEmpty) {
       print('[ContactDatabaseService] ℹ️ getContactsByIds: 传入空列表，返回空Map');
@@ -142,28 +162,25 @@ class ContactDatabaseService {
     }
   }
 
-  Future<void> deleteContact(String id) async {
+  /// 根据 userId 删除联系人
+  Future<void> deleteContactByUserId(int userId) async {
     final db = database;
-    final contactId = int.tryParse(id);
-    if (contactId == null || contactId <= 0) {
-      throw ArgumentError('无效的联系人ID: $id');
+    if (userId <= 0) {
+      throw ArgumentError('无效的用户ID: $userId');
     }
 
-    await (db.delete(db.contacts)..where((tbl) => tbl.id.equals(contactId))).go();
+    await (db.delete(db.contacts)..where((tbl) => tbl.userId.equals(userId))).go();
 
-    print('[ContactDatabaseService] 🗑️ 联系人已删除: id=$id');
+    print('[ContactDatabaseService] 🗑️ 联系人已删除: userId=$userId');
   }
 
-  Future<void> deleteContactByImUserId(String imUserId) async {
-    final db = database;
-    final contactId = int.tryParse(imUserId);
-    if (contactId == null || contactId <= 0) {
-      throw ArgumentError('无效的IM用户ID: $imUserId');
+  /// 兼容旧接口：根据字符串ID删除（自动识别为 userId）
+  Future<void> deleteContact(String id) async {
+    final userId = int.tryParse(id);
+    if (userId == null || userId <= 0) {
+      throw ArgumentError('无效的联系人ID: $id');
     }
-
-    await (db.delete(db.contacts)..where((tbl) => tbl.id.equals(contactId))).go();
-
-    print('[ContactDatabaseService] 🗑️ 联系人已删除: imUserId=$imUserId');
+    await deleteContactByUserId(userId);
   }
 
   Future<void> clearAllContacts() async {
@@ -182,41 +199,55 @@ class ContactDatabaseService {
     return count;
   }
 
-  Future<void> updateContactOnlineStatus(String id, bool isOnline) async {
+  /// 根据 userId 更新在线状态
+  Future<void> updateContactOnlineStatus(int userId, bool isOnline) async {
     final db = database;
-    final contactId = int.tryParse(id);
-    if (contactId == null || contactId <= 0) {
-      throw ArgumentError('无效的联系人ID: $id');
+    if (userId <= 0) {
+      throw ArgumentError('无效的用户ID: $userId');
     }
 
     await (db.update(db.contacts)
-          ..where((tbl) => tbl.id.equals(contactId)))
+          ..where((tbl) => tbl.userId.equals(userId)))
         .write(ContactsCompanion(
               onlineStatus: Value(isOnline ? 1 : 0),
             ));
 
-    print('[ContactDatabaseService] 📝 联系人在线状态已更新: id=$id, isOnline=$isOnline');
+    print('[ContactDatabaseService] 📝 联系人在线状态已更新: userId=$userId, isOnline=$isOnline');
   }
 
-  Future<void> updateContactNickname(String id, String nickname) async {
+  /// 兼容旧接口：字符串形式的在线状态更新
+  Future<void> updateContactOnlineStatusString(String id, bool isOnline) async {
+    final userId = int.tryParse(id) ?? 0;
+    await updateContactOnlineStatus(userId, isOnline);
+  }
+
+  /// 根据 userId 更新昵称
+  Future<void> updateContactNickname(int userId, String nickname) async {
     final db = database;
-    final contactId = int.tryParse(id);
-    if (contactId == null || contactId <= 0) {
-      throw ArgumentError('无效的联系人ID: $id');
+    if (userId <= 0) {
+      throw ArgumentError('无效的用户ID: $userId');
     }
 
     await (db.update(db.contacts)
-          ..where((tbl) => tbl.id.equals(contactId)))
+          ..where((tbl) => tbl.userId.equals(userId)))
         .write(ContactsCompanion(
               nickname: Value(nickname),
             ));
 
-    print('[ContactDatabaseService] 📝 联系人昵称已更新: id=$id, nickname=$nickname');
+    print('[ContactDatabaseService] 📝 联系人昵称已更新: userId=$userId, nickname=$nickname');
+  }
+
+  /// 兼容旧接口：字符串形式的昵称更新
+  Future<void> updateContactNicknameString(String id, String nickname) async {
+    final userId = int.tryParse(id) ?? 0;
+    await updateContactNickname(userId, nickname);
   }
 
   UserModel _toUserModel(Contact row) {
+    // userId 是真正的用户ID（对应服务端 contactUserId），作为业务标识
+    final realUserId = row.userId ?? 0;
     return UserModel(
-      id: row.id.toString(),
+      id: realUserId.toString(),       // id 使用真正的用户ID
       username: row.username,
       nickname: row.nickname,
       avatar: row.avatar.isNotEmpty ? row.avatar : null,
@@ -226,14 +257,15 @@ class ContactDatabaseService {
           ? DateTime.fromMillisecondsSinceEpoch(row.createTime! * 1000)
           : null,
       isOnline: row.onlineStatus == 1,
-      imUserId: row.id.toString(),
+      imUserId: realUserId.toString(), // imUserId 同样使用真正的用户ID
       friendStatus: row.status,
     );
   }
 
   ContactInfo _toContactInfo(Contact row) {
     return ContactInfo(
-      id: row.id,
+      id: row.id,                     // 本地自增ID（无业务含义）
+      userId: row.userId ?? 0,        // 真正的用户ID（业务键）
       username: row.username,
       nickname: row.nickname,
       avatar: row.avatar,

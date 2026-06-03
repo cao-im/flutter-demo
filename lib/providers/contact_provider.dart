@@ -168,10 +168,12 @@ class ContactProvider with ChangeNotifier {
         _contacts.add(contact);
       }
 
-      final contactId = int.tryParse(contact.id);
-      if (contactId != null && contactId > 0) {
+      // contact.id 现在是真正的用户ID（来自 _toUserModel 映射的 row.userId）
+      final userId = int.tryParse(contact.id) ?? int.tryParse(contact.imUserId ?? '') ?? 0;
+      if (userId > 0) {
         final contactInfo = ContactInfo(
-          id: contactId,
+          id: 0,  // 本地自增ID，此处无法获取，由数据库填充
+          userId: userId,
           username: contact.username,
           nickname: contact.nickname,
           avatar: contact.avatar ?? '',
@@ -181,10 +183,10 @@ class ContactProvider with ChangeNotifier {
 
         // 触发联系人变更事件
         _eventBus.fire(ContactDataChangedEvent(
-          contactId: contactId,
+          contactId: userId,
           changeType: 'added',
         ));
-        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (added), contactId=$contactId');
+        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (added), userId=$userId');
       }
 
       notifyListeners();
@@ -201,16 +203,16 @@ class ContactProvider with ChangeNotifier {
 
       _contacts.removeWhere((c) => c.id == contactId);
 
-      final id = int.tryParse(contactId);
-      if (id != null && id > 0) {
-        removeFromCache(id);
+      final userId = int.tryParse(contactId);
+      if (userId != null && userId > 0) {
+        removeFromCache(userId);
 
         // 触发联系人变更事件
         _eventBus.fire(ContactDataChangedEvent(
-          contactId: id,
+          contactId: userId,
           changeType: 'deleted',
         ));
-        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (deleted), contactId=$id');
+        debugPrint('📍[ContactProvider] 📢 已触发 ContactDataChangedEvent (deleted), userId=$userId');
       }
 
       notifyListeners();
@@ -564,8 +566,8 @@ class ContactProvider with ChangeNotifier {
   }
 
   void updateCache(ContactInfo contact) {
-    _contactCache[contact.id] = contact;
-    debugPrint('💾 updateCache: 已更新缓存 id=${contact.id}, nickname=${contact.nickname}, 当前缓存总数: ${_contactCache.length}');
+    _contactCache[contact.userId] = contact;
+    debugPrint('💾 updateCache: 已更新缓存 userId=${contact.userId}, nickname=${contact.nickname}, 当前缓存总数: ${_contactCache.length}');
   }
 
   void removeFromCache(int id) {

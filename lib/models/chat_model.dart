@@ -4,6 +4,7 @@ import 'user_model.dart';
 class ConversationModel {
   final String id;
   final int? dbId;
+  final int targetId;
   final String name;
   final String? avatar;
   final List<String> participantIds;
@@ -16,6 +17,7 @@ class ConversationModel {
   ConversationModel({
     required this.id,
     this.dbId,
+    required this.targetId,
     required this.name,
     this.avatar,
     required this.participantIds,
@@ -29,6 +31,7 @@ class ConversationModel {
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
     return ConversationModel(
       id: json['id'] ?? '',
+      targetId: json['target_id'] ?? 0,
       name: json['name'] ?? '',
       avatar: json['avatar'],
       participantIds: List<String>.from(json['participant_ids'] ?? []),
@@ -47,6 +50,7 @@ class ConversationModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'target_id': targetId,
       'name': name,
       'avatar': avatar,
       'participant_ids': participantIds,
@@ -61,6 +65,7 @@ class ConversationModel {
   ConversationModel copyWith({
     String? id,
     int? dbId,
+    int? targetId,
     String? name,
     String? avatar,
     List<String>? participantIds,
@@ -73,6 +78,7 @@ class ConversationModel {
     return ConversationModel(
       id: id ?? this.id,
       dbId: dbId ?? this.dbId,
+      targetId: targetId ?? this.targetId,
       name: name ?? this.name,
       avatar: avatar ?? this.avatar,
       participantIds: participantIds ?? this.participantIds,

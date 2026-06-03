@@ -500,20 +500,20 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
     return InkWell(
       onTap: () {
-        debugPrint('👆[DesktopContactsPanel] 点击联系人: id=${contact.id}, name=$name');
-        final contactId = contact.id ?? '';
+        final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
+        debugPrint('👆[DesktopContactsPanel] 点击联系人: id=${contact.id}, userId=$realUserId, name=$name');
+        final contactId = realUserId.toString();
         final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
         layoutProvider.selectConversation(contactId, name, false);
         debugPrint('👆[DesktopContactsPanel] 已调用 layoutProvider.selectConversation');
 
         // ✅ 同时设置 ChatProvider 的当前会话，确保发送消息时能正确获取
-        // 即使会话列表中没有该联系人的会话记录，也需要创建临时的会话对象
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-        final conversationId = contactId.isNotEmpty ? '1_$contactId' : '';
-        debugPrint('👆[DesktopContactsPanel] 准备设置 ChatProvider 当前会话: conversationId=$conversationId');
+        debugPrint('👆[DesktopContactsPanel] 准备设置 ChatProvider 当前会话: conversationId=$contactId, targetId=$realUserId');
         chatProvider.setCurrentConversation(
           ConversationModel(
-            id: conversationId,
+            id: contactId,
+            targetId: realUserId,
             name: name,
             isGroup: false,
             participantIds: [],
@@ -604,16 +604,17 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       ],
     ).then((value) {
       if (value == 'chat') {
-        final contactId = contact.id ?? '';
+        final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
+        final contactId = realUserId.toString();
         Provider.of<LayoutProvider>(context, listen: false)
             .selectConversation(contactId, name, false);
 
         // ✅ 同时设置 ChatProvider 的当前会话
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-        final conversationId = contactId.isNotEmpty ? '1_$contactId' : '';
         chatProvider.setCurrentConversation(
           ConversationModel(
-            id: conversationId,
+            id: contactId,
+            targetId: realUserId,
             name: name,
             isGroup: false,
             participantIds: [],
@@ -641,7 +642,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _deleteContact(contact.id, name);
+                final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
+                _deleteContact(realUserId.toString(), name);
               },
               style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
               child: const Text('删除'),

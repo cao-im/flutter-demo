@@ -15,6 +15,7 @@ class ChatPage extends StatefulWidget {
   final String conversationName;
   final bool isGroup;
   final bool isPanelMode;
+  final int targetId; // 聊天对象的真实用户ID（对应服务端 contactUserId）
 
   const ChatPage({
     super.key,
@@ -22,6 +23,7 @@ class ChatPage extends StatefulWidget {
     required this.conversationName,
     this.isGroup = false,
     this.isPanelMode = false,
+    this.targetId = 0, // 默认0，由调用方传入正确值
   });
 
   @override
@@ -39,11 +41,43 @@ class _ChatPageState extends State<ChatPage> {
   ChatProvider? _chatProvider;
   int _lastMessageCount = 0;
   bool _currentConversationNotSetInInit = false; // 标记 initState 中是否成功设置会话
+  int? _resolvedTargetId; // 解析后的 targetId（含兜底查询）
+
+  /// 获取 targetId：优先使用传入值，为0时从已加载的会话列表中查找兜底
+  int get effectiveTargetId {
+    if (widget.targetId > 0) return widget.targetId;
+    if (_resolvedTargetId != null && _resolvedTargetId! > 0) return _resolvedTargetId!;
+    // 最后兜底：直接解析 conversationId（新格式是纯数字 targetId）
+    return int.tryParse(widget.conversationId) ?? 0;
+  }
+
+  /// 从 ChatProvider 已加载的会话列表中查找匹配的 targetId
+  void _resolveTargetIdFromConversations() {
+    if (widget.targetId > 0) {
+      _resolvedTargetId = widget.targetId;
+      return;
+    }
+    if (_chatProvider == null) return;
+    // 在已有会话列表中按 id 匹配
+    final match = _chatProvider!.conversations.firstWhere(
+      (c) => c.id == widget.conversationId,
+      orElse: () => ConversationModel(
+        id: '', targetId: 0, name: '', participantIds: [],
+      ),
+    );
+    if (match.targetId > 0) {
+      _resolvedTargetId = match.targetId;
+      debugPrint('🔄[ChatPage] 从会话列表查找到 targetId=${_resolvedTargetId} (conversationId=${widget.conversationId})');
+    }
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+    // 尝试从已加载的会话列表中解析 targetId（兜底逻辑）
+    _resolveTargetIdFromConversations();
 
     // ✅ 备用逻辑：如果 initState 中设置会话失败，在这里重试
     // 原因：某些情况下 initState 中可能无法访问 InheritedWidget
@@ -52,6 +86,7 @@ class _ChatPageState extends State<ChatPage> {
       _chatProvider?.setCurrentConversation(
         ConversationModel(
           id: widget.conversationId,
+          targetId: effectiveTargetId,
           name: widget.conversationName,
           participantIds: [],
           isGroup: widget.isGroup,
@@ -78,6 +113,7 @@ class _ChatPageState extends State<ChatPage> {
         chatProvider.setCurrentConversation(
           ConversationModel(
             id: widget.conversationId,
+            targetId: effectiveTargetId,
             name: widget.conversationName,
             participantIds: [],
             isGroup: widget.isGroup,
@@ -98,8 +134,8 @@ class _ChatPageState extends State<ChatPage> {
 
         _scrollToBottom(animate: false);  // 首次加载使用无动画跳转
 
-        final parts = widget.conversationId.split('_');
-        final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+        // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
+        final targetId = effectiveTargetId;
 
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
@@ -127,6 +163,9 @@ class _ChatPageState extends State<ChatPage> {
     _currentPage = 1;
     _hasMore = true;
     _lastMessageCount = 0;
+    // 会话切换时重新解析 targetId
+    _resolvedTargetId = null;
+    _resolveTargetIdFromConversations();
 
     if (widget.conversationId.isNotEmpty) {
       // ✅ 同步设置当前会话（不使用 postFrameCallback）
@@ -135,6 +174,7 @@ class _ChatPageState extends State<ChatPage> {
       _chatProvider?.setCurrentConversation(
         ConversationModel(
           id: widget.conversationId,
+          targetId: effectiveTargetId,
           name: widget.conversationName,
           participantIds: [],
           isGroup: widget.isGroup,
@@ -148,8 +188,8 @@ class _ChatPageState extends State<ChatPage> {
 
         _scrollToBottom(animate: false);  // 切换会话时也使用无动画跳转
 
-        final parts = widget.conversationId.split('_');
-        final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+        // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
+        final targetId = effectiveTargetId;
 
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
@@ -217,8 +257,7 @@ class _ChatPageState extends State<ChatPage> {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
 
     try {
-      final parts = widget.conversationId.split('_');
-      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final targetId = effectiveTargetId;
       final sdkMessages = await chatProvider.loadMoreHistoryMessages(
         targetId: targetId,
         page: _currentPage,
@@ -521,8 +560,7 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<ContactInfo?> _getContactInfo(ChatProvider chatProvider) async {
     try {
-      final parts = widget.conversationId.split('_');
-      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final targetId = effectiveTargetId;
 
       if (targetId <= 0) return null;
 

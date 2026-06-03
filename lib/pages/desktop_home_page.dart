@@ -131,6 +131,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                 (c) => c.id == id,
                 orElse: () => ConversationModel(
                   id: id,
+                  targetId: int.tryParse(id) ?? 0, // 尝试从 conversationId 解析
                   name: name,
                   isGroup: isGroup,
                   participantIds: [],
@@ -334,6 +335,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     final conversationName = layoutProvider.currentConversationName ?? '';
     final isGroup = layoutProvider.isGroup;
 
-    return Expanded(key: ValueKey('chat_panel_$conversationId'), child: ChatPage(conversationId: conversationId, conversationName: conversationName, isGroup: isGroup, isPanelMode: true));
+    return Expanded(key: ValueKey('chat_panel_$conversationId'), child: ChatPage(conversationId: conversationId, conversationName: conversationName, isGroup: isGroup, isPanelMode: true, targetId: int.tryParse(conversationId) ?? 0));
   }
 }

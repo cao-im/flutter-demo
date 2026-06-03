@@ -5,6 +5,7 @@ import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/contact_info_model.dart';
+import '../models/sender_info_model.dart';
 import '../services/contact_database_service.dart';
 import '../utils/display_name_helper.dart';
 import '../sdk/im_sdk_manager.dart';
@@ -68,8 +69,7 @@ class ChatProvider with ChangeNotifier {
       bool isInCurrentConversation = false;
       if (_currentConversation != null) {
         final msgTargetId = event.message.toId;
-        final convParts = _currentConversation!.id.split('_');
-        final convTargetId = int.tryParse(convParts.last ?? '0') ?? 0;
+        final convTargetId = _currentConversation!.targetId;
 
         if (msgTargetId == convTargetId || event.message.fromId == convTargetId) {
           isInCurrentConversation = true;
@@ -155,7 +155,7 @@ class ChatProvider with ChangeNotifier {
 
       for (final conv in sdkConversations) {
         final displayId = (conv.id != null && conv.id! > 0)
-            ? '${conv.targetType.value}_${conv.targetId}'
+            ? '${conv.targetId}'
             : conv.conversationId;
 
         String displayName;
@@ -166,15 +166,37 @@ class ChatProvider with ChangeNotifier {
           try {
             final group = await _sdkManager.client.getGroup(conv.targetId);
             displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
+            
+            // 如果最后一条消息有groupInfo，优先使用
+            if (conv.lastMessage?.groupInfo != null) {
+              displayName = conv.lastMessage!.groupInfo!.groupName;
+            }
           } catch (e) {
             debugPrint('⚠️[ChatProvider] 获取群组名称失败: $e');
-            displayName = '群组 ${conv.targetId}';
+            
+            // 尝试从最后一条消息的groupInfo获取
+            if (conv.lastMessage?.groupInfo != null) {
+              displayName = conv.lastMessage!.groupInfo!.groupName;
+            } else {
+              displayName = '群组 ${conv.targetId}';
+            }
           }
         } else {
-          // 从缓存中获取联系人信息（已通过批量预加载）
-          final contactInfo = _contactInfoCache[conv.targetId];
-          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          // 优先从最后一条消息的senderInfo获取（新方案）
+          if (conv.lastMessage?.senderInfo != null) {
+            final lastMsgSenderInfo = conv.lastMessage!.senderInfo!;
+            displayName = lastMsgSenderInfo.nickname.isNotEmpty 
+                ? lastMsgSenderInfo.nickname 
+                : '用户${conv.targetId}';
+            displayAvatar = lastMsgSenderInfo.avatar.isNotEmpty 
+                ? lastMsgSenderInfo.avatar 
+                : null;
+          } else {
+            // fallback到本地缓存（原有方案）
+            final contactInfo = _contactInfoCache[conv.targetId];
+            displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+            displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          }
         }
 
         if (conv.lastMessage != null) {
@@ -186,6 +208,7 @@ class ChatProvider with ChangeNotifier {
         conversationModels.add(ConversationModel(
           id: displayId,
           dbId: conv.id,
+          targetId: conv.targetId,
           name: displayName,
           avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
@@ -262,7 +285,7 @@ class ChatProvider with ChangeNotifier {
 
       for (final conv in sdkConversations) {
         final displayId = (conv.id != null && conv.id! > 0)
-            ? '${conv.targetType.value}_${conv.targetId}'
+            ? '${conv.targetId}'
             : conv.conversationId;
 
         String displayName;
@@ -273,14 +296,35 @@ class ChatProvider with ChangeNotifier {
           try {
             final group = await _sdkManager.client.getGroup(conv.targetId);
             displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
+            
+            // 如果最后一条消息有groupInfo，优先使用
+            if (conv.lastMessage?.groupInfo != null) {
+              displayName = conv.lastMessage!.groupInfo!.groupName;
+            }
           } catch (e) {
-            displayName = '群组 ${conv.targetId}';
+            // 尝试从最后一条消息的groupInfo获取
+            if (conv.lastMessage?.groupInfo != null) {
+              displayName = conv.lastMessage!.groupInfo!.groupName;
+            } else {
+              displayName = '群组 ${conv.targetId}';
+            }
           }
         } else {
-          // 从缓存中获取联系人信息
-          final contactInfo = _contactInfoCache[conv.targetId];
-          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          // 优先从最后一条消息的senderInfo获取（新方案）
+          if (conv.lastMessage?.senderInfo != null) {
+            final lastMsgSenderInfo = conv.lastMessage!.senderInfo!;
+            displayName = lastMsgSenderInfo.nickname.isNotEmpty 
+                ? lastMsgSenderInfo.nickname 
+                : '用户${conv.targetId}';
+            displayAvatar = lastMsgSenderInfo.avatar.isNotEmpty 
+                ? lastMsgSenderInfo.avatar 
+                : null;
+          } else {
+            // fallback到本地缓存（原有方案）
+            final contactInfo = _contactInfoCache[conv.targetId];
+            displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+            displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          }
         }
 
         if (conv.lastMessage != null) {
@@ -299,6 +343,7 @@ class ChatProvider with ChangeNotifier {
         conversationModels.add(ConversationModel(
           id: displayId,
           dbId: conv.id,
+          targetId: conv.targetId,
           name: displayName,
           avatar: displayAvatar,
           participantIds: [conv.targetId.toString(), conv.userId.toString()],
@@ -323,8 +368,7 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final parts = conversationId.split('_');
-      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final targetId = int.tryParse(conversationId) ?? 0;
 
       debugPrint('📍[ChatProvider] 📥 开始加载所有历史消息...');
       
@@ -420,10 +464,13 @@ class ChatProvider with ChangeNotifier {
       return;
     }
 
+    final currentUserId = _sdkManager.client.currentUserId;
+    final currentUserInfo = await _getCurrentUserInfo();
+
     final tempMessage = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       conversationId: _currentConversation!.id,
-      senderId: '',
+      senderId: currentUserId?.toString() ?? '',
       receiverId: '',
       type: type == 'image' ? MessageType.image : MessageType.text,
       content: content,
@@ -431,17 +478,19 @@ class ChatProvider with ChangeNotifier {
       isSending: true,
       isSent: true,
       status: MessageStatus.sending,
+      senderInfo: currentUserInfo,
     );
+
+    debugPrint('📤[ChatProvider] 发送消息(本地) senderInfo=${tempMessage.senderInfo?.toJson()}');
 
     _messages.add(tempMessage);
     notifyListeners();
 
     try {
-      final parts = _currentConversation!.id.split('_');
-      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final targetId = _currentConversation!.targetId;
       final isGroup = _currentConversation!.isGroup;
 
-      debugPrint('📍[ChatProvider] 发送消息: conversationId=${_currentConversation!.id}, targetId=$targetId, isGroup=$isGroup');
+      debugPrint('📍[ChatProvider] 发送消息: conversationId=${_currentConversation!.id}, targetId=$targetId, isGroup=$isGroup, currentUserId=$currentUserId');
       
       if (targetId <= 0) {
         debugPrint('❌[ChatProvider] ⚠️ targetId 无效 ($targetId)，取消发送');
@@ -491,6 +540,48 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  Future<SenderInfoModel?> _getCurrentUserInfo() async {
+    try {
+      final currentUserId = _sdkManager.client.currentUserId;
+      if (currentUserId == null) return null;
+
+      // 先从本地缓存获取
+      final contactInfo = _contactInfoCache[currentUserId];
+      if (contactInfo != null) {
+        return SenderInfoModel(
+          userId: contactInfo.id,
+          nickname: contactInfo.nickname,
+          avatar: contactInfo.avatar,
+        );
+      }
+
+      // 缓存未命中，从数据库查询
+      final contactService = ContactDatabaseService();
+      await contactService.init(userId: currentUserId);
+      final contactsMap = await contactService.getContactsByIds([currentUserId]);
+      final info = contactsMap[currentUserId];
+
+      if (info != null) {
+        _contactInfoCache[currentUserId] = info;
+        return SenderInfoModel(
+          userId: info.id,
+          nickname: info.nickname,
+          avatar: info.avatar,
+        );
+      }
+
+      // 都没有，返回基本信息
+      return SenderInfoModel(
+        userId: currentUserId,
+        nickname: '我',
+        avatar: '',
+      );
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 获取当前用户信息失败: $e');
+      return null;
+    }
+  }
+
   Future<void> retrySendMessage(MessageModel message) async {
     if (_currentConversation == null) return;
 
@@ -505,8 +596,7 @@ class ChatProvider with ChangeNotifier {
     }
 
     try {
-      final parts = _currentConversation!.id.split('_');
-      final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+      final targetId = _currentConversation!.targetId;
       final isGroup = _currentConversation!.isGroup;
 
       sdk.Message sentMessage;
@@ -604,8 +694,7 @@ class ChatProvider with ChangeNotifier {
 
     try {
       for (final conv in _conversations) {
-        final parts = conv.id.split('_');
-        final targetId = int.tryParse(parts.last ?? '0') ?? 0;
+        final targetId = conv.targetId;
         if (targetId > 0) {
           try {
             await _sdkManager.client.deleteConversation(targetId);
@@ -683,6 +772,25 @@ class ChatProvider with ChangeNotifier {
     final currentUserId = _sdkManager.client.currentUserId;
     final isFromMe = currentUserId != null && msg.fromId == currentUserId;
 
+    SenderInfoModel? senderInfo;
+    if (msg.senderInfo != null) {
+      senderInfo = SenderInfoModel(
+        userId: msg.senderInfo!.userId,
+        nickname: msg.senderInfo!.nickname,
+        avatar: msg.senderInfo!.avatar,
+        groupNickname: msg.senderInfo!.groupNickname,
+      );
+    }
+
+    GroupInfoModel? groupInfo;
+    if (msg.groupInfo != null) {
+      groupInfo = GroupInfoModel(
+        groupId: msg.groupInfo!.groupId,
+        groupName: msg.groupInfo!.groupName,
+        groupAvatar: msg.groupInfo!.groupAvatar,
+      );
+    }
+
     return MessageModel(
       id: msg.id?.toString() ?? msg.timestamp.toString(),
       conversationId: '',
@@ -695,6 +803,8 @@ class ChatProvider with ChangeNotifier {
       timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
       isSent: isFromMe,
       status: MessageStatus.delivered,
+      senderInfo: senderInfo,
+      groupInfo: groupInfo,
     );
   }
 }
@@ -705,6 +815,38 @@ class _ChatMessageListener implements sdk.MessageListener {
 
   @override
   void onMessageReceived(sdk.Message message) {
+    final currentUserId = _provider._sdkManager.client.currentUserId;
+
+    SenderInfoModel? senderInfo;
+    if (message.senderInfo != null) {
+      senderInfo = SenderInfoModel(
+        userId: message.senderInfo!.userId,
+        nickname: message.senderInfo!.nickname,
+        avatar: message.senderInfo!.avatar,
+        groupNickname: message.senderInfo!.groupNickname,
+      );
+    } else {
+      // 如果消息中没有senderInfo，尝试从缓存获取
+      final fromId = message.fromId;
+      final contactInfo = _provider._contactInfoCache[fromId];
+      if (contactInfo != null) {
+        senderInfo = SenderInfoModel(
+          userId: contactInfo.id,
+          nickname: contactInfo.nickname,
+          avatar: contactInfo.avatar,
+        );
+      }
+    }
+
+    GroupInfoModel? groupInfo;
+    if (message.groupInfo != null) {
+      groupInfo = GroupInfoModel(
+        groupId: message.groupInfo!.groupId,
+        groupName: message.groupInfo!.groupName,
+        groupAvatar: message.groupInfo!.groupAvatar,
+      );
+    }
+
     final model = MessageModel(
       id: message.id?.toString() ?? message.timestamp.toString(),
       conversationId: '',
@@ -716,7 +858,12 @@ class _ChatMessageListener implements sdk.MessageListener {
       content: message.content,
       timestamp: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
       status: MessageStatus.delivered,
+      senderInfo: senderInfo,
+      groupInfo: groupInfo,
     );
+
+    debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');
+
     _provider.receiveMessage(model);
   }
 

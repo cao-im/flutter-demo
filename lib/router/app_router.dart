@@ -37,6 +37,7 @@ class AppRouter {
             conversationId: args?['conversationId'] ?? '',
             conversationName: args?['conversationName'] ?? '',
             isGroup: args?['isGroup'] ?? false,
+            targetId: args?['targetId'] ?? 0,
           ),
         );
       case groupCreate:
