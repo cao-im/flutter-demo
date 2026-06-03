@@ -19,6 +19,11 @@ class LayoutProvider with ChangeNotifier {
   }
 
   void selectConversation(String id, String name, bool isGroup) {
+    if (_currentConversationId == id) {
+      // 再次点击同一会话时，关闭右侧聊天面板
+      clearConversation();
+      return;
+    }
     _currentConversationId = id;
     _currentConversationName = name;
     _isGroup = isGroup;

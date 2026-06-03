@@ -431,11 +431,6 @@ class _ConversationListPageState extends State<ConversationListPage>
                     isSelected: isSelected,
                     onTap: () {
                       if (widget.onConversationSelected != null) {
-                        layoutProvider.selectConversation(
-                          conversation.id,
-                          conversation.name,
-                          conversation.isGroup,
-                        );
                         widget.onConversationSelected!(
                           conversation.id,
                           conversation.name,
