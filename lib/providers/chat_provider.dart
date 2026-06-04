@@ -127,7 +127,8 @@ class ChatProvider with ChangeNotifier {
     debugPrint('🔧[ChatProvider] 设置前 _currentConversation: ${_currentConversation?.id ?? "null"}');
     _currentConversation = conversation;
     debugPrint('🔧[ChatProvider] 设置后 _currentConversation: ${_currentConversation?.id ?? "null"}');
-    notifyListeners();
+    // 延迟通知，避免在 initState 等 build 期间调用 notifyListeners 导致报错
+    Future.microtask(() => notifyListeners());
   }
 
   Future<void> loadConversations() async {
@@ -644,11 +645,16 @@ class ChatProvider with ChangeNotifier {
   Future<void> markConversationAsRead({
     required int targetId,
     required bool isGroup,
+    int? dbId,
   }) async {
     try {
-      debugPrint('📍[ChatProvider] 标记会话已读: targetId=$targetId, isGroup=$isGroup');
+      // 如果外部没传 dbId，从已加载的会话列表中查找
+      final resolvedDbId = dbId ?? _findDbIdByTargetId(targetId);
+      debugPrint('📍[ChatProvider] 标记会话已读: targetId=$targetId, 传入dbId=$dbId, 解析dbId=$resolvedDbId, isGroup=$isGroup');
 
-      await _sdkManager.client.markConversationAsRead(targetId);
+      // 使用数据库主键作为 conversationId（这才是 SDK 需要的）
+      final conversationId = (resolvedDbId != null && resolvedDbId > 0) ? resolvedDbId : targetId;
+      await _sdkManager.client.markConversationAsRead(conversationId);
 
       final convIndex = _conversations.indexWhere(
         (c) => c.id.contains(targetId.toString()),
@@ -659,12 +665,25 @@ class ChatProvider with ChangeNotifier {
           unreadCount: 0,
         );
         _conversations[convIndex] = updatedConv;
-        debugPrint('✅[ChatProvider] 会话已读标记成功, 未读数已清零');
+        debugPrint('✅[ChatProvider] 会话已读标记成功, 未读数已清零 (conversationId=$conversationId)');
         notifyListeners();
       }
     } catch (e) {
       debugPrint('❌[ChatProvider] 标记会话已读失败: $e');
     }
+  }
+
+  /// 根据 targetId 从已加载的会话列表中查找数据库主键 dbId
+  int? _findDbIdByTargetId(int targetId) {
+    final match = _conversations.where(
+      (c) => c.targetId == targetId || c.id.contains(targetId.toString()),
+    ).firstOrNull;
+    if (match?.dbId != null && match!.dbId! > 0) {
+      debugPrint('📍[ChatProvider] 从会话列表中查找到 dbId: ${match.dbId} (targetId=$targetId)');
+      return match.dbId;
+    }
+    debugPrint('⚠️[ChatProvider] 会话列表中未找到 targetId=$targetId 对应的 dbId');
+    return null;
   }
 
   Future<void> deleteConversation(String conversationId) async {

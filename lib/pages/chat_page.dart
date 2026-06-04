@@ -140,6 +140,7 @@ class _ChatPageState extends State<ChatPage> {
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
           isGroup: widget.isGroup,
+          dbId: _chatProvider?.currentConversation?.dbId,
         );
       });
     } else {
@@ -194,6 +195,7 @@ class _ChatPageState extends State<ChatPage> {
         await _chatProvider?.markConversationAsRead(
           targetId: targetId,
           isGroup: widget.isGroup,
+          dbId: _chatProvider?.currentConversation?.dbId,
         );
       });
     } else {
