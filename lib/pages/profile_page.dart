@@ -84,17 +84,42 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
 
-    controller.dispose();
+    // 注意：不手动 dispose controller，因为 Dialog 的 TextField 可能还在异步释放中
+    // controller 会被 GC 自动回收（无原生资源需要立即清理）
 
     if (result != null && result.isNotEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('昵称已修改为: $result'),
-          duration: const Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      // 如果昵称没有变化，不调用API
+      if (result == currentNickname) return;
+
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.updateNickname(result);
+
+      if (!mounted) return;
+
+      if (success) {
+        // 使用 addPostFrameCallback 确保在 frame 结束后显示 SnackBar，避免 _dependents.isEmpty 错误
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('昵称已修改为: $result'),
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('修改失败: ${authProvider.errorMessage ?? "未知错误"}'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     }
   }
 

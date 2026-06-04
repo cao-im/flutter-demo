@@ -226,6 +226,63 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> updateNickname(String newNickname) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final response = await _apiService.updateProfile({'nickname': newNickname});
+      final code = response['code'];
+
+      if (code == 200) {
+        // 从服务端返回的完整用户数据更新本地状态
+        final userData = response['data'];
+        if (userData != null && _user != null) {
+          _user = UserModel.fromJson(userData);
+        } else if (_user != null) {
+          // 降级：直接用传入值更新
+          _user = _user!.copyWith(nickname: newNickname);
+        }
+        notifyListeners();
+        return true;
+      }
+      _setError(response['message'] ?? '修改昵称失败');
+      return false;
+    } catch (e) {
+      _setError(e.toString().replaceFirst('Exception: ', ''));
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// 通用个人资料更新方法，支持昵称、头像、签名等多个字段
+  Future<bool> updateProfile(Map<String, dynamic> data) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final response = await _apiService.updateProfile(data);
+      final code = response['code'];
+
+      if (code == 200) {
+        final userData = response['data'];
+        if (userData != null && _user != null) {
+          _user = UserModel.fromJson(userData);
+        }
+        notifyListeners();
+        return true;
+      }
+      _setError(response['message'] ?? '修改个人资料失败');
+      return false;
+    } catch (e) {
+      _setError(e.toString().replaceFirst('Exception: ', ''));
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();

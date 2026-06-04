@@ -115,6 +115,16 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
+    try {
+      final response = await _appDio.put('/user/profile', data: data);
+      final parsed = _parseResponse(response.data);
+      return parsed as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception('修改个人资料失败: ${e.message}');
+    }
+  }
+
   // ==================== IM API 方法 ====================
 
   Future<List<dynamic>> getFriendList(int userId) async {
