@@ -125,6 +125,16 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getUserProfile() async {
+    try {
+      final response = await _appDio.get('/user/info');
+      final parsed = _parseResponse(response.data);
+      return parsed as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception('获取用户资料失败: ${e.message}');
+    }
+  }
+
   // ==================== IM API 方法 ====================
 
   Future<List<dynamic>> getFriendList(int userId) async {
