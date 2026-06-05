@@ -258,13 +258,8 @@ class ContactProvider with ChangeNotifier {
       final allResults = data
           .map((json) => UserModel.fromJson(json as Map<String, dynamic>))
           .toList();
-      debugPrint('🔍 搜索关键词: $keyword');
-      debugPrint('🔍 服务端返回 ${allResults.length} 条结果');
-      for (final u in allResults) {
-        debugPrint('🔍   用户: id=${u.id}, username=${u.username}, friendStatus=${u.friendStatus}');
-      }
       _searchResults = allResults;
-      debugPrint('🔍 最终结果数: ${_searchResults.length}');
+      debugPrint('🔍 搜索关键词:$keyword | 返回${allResults.length}条结果 | 用户列表:[${allResults.map((u) => 'id:${u.id},username:${u.username},status:${u.friendStatus}').join('; ')}] | 最终结果数:${_searchResults.length}');
     } catch (e) {
       debugPrint('搜索用户失败: $e');
       _searchResults = [];

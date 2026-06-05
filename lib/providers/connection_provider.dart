@@ -23,9 +23,7 @@ class ConnectionProvider with ChangeNotifier {
   IMSdkManager get sdkManager => _sdkManager;
 
   Future<void> initialize(String serverUrl) async {
-    debugPrint('📍[ConnProvider] ====== initialize() 开始 ======');
-    debugPrint('📍[ConnProvider] serverUrl: $serverUrl');
-    debugPrint('📍[ConnProvider] 当前状态: $_state');
+    debugPrint('📍[ConnProvider] ====== initialize() 开始 | serverUrl:$serverUrl, 状态:$_state ======');
 
     _setState(ImConnectionState.connecting);
 
@@ -41,8 +39,7 @@ class ConnectionProvider with ChangeNotifier {
       debugPrint('📍[ConnProvider] 初始化完成，状态设为 disconnected (等待connect)');
       _setState(ImConnectionState.disconnected);
     } catch (e, stack) {
-      debugPrint('❌[ConnProvider] initialize 失败: $e');
-      debugPrint('❌[ConnProvider] stackTrace: $stack');
+      debugPrint('❌[ConnProvider] initialize 失败: $e | stackTrace: $stack');
       _setError(e.toString());
     }
 
@@ -50,13 +47,7 @@ class ConnectionProvider with ChangeNotifier {
   }
 
   Future<void> connect(String token, {int? userId, String? refreshToken}) async {
-    debugPrint('');
-    debugPrint('📍[ConnProvider] ====== connect() 开始 ======');
-    debugPrint('📍[ConnProvider] token长度: ${token?.length ?? 0}');
-    debugPrint('📍[ConnProvider] refreshToken: ${refreshToken != null ? "有" : "无"}');
-    debugPrint('📍[ConnProvider] userId: $userId');
-    debugPrint('📍[ConnProvider] isInitialized: ${_sdkManager.isInitialized}');
-    debugPrint('📍[ConnProvider] 当前状态: $_state');
+    debugPrint('📍[ConnProvider] ====== connect() 开始 | token长度:${token?.length ?? 0}, refreshToken:${refreshToken != null ? "有" : "无"}, userId:$userId, isInitialized:${_sdkManager.isInitialized}, 状态:$_state ======');
 
     if (!_sdkManager.isInitialized) {
       debugPrint('⚠️[ConnProvider] SDK 未初始化，跳过连接');
@@ -70,14 +61,12 @@ class ConnectionProvider with ChangeNotifier {
       await _sdkManager.connect(token, userId: userId, refreshToken: refreshToken);
       debugPrint('✅[ConnProvider] IMSdkManager.connect() 返回成功');
     } catch (e, stack) {
-      debugPrint('❌[ConnProvider] connect 失败: $e');
-      debugPrint('❌[ConnProvider] stackTrace: $stack');
+      debugPrint('❌[ConnProvider] connect 失败: $e | stackTrace: $stack');
       _setError(e.toString());
       _setState(ImConnectionState.disconnected);
     }
 
-    debugPrint('📍[ConnProvider] ====== connect() 结束, 最终状态: $_state ======');
-    debugPrint('');
+    debugPrint('📍[ConnProvider] ====== connect() 结束, 最终状态:$_state ======');
   }
 
   Future<void> disconnect() async {

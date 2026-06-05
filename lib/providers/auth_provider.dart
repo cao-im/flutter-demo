@@ -141,16 +141,13 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> loadUserFromStorage(BuildContext context) async {
-    debugPrint('');
     debugPrint('📍[AuthProvider] ====== loadUserFromStorage() 开始 ======');
 
     final token = await StorageService.getToken();
     final imToken = await StorageService.getImToken();
     final imRefreshToken = await StorageService.getImRefreshToken();
     
-    debugPrint('📍[AuthProvider] token: ${token != null ? "有" : "无"}');
-    debugPrint('📍[AuthProvider] imToken: ${imToken != null ? "有" : "无"}');
-    debugPrint('📍[AuthProvider] imRefreshToken: ${imRefreshToken != null ? "有" : "无"}');
+    debugPrint('📍[AuthProvider] token:${token != null ? "有" : "无"}, imToken:${imToken != null ? "有" : "无"}, imRefreshToken:${imRefreshToken != null ? "有" : "无"}');
 
     if (token != null && token.isNotEmpty) {
       final userId = await StorageService.getUserId();
@@ -207,8 +204,7 @@ class AuthProvider with ChangeNotifier {
           
           notifyListeners();
         } catch (e, stack) {
-          debugPrint('❌[AuthProvider] 加载失败: $e');
-          debugPrint('❌[AuthProvider] stackTrace: $stack');
+          debugPrint('❌[AuthProvider] 加载失败: $e | stackTrace: $stack');
           
           if (e.toString().contains('401') || e.toString().contains('Token无效')) {
             debugPrint('⚠️[AuthProvider] Token无效，执行登出');
@@ -234,7 +230,6 @@ class AuthProvider with ChangeNotifier {
     }
 
     debugPrint('📍[AuthProvider] ====== loadUserFromStorage() 结束 ======');
-    debugPrint('');
   }
 
   Future<void> logout(BuildContext context) async {

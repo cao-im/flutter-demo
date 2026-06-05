@@ -1,271 +1,118 @@
-import 'dart:convert';
-import 'package:cao_im_sdk_flutter/utils/network_log_interceptor.dart';
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' show NetworkLogInterceptor;
-import '../models/user_model.dart';
-import 'storage_service.dart';
+import 'apis/auth_api.dart';
+import 'apis/user_api.dart';
+import 'apis/contact_api.dart';
 
+/// API 服务统一入口
+///
+/// 对外提供所有 HTTP API 的访问能力，内部按领域委托给对应的 Api 类：
+/// - [authApi] - 认证相关（登录、注册）
+/// - [userApi] - 用户资料（获取/修改个人信息）
+/// - [contactApi] - 联系人/好友（好友列表、好友请求、搜索等）
+///
+/// 使用示例：
+/// ```dart
+/// final apiService = ApiService();
+/// // 方式1：直接调用（向后兼容）
+/// await apiService.login('username', 'password');
+/// // 方式2：通过领域 API 调用（推荐，更清晰）
+/// await apiService.authApi.login('username', 'password');
+/// ```
 class ApiService {
-  static const String _appServerUrl = 'http://192.168.0.138:8081/api';
-  static const String _imServerUrl = 'http://192.168.0.138:8080/api';
+  // ==================== 领域 API 实例 ====================
 
-  late final Dio _appDio;
-  late final Dio _imDio;
+  /// 认证相关 API（登录、注册）
+  final AuthApi authApi = AuthApi();
 
-  ApiService() {
-    _appDio = _createAppDio();
-    _imDio = _createImDio();
-  }
+  /// 用户资料相关 API
+  final UserApi userApi = UserApi();
 
-  Dio _createAppDio() {
-    final dio = Dio(BaseOptions(
-      baseUrl: _appServerUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {'Content-Type': 'application/json'},
-      responseType: ResponseType.plain,
-    ));
+  /// 联系人/好友相关 API
+  final ContactApi contactApi = ContactApi();
 
-    dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await StorageService.getToken();
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        handler.next(options);
-      },
-      onError: (e, handler) async {
-        if (e.response?.statusCode == 401) {
-          debugPrint('⚠️[ApiService] App API 返回401，Token可能已过期');
-        }
-        handler.next(e);
-      },
-    ));
+  // ==================== 向后兼容方法（委托给各领域 API）====================
 
-    dio.interceptors.add(NetworkLogInterceptor());
+  // ---------- 认证相关 ----------
 
-    return dio;
-  }
-
-  Dio _createImDio() {
-    final dio = Dio(BaseOptions(
-      baseUrl: _imServerUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {'Content-Type': 'application/json'},
-      responseType: ResponseType.plain,
-    ));
-
-    dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final imToken = await StorageService.getImToken();
-        if (imToken != null && imToken.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $imToken';
-        }
-        handler.next(options);
-      },
-    ));
-
-    dio.interceptors.add(NetworkLogInterceptor());
-
-    return dio;
-  }
-
-  dynamic _parseResponse(dynamic responseData) {
-    if (responseData is String) {
-      try {
-        return jsonDecode(responseData);
-      } catch (e) {
-        debugPrint('JSON 解析失败: $e');
-        debugPrint('原始响应数据: $responseData');
-        throw Exception('服务器响应格式错误');
-      }
-    }
-    return responseData;
-  }
-
+  /// 用户登录（委托给 [AuthApi.login]）
   Future<Map<String, dynamic>> login(String username, String password) async {
-    try {
-      _appDio.options.headers.remove('Authorization');
-      final response = await _appDio.post('/client/login', data: {
-        'username': username,
-        'password': password,
-      });
-      final data = _parseResponse(response.data);
-      return data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw Exception('登录失败: ${e.message}');
-    }
+    return authApi.login(username, password);
   }
 
+  /// 用户注册（委托给 [AuthApi.register]）
   Future<Map<String, dynamic>> register(
-      String username, String password, String nickname) async {
-    try {
-      _appDio.options.headers.remove('Authorization');
-      final response = await _appDio.post('/client/register', data: {
-        'username': username,
-        'password': password,
-        'nickname': nickname,
-      });
-      final data = _parseResponse(response.data);
-      return data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw Exception('注册失败: ${e.message}');
-    }
+    String username,
+    String password,
+    String nickname,
+  ) async {
+    return authApi.register(username, password, nickname);
   }
 
+  // ---------- 用户资料相关 ----------
+
+  /// 修改个人资料（委托给 [UserApi.updateProfile]）
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
-    try {
-      final response = await _appDio.put('/user/profile', data: data);
-      final parsed = _parseResponse(response.data);
-      return parsed as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw Exception('修改个人资料失败: ${e.message}');
-    }
+    return userApi.updateProfile(data);
   }
 
+  /// 获取用户个人资料（委托给 [UserApi.getUserProfile]）
   Future<Map<String, dynamic>> getUserProfile() async {
-    try {
-      final response = await _appDio.get('/user/info');
-      final parsed = _parseResponse(response.data);
-      return parsed as Map<String, dynamic>;
-    } on DioException catch (e) {
-      throw Exception('获取用户资料失败: ${e.message}');
-    }
+    return userApi.getUserProfile();
   }
 
-  // ==================== IM API 方法 ====================
+  // ---------- 联系人/好友相关 ----------
 
+  /// 获取好友列表（委托给 [ContactApi.getFriendList]）
   Future<List<dynamic>> getFriendList(int userId) async {
-    try {
-      final response = await _imDio.get('/contact/list', queryParameters: {'userId': userId});
-      final data = _parseResponse(response.data);
-      if (data is Map<String, dynamic> && data.containsKey('data')) {
-        return data['data'] as List<dynamic>;
-      }
-      return [];
-    } on DioException catch (e) {
-      throw Exception('获取联系人列表失败: ${e.message}');
-    }
+    return contactApi.getFriendList(userId);
   }
 
+  /// 发送好友请求（委托给 [ContactApi.sendFriendRequest]）
   Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
-    try {
-      await _imDio.post('/friend-request/request', queryParameters: {
-        'fromUserId': fromUserId,
-        'toUserId': toUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('发送好友请求失败: ${e.message}');
-    }
+    return contactApi.sendFriendRequest(fromUserId, toUserId);
   }
 
+  /// 发送好友请求-字符串参数版本
   Future<void> sendFriendRequestWithString(String fromUserId, String toUserId) async {
-    try {
-      await _imDio.post('/friend-request/request', queryParameters: {
-        'fromUserId': fromUserId,
-        'toUserId': toUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('发送好友请求失败: ${e.message}');
-    }
+    return contactApi.sendFriendRequestWithString(fromUserId, toUserId);
   }
 
+  /// 接受好友请求（委托给 [ContactApi.acceptFriendRequest]）
   Future<void> acceptFriendRequest(int toUserId, int fromUserId) async {
-    try {
-      await _imDio.put('/friend-request/accept', queryParameters: {
-        'toUserId': toUserId,
-        'fromUserId': fromUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('接受好友请求失败: ${e.message}');
-    }
+    return contactApi.acceptFriendRequest(toUserId, fromUserId);
   }
 
+  /// 接受好友请求-字符串参数版本
   Future<void> acceptFriendRequestWithString(String toUserId, String fromUserId) async {
-    try {
-      await _imDio.put('/friend-request/accept', queryParameters: {
-        'toUserId': toUserId,
-        'fromUserId': fromUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('接受好友请求失败: ${e.message}');
-    }
+    return contactApi.acceptFriendRequestWithString(toUserId, fromUserId);
   }
 
+  /// 拒绝好友请求（委托给 [ContactApi.rejectFriendRequest]）
   Future<void> rejectFriendRequest(int toUserId, int fromUserId) async {
-    try {
-      await _imDio.put('/friend-request/reject', queryParameters: {
-        'toUserId': toUserId,
-        'fromUserId': fromUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('拒绝好友请求失败: ${e.message}');
-    }
+    return contactApi.rejectFriendRequest(toUserId, fromUserId);
   }
 
+  /// 拒绝好友请求-字符串参数版本
   Future<void> rejectFriendRequestWithString(String toUserId, String fromUserId) async {
-    try {
-      await _imDio.put('/friend-request/reject', queryParameters: {
-        'toUserId': toUserId,
-        'fromUserId': fromUserId,
-      });
-    } on DioException catch (e) {
-      throw Exception('拒绝好友请求失败: ${e.message}');
-    }
+    return contactApi.rejectFriendRequestWithString(toUserId, fromUserId);
   }
 
+  /// 删除好友（委托给 [ContactApi.deleteFriend]）
   Future<void> deleteFriend(int userId, int contactId) async {
-    try {
-      await _imDio.delete('/contact/$contactId', queryParameters: {'userId': userId});
-    } on DioException catch (e) {
-      throw Exception('删除联系人失败: ${e.message}');
-    }
+    return contactApi.deleteFriend(userId, contactId);
   }
 
+  /// 搜索用户（委托给 [ContactApi.searchUsers]）
   Future<List<dynamic>> searchUsers(String keyword) async {
-    try {
-      final response = await _imDio.get('/contact/search-users', queryParameters: {
-        'keyword': keyword,
-      });
-      final data = _parseResponse(response.data);
-      if (data is Map<String, dynamic> && data.containsKey('data')) {
-        return data['data'] as List<dynamic>;
-      }
-      return [];
-    } on DioException catch (e) {
-      throw Exception('搜索用户失败: ${e.message}');
-    }
+    return contactApi.searchUsers(keyword);
   }
 
+  /// 获取好友请求列表（委托给 [ContactApi.getFriendRequests]）
   Future<List<dynamic>> getFriendRequests(int userId) async {
-    try {
-      final response = await _imDio.get('/friend-request/pending', queryParameters: {'userId': userId});
-      final data = _parseResponse(response.data);
-      if (data is Map<String, dynamic> && data.containsKey('data')) {
-        return data['data'] as List<dynamic>;
-      }
-      return [];
-    } on DioException catch (e) {
-      throw Exception('获取好友请求失败: ${e.message}');
-    }
+    return contactApi.getFriendRequests(userId);
   }
 
+  /// 检查好友状态（委托给 [ContactApi.checkFriendStatus]）
   Future<int> checkFriendStatus(int userId, int targetUserId) async {
-    try {
-      final response = await _imDio.get('/contact/check-status', queryParameters: {
-        'userId': userId,
-        'targetUserId': targetUserId,
-      });
-      final data = _parseResponse(response.data);
-      if (data is Map<String, dynamic> && data.containsKey('data')) {
-        return data['data'] as int ?? 0;
-      }
-      return 0;
-    } on DioException catch (e) {
-      debugPrint('检查好友状态失败: $e');
-      return 0;
-    }
+    return contactApi.checkFriendStatus(userId, targetUserId);
   }
 }

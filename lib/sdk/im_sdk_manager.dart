@@ -17,8 +17,7 @@ class IMSdkManager {
       return;
     }
 
-    print('📍[SdkManager] ====== initialize() 开始 ======');
-    print('📍[SdkManager] serverUrl: $serverUrl');
+    print('📍[SdkManager] initialize()开始 | serverUrl: $serverUrl');
 
     try {
       final config = IMConfig(
@@ -34,18 +33,16 @@ class IMSdkManager {
         },
       );
 
-      print('📍[SdkManager] 调用 IMClient.init()...');
-      print('📍[SdkManager] 重连策略: 前5次每5秒, 之后每10秒');
+      print('📍[SdkManager] 调用 IMClient.init()... | 重连策略: 前5次每5秒, 之后每10秒');
       await client.init(serverUrl: serverUrl, config: config);
       print('✅[SdkManager] IMClient.init() 成功');
       _isInitialized = true;
     } catch (e, stack) {
-      print('❌[SdkManager] IMClient.init() 失败: $e');
-      print('❌[SdkManager] stackTrace: $stack');
+      print('❌[SdkManager] IMClient.init() 失败: $e | stackTrace: $stack');
       rethrow;
     }
 
-    print('📍[SdkManager] ====== initialize() 结束 ======');
+    print('📍[SdkManager] initialize()结束 | isInitialized=$_isInitialized');
   }
 
   Future<void> connect(String token, {int? userId, String? refreshToken}) async {
@@ -54,24 +51,16 @@ class IMSdkManager {
       throw Exception('SDK 未初始化，请先调用 initialize');
     }
 
-    print('');
-    print('📍[SdkManager] ====== connect() 开始 ======');
-    print('📍[SdkManager] token前20字符: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
-    print('📍[SdkManager] refreshToken: ${refreshToken != null ? "有" : "无"}');
-    print('📍[SdkManager] userId: $userId');
+    print('📍[SdkManager] connect()开始 | token前20字符: ${token.substring(0, token.length > 20 ? 20 : token.length)}..., refreshToken:${refreshToken != null ? "有" : "无"}, userId:$userId');
 
     try {
-      print('📍[SdkManager] 调用 IMClient.connect(token, userId: $userId, refreshToken: ${refreshToken != null ? "有" : "无"})...');
+      print('📍[SdkManager] 调用 IMClient.connect(userId:$userId, refreshToken:${refreshToken != null ? "有" : "无"})...');
       await client.connect(token, userId: userId, refreshToken: refreshToken);
-      print('✅[SdkManager] IMClient.connect() 返回成功');
+      print('✅[SdkManager] IMClient.connect() 返回成功 | isConnected=$isConnected');
     } catch (e, stack) {
-      print('❌[SdkManager] IMClient.connect() 失败: $e');
-      print('❌[SdkManager] stackTrace: $stack');
+      print('❌[SdkManager] IMClient.connect() 失败: $e | stackTrace: $stack');
       rethrow;
     }
-
-    print('📍[SdkManager] ====== connect() 结束, isConnected=$isConnected ======');
-    print('');
   }
 
   Future<void> disconnect() async {
