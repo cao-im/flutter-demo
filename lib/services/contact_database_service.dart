@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' hide Value;
 import 'package:cao_im_sdk_flutter/storage/drift/app_database.dart';
+import 'package:cao_im_sdk_flutter/storage/drift/drift_storage.dart';
 import 'package:cao_im_sdk_flutter/storage/drift/tables/contacts_table.dart';
+import 'package:cao_im_sdk_flutter/storage/storage_factory.dart';
 import '../models/user_model.dart';
 import '../models/contact_info_model.dart';
 
@@ -10,16 +12,25 @@ class ContactDatabaseService {
   factory ContactDatabaseService() => _instance;
   ContactDatabaseService._internal();
 
-  AppDatabase? _db;
   bool _isInitialized = false;
+  int? _currentUserId;
+  AppDatabase? _db;
 
+  /// 复用 StorageFactory (DriftStorage) 的共享数据库连接，避免双连接导致 database locked
   Future<void> init({required int userId}) async {
-    if (_isInitialized) return;
+    if (_isInitialized && _currentUserId == userId) return;
 
     try {
-      _db = AppDatabase(userId);
+      // 确保共享数据库已初始化（会话/消息服务也用同一个实例）
+      final storage = await StorageFactory.getInstance(userId: userId);
+      if (storage is DriftStorage) {
+        _db = storage.appDatabase;
+      } else {
+        throw StateError('共享存储不是 DriftStorage 实例');
+      }
+      _currentUserId = userId;
       _isInitialized = true;
-      print('[ContactDatabaseService] ✅ 初始化完成 (userId=$userId)');
+      print('[ContactDatabaseService] ✅ 初始化完成 (userId=$userId, 复用共享数据库连接)');
     } catch (e, stackTrace) {
       print('[ContactDatabaseService] ❌ 初始化失败: $e');
       print('[ContactDatabaseService] 📍 堆栈: $stackTrace');
@@ -267,18 +278,11 @@ class ContactDatabaseService {
     );
   }
 
-  Future<void> close() async {
-    if (_isInitialized && _db != null) {
-      await _db!.close();
-      _isInitialized = false;
-      _db = null;
-      print('[ContactDatabaseService] ✓ 连接已关闭');
-    }
-  }
-
   /// 重置单例状态（用于切换账号时调用）
+  /// 注意：不关闭底层数据库连接（由 StorageFactory/DriftStorage 统一管理生命周期）
   Future<void> reset() async {
-    await close();
+    _isInitialized = false;
+    _currentUserId = null;
     print('[ContactDatabaseService] ✓ 单例已重置，可重新初始化');
   }
 }
