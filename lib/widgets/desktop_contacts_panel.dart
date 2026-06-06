@@ -504,24 +504,15 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       onTap: () {
         final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
         debugPrint('👆[DesktopContactsPanel] 点击联系人: id=${contact.id}, userId=$realUserId, name=$name');
-        final contactId = realUserId.toString();
         final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
-        layoutProvider.selectConversation(contactId, name, false);
-        debugPrint('👆[DesktopContactsPanel] 已调用 layoutProvider.selectConversation');
-
-        // ✅ 同时设置 ChatProvider 的当前会话，确保发送消息时能正确获取
-        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-        debugPrint('👆[DesktopContactsPanel] 准备设置 ChatProvider 当前会话: conversationId=$contactId, targetId=$realUserId');
-        chatProvider.setCurrentConversation(
-          ConversationModel(
-            id: contactId,
-            targetId: realUserId,
-            name: name,
-            isGroup: false,
-            participantIds: [],
-          ),
-        );
-        debugPrint('✅[DesktopContactsPanel] 联系人点击处理完成');
+        // 选中联系人，右侧面板展示联系人详情
+        layoutProvider.selectContact(UserModel(
+          id: contact.id,
+          username: contact.username ?? '',
+          nickname: contact.nickname ?? '',
+          avatar: contact.avatar,
+          imUserId: (realUserId > 0) ? realUserId.toString() : contact.imUserId,
+        ));
       },
       onLongPress: () => _showContactContextMenu(contact, context),
       hoverColor: AppTheme.primaryColor.withOpacity(0.04),
@@ -608,20 +599,22 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       if (value == 'chat') {
         final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
         final contactId = realUserId.toString();
-        Provider.of<LayoutProvider>(context, listen: false)
-            .selectConversation(contactId, name, false);
-
-        // ✅ 同时设置 ChatProvider 的当前会话
-        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-        chatProvider.setCurrentConversation(
-          ConversationModel(
-            id: contactId,
-            targetId: realUserId,
-            name: name,
-            isGroup: false,
-            participantIds: [],
-          ),
-        );
+        // 切换到会话标签并打开聊天
+        final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
+        layoutProvider.selectNavigation(0);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          layoutProvider.selectConversation(contactId, name, false);
+          // 设置 ChatProvider 当前会话
+          Provider.of<ChatProvider>(context, listen: false).setCurrentConversation(
+            ConversationModel(
+              id: contactId,
+              targetId: realUserId,
+              name: name,
+              isGroup: false,
+              participantIds: [],
+            ),
+          );
+        });
       } else if (value == 'delete') {
         _confirmDeleteContact(contact, name);
       }
