@@ -663,27 +663,11 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       await context.read<ContactProvider>().deleteFriend(contactId);
 
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('✅ 已删除好友 $name'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
+        _showSuccessSnackBar('✅ 已删除好友 $name');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('❌ 删除失败: $e'),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        _showErrorSnackBar('❌ 删除失败: $e');
       }
     }
   }
@@ -829,28 +813,44 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     try {
       await context.read<ContactProvider>().acceptFriendRequestWithString(friendId.toString());
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: const Text('✅ 已接受好友请求'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
+        _showSuccessSnackBar('✅ 已接受好友请求');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('❌ 操作失败: $e'),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        _showErrorSnackBar('❌ 操作失败: $e');
       }
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    try {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } catch (_) {
+      // 忽略无 Scaffold 上下文的情况
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    try {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } catch (_) {
+      // 忽略无 Scaffold 上下文的情况
     }
   }
 
@@ -858,26 +858,11 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     try {
       await context.read<ContactProvider>().rejectFriendRequestWithString(friendId.toString());
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: const Text('已拒绝好友请求'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
+        _showSuccessSnackBar('已拒绝好友请求');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('操作失败: $e'),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        _showErrorSnackBar('操作失败: $e');
       }
     }
   }

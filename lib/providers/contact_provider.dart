@@ -591,6 +591,17 @@ class ContactProvider with ChangeNotifier {
     _isCacheInitialized = false;
     debugPrint('💾 clearCache: 已清空缓存，共移除 $count 个联系人');
   }
+
+  /// 重置所有状态（用于登出/切换账号时调用）
+  Future<void> resetState() async {
+    _contacts = [];
+    _searchResults = [];
+    _friendRequests = [];
+    _unreadFriendRequestCount = 0;
+    clearCache();
+    await _dbService.reset();
+    debugPrint('📍[ContactProvider] ✓ 状态已重置（通讯录、搜索结果、好友请求、缓存、数据库）');
+  }
 }
 
 class _ContactFriendRequestListener implements sdk.FriendRequestListener {

@@ -35,8 +35,9 @@ class ContactDatabaseService {
   }
 
   /// 批量插入或更新联系人
-  /// 核心规则：id字段为本地记录ID（不存服务端任何值），userId为业务键（存服务端contactUserId）
-  /// upsert逻辑：先按userId查是否存在 → 存在则更新 | 不存在则插入（id自增）
+  /// 核心规则：id字段为本地自增ID（由SQLite AUTOINCREMENT 自动分配，无业务含义）
+  /// userId为业务键（存服务端 contactUserId，真正的联系人标识）
+  /// upsert逻辑：先按userId查是否存在 → 存在则更新 | 不存在则插入（id自动分配）
   Future<void> upsertContacts(List<UserModel> users) async {
     if (users.isEmpty) return;
 
@@ -54,7 +55,7 @@ class ContactDatabaseService {
           .getSingleOrNull();
 
       final baseCompanion = ContactsCompanion(
-        // 注意：不设 id！id 由数据库分配（本地记录ID）
+        // id 由 SQLite AUTOINCREMENT 自动分配，不手动指定
         userId: Value(imUserId),
         username: Value(user.username),
         nickname: Value(user.nickname),
@@ -73,15 +74,8 @@ class ContactDatabaseService {
         await (db.update(db.contacts)..where((tbl) => tbl.id.equals(existing.id)))
             .write(baseCompanion);
       } else {
-        // 不存在 → 插入新记录（id 用 max(id)+1 实现自增）
-        final maxIdResult = await db.selectOnly(db.contacts)
-          ..addColumns([db.contacts.id]);
-        final maxIdRows = await maxIdResult.get();
-        final nextId = maxIdRows.isEmpty ? 1 : (maxIdRows.first.read(db.contacts.id) ?? 0) + 1;
-
-        await db.into(db.contacts).insert(baseCompanion.copyWith(
-          id: Value(nextId),
-        ));
+        // 不存在 → 直接插入，id 由数据库 AUTOINCREMENT 自动分配
+        await db.into(db.contacts).insert(baseCompanion);
       }
     }
 
@@ -280,5 +274,11 @@ class ContactDatabaseService {
       _db = null;
       print('[ContactDatabaseService] ✓ 连接已关闭');
     }
+  }
+
+  /// 重置单例状态（用于切换账号时调用）
+  Future<void> reset() async {
+    await close();
+    print('[ContactDatabaseService] ✓ 单例已重置，可重新初始化');
   }
 }

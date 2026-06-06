@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import 'connection_provider.dart';
+import 'contact_provider.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -238,6 +239,10 @@ class AuthProvider with ChangeNotifier {
     if (connectionProvider.isConnected) {
       await connectionProvider.disconnect();
     }
+
+    // 重置通讯录状态（清空内存缓存 + 关闭数据库连接）
+    final contactProvider = context.read<ContactProvider>();
+    await contactProvider.resetState();
 
     await StorageService.clearAll();
     _user = null;
