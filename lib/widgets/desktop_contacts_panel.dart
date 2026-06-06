@@ -26,7 +26,6 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
   // 新的朋友折叠展开状态
   bool _isNewFriendsExpanded = false;
-  final GlobalKey _addButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -103,84 +102,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // + 号按钮，点击弹出菜单（仿微信）
-          Material(
-            key: _addButtonKey,
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            elevation: 0,
-            child: InkWell(
-              onTap: () => _showAddMenu(context),
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Icon(Icons.add, size: 20, color: AppTheme.primaryColor),
-              ),
-            ),
-          ),
         ],
       ),
-    );
-  }
-
-  /// 显示+号菜单（定位在按钮下方）
-  void _showAddMenu(BuildContext context) {
-    final RenderBox? button = _addButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (button == null) return;
-
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
-
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        buttonPosition.dx,
-        buttonPosition.dy + button.size.height + 4,
-        overlay.size.width - buttonPosition.dx - button.size.width,
-        0,
-      ),
-      items: [
-        PopupMenuItem<String>(
-          value: 'add_friend',
-          height: 44,
-          child: Row(children: [
-            Icon(Icons.person_add_outlined, size: 20, color: AppTheme.textSecondaryColor),
-            SizedBox(width: 12),
-            Text('添加好友', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
-          ]),
-        ),
-        PopupMenuItem<String>(
-          value: 'group_chat',
-          height: 44,
-          child: Row(children: [
-            Icon(Icons.group_add_outlined, size: 20, color: AppTheme.textSecondaryColor),
-            SizedBox(width: 12),
-            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
-          ]),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'add_friend') {
-        _showAddFriendDialog(context);
-      } else if (value == 'group_chat') {
-        _showSuccessSnackBar('发起群聊功能开发中');
-      }
-    });
-  }
-
-  /// 添加好友弹窗
-  void _showAddFriendDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => _AddFriendDialog(),
     );
   }
 
@@ -573,6 +496,15 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     } catch (e) {
       if (mounted) _showErrorSnackBar('❌ 删除失败: $e');
     }
+  }
+
+  /// 添加好友弹窗（空状态按钮调用）
+  void _showAddFriendDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => _AddFriendDialog(),
+    );
   }
 
   Future<void> _acceptRequest(dynamic friendId) async {
