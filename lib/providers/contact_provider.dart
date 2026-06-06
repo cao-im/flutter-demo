@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
+import 'package:lpinyin/lpinyin.dart';
 import '../models/user_model.dart';
 import '../models/contact_info_model.dart';
 import '../services/api_service.dart';
@@ -31,20 +32,22 @@ class ContactProvider with ChangeNotifier {
 
   Map<int, ContactInfo> get contactCache => Map.unmodifiable(_contactCache);
 
+  /// 固定的索引顺序：# + A~Z
+  static final List<String> _indexLetters = ['#', ...List.generate(26, (i) => String.fromCharCode(65 + i))];
+
   Map<String, List<UserModel>> get groupedContacts {
     final Map<String, List<UserModel>> grouped = {};
+    // 初始化所有索引项
+    for (final letter in _indexLetters) {
+      grouped[letter] = [];
+    }
     for (final contact in _contacts) {
       final initial = _getPinyinInitial(contact.nickname.isNotEmpty ? contact.nickname : contact.username);
-      if (!grouped.containsKey(initial)) {
-        grouped[initial] = [];
-      }
       grouped[initial]!.add(contact);
     }
-
-    final sortedKeys = grouped.keys.toList()..sort();
-    return Map.fromEntries(
-      sortedKeys.map((key) => MapEntry(key, grouped[key]!)),
-    );
+    // 移除空的索引项（保留 # 即使为空也显示）
+    grouped.removeWhere((key, value) => value.isEmpty && key != '#');
+    return grouped;
   }
 
   String _getPinyinInitial(String name) {
@@ -54,13 +57,21 @@ class ContactProvider with ChangeNotifier {
     final codeUnit = firstChar.codeUnitAt(0);
 
     if (codeUnit >= 0x4E00 && codeUnit <= 0x9FFF) {
-      return firstChar.toUpperCase();
-    } else if (codeUnit >= 0x41 && codeUnit <= 0x5A) {
-      return firstChar;
-    } else if (codeUnit >= 0x61 && codeUnit <= 0x7A) {
-        return firstChar.toUpperCase();
-    } else {
+      // 中文 → 转拼音取首字母大写
+      final shortPinyin = PinyinHelper.getShortPinyin(name);
+      // 取第一个拼音首字母（去除非字母字符）
+      for (final char in shortPinyin.split('')) {
+        if (RegExp(r'[a-zA-Z]').hasMatch(char)) {
+          return char.toUpperCase();
+        }
+      }
       return '#';
+    } else if (codeUnit >= 0x41 && codeUnit <= 0x5A) {
+      return firstChar; // 大写英文直接用
+    } else if (codeUnit >= 0x61 && codeUnit <= 0x7A) {
+      return firstChar.toUpperCase(); // 小写英文转大写
+    } else {
+      return '#'; // 数字/符号归入 #
     }
   }
 

@@ -25,6 +25,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   _PanelView _currentView = _PanelView.contacts;
   int? _currentUserId;
   final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _sectionKeys = {};
 
   @override
   void initState() {
@@ -252,7 +253,11 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   }
 
   Widget _buildGroupHeader(String letter, int count) {
+    // 确保每个字母分组有对应的 GlobalKey
+    _sectionKeys.putIfAbsent(letter, () => GlobalKey());
+
     return Container(
+      key: _sectionKeys[letter],
       padding: const EdgeInsets.only(left: 56, top: 14, bottom: 6),
       child: Row(
         children: [
@@ -317,17 +322,14 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   }
 
   void _scrollToLetter(String letter) {
-    // 查找对应字母的分组标题位置并滚动
-    // 这里可以通过 GlobalKey 或计算偏移量实现精确滚动
-    // 简化实现：提示用户可以使用搜索功能
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text('跳转到 $letter 分组'),
-        duration: const Duration(milliseconds: 800),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        backgroundColor: AppTheme.primaryColor,
-      ),
+    final key = _sectionKeys[letter];
+    if (key?.currentContext == null) return;
+
+    Scrollable.ensureVisible(
+      key!.currentContext!,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      alignment: 0.0,
     );
   }
 

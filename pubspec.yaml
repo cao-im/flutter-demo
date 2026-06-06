@@ -41,6 +41,7 @@ dependencies:
   tools_box: ^0.2.0
   cao_im_sdk_flutter:
     path: ../im-sdk-flutter
+  lpinyin: ^2.0.3
 
 dev_dependencies:
   flutter_test:
