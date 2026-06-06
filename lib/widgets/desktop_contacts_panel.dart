@@ -297,11 +297,9 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
               ],
             ),
           ),
-          if (isPendingReceived) ...[
-            InkWell(onTap: () => _rejectRequest(fromUserId), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.errorColor.withOpacity(0.5))), child: Text('拒绝', style: TextStyle(fontSize: 11, color: AppTheme.errorColor)))),
-            SizedBox(width: 6),
-            InkWell(onTap: () => _acceptRequest(fromUserId), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: AppTheme.primaryColor), child: Text('接受', style: TextStyle(fontSize: 11, color: Colors.white)))),
-          ] else if (isPendingSent)
+          if (isPendingReceived)
+            InkWell(onTap: () => _acceptRequest(fromUserId), child: Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: AppTheme.primaryColor), child: Text('接受', style: TextStyle(fontSize: 11, color: Colors.white))))
+          else if (isPendingSent)
             Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.access_time, size: 12, color: Colors.orange), SizedBox(width: 3), Text('等待对方', style: TextStyle(fontSize: 11, color: Colors.orange))])
           else
             Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, size: 14, color: Colors.green), SizedBox(width: 3), Text('已添加', style: TextStyle(fontSize: 11, color: Colors.green))]),
@@ -516,14 +514,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     }
   }
 
-  Future<void> _rejectRequest(dynamic friendId) async {
-    try {
-      await context.read<ContactProvider>().rejectFriendRequestWithString(friendId.toString());
-      if (mounted) _showSuccessSnackBar('已拒绝好友请求');
-    } catch (e) {
-      if (mounted) _showErrorSnackBar('操作失败: $e');
-    }
-  }
+
 
   void _showSuccessSnackBar(String message) {
     try { ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), backgroundColor: AppTheme.successColor)); } catch (_) {}
