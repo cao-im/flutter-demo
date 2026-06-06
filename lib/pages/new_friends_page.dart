@@ -83,48 +83,6 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
     }
   }
 
-  Future<void> _rejectRequest(dynamic friendId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('拒绝好友请求'),
-        content: const Text('确定要拒绝这个好友请求吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              '拒绝',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        final friendIdStr = friendId.toString();
-        await context.read<ContactProvider>().rejectFriendRequestWithString(friendIdStr);
-
-        if (mounted) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            const SnackBar(content: Text('已拒绝好友请求')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(content: Text('操作失败: $e')),
-          );
-        }
-      }
-    }
-  }
-
   String _getRequestType(Map<String, dynamic> request) {
     final toUserId = request['toUserId']?.toString();
     final status = request['status']?.toString() ?? '0';
@@ -319,20 +277,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
                   ],
                 ),
               ),
-              if (isPendingReceived) ...[
-                OutlinedButton.icon(
-                  onPressed: () => _rejectRequest(fromUserId),
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('拒绝'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
+              if (isPendingReceived)
                 ElevatedButton.icon(
                   onPressed: () => _acceptRequest(fromUserId),
                   icon: const Icon(Icons.check, size: 18),
@@ -344,8 +289,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                ),
-              ] else if (isPendingSent)
+                ) else if (isPendingSent)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
