@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path_provider/path_provider.dart';
 
+// 默认使用 stub（空实现），Web 端自动切换到 HTML5 Audio 实现
+import 'notification_service_stub.dart' if (dart.library.html) 'notification_service_web.dart' as web_audio;
+
 /// 消息通知数据模型
 class NotificationData {
   final int senderId;
@@ -150,7 +153,8 @@ class NotificationService {
   /// 播放提示音（按平台分发）
   Future<void> _playSound() async {
     if (kIsWeb) {
-      debugPrint('🔕[通知] ⏭️ 不播放：当前为 Web 平台');
+      debugPrint('🔊[通知] 🌐 使用 HTML5 Audio 播放 wav...');
+      await _playViaWebAudio();
       return;
     }
 
@@ -183,28 +187,58 @@ class NotificationService {
     return 'Unknown';
   }
 
+  /// Web：从 assets 加载 wav → 创建 Blob URL → HTML5 Audio 播放
+  Future<void> _playViaWebAudio() async {
+    try {
+      debugPrint('🔊[通知] 📂 正在从 assets 加载 wav: $_soundAssetPath');
+
+      // 从 Flutter assets 读取 wav 字节数据
+      final byteData = await rootBundle.load(_soundAssetPath);
+      final bytes = byteData.buffer.asUint8List();
+      debugPrint('🔊[通知] 📦 wav 已加载，大小: ${bytes.length} 字节');
+
+      // 创建 Blob URL 并播放
+      final player = web_audio.createWebAudio(bytes);
+      player.play();
+      debugPrint('🔊[通知] ✅ Web Audio.play() 已调用');
+    } catch (e, stack) {
+      debugPrint('🔕[通知] ❌ Web 播放异常: $e');
+      debugPrint('🔕[通知] 堆栈: $stack');
+    }
+  }
+
   /// 移动端：通过通知播放提示音
   Future<void> _playViaNotification() async {
     try {
+      // iOS 自定义通知声音（需将 wav 文件放入 ios/Runner/ 目录并添加到 Xcode Bundle）
+      // Android 通过通知渠道的 RawResourceAndroidNotificationSound 已配置自定义音
+      final iosSound = Platform.isIOS
+          ? const DarwinNotificationDetails(
+              presentAlert: false,
+              presentBadge: false,
+              sound: 'new_msg.wav', // 自定义提示音，需在 Xcode Bundle 中
+            )
+          : const DarwinNotificationDetails(
+              presentAlert: false,
+              presentBadge: false,
+              presentSound: true, // 非iOS平台用系统默认音兜底
+            );
+
       await _notifications.show(
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
         '',
         '',
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
+        NotificationDetails(
+          android: const AndroidNotificationDetails(
             'cao_im_msg', '新消息',
             channelDescription: '新消息提示',
             importance: Importance.high,
             priority: Priority.high,
           ),
-          iOS: DarwinNotificationDetails(
-            presentAlert: false,
-            presentBadge: false,
-            presentSound: true,
-          ),
+          iOS: iosSound,
         ),
       );
-      debugPrint('🔊[通知] ✅ 通知已发送，提示音应已播放');
+      debugPrint('🔊[通知] ✅ 通知已发送，${Platform.isIOS ? "自定义" : "系统默认"}提示音应已播放');
     } catch (e) {
       debugPrint('🔕[通知] ❌ 通知提示音播放失败: $e');
     }
