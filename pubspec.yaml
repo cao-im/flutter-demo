@@ -42,6 +42,8 @@ dependencies:
   cao_im_sdk_flutter:
     path: ../im-sdk-flutter
   lpinyin: ^2.0.3
+  flutter_local_notifications: ^18.0.1
+  path_provider: ^2.1.3
 
 dev_dependencies:
   flutter_test:

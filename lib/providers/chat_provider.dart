@@ -7,6 +7,7 @@ import '../models/message_model.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../services/contact_database_service.dart';
+import '../services/notification_service.dart';
 import '../utils/display_name_helper.dart';
 import '../sdk/im_sdk_manager.dart';
 
@@ -37,9 +38,12 @@ class ChatProvider with ChangeNotifier {
     if (_isListening) return;
     _sdkManager.client.addMessageListener(_ChatMessageListener(this));
     _isListening = true;
-    
+
     // ✅ 开始监听事件总线
     startEventListening();
+
+    // ✅ 初始化通知服务
+    _initNotificationService();
   }
 
   void stopListening() {
@@ -78,9 +82,11 @@ class ChatProvider with ChangeNotifier {
         }
       }
 
-      // 如果不在当前会话，正常加载会话列表（包含未读数）
+      // 如果不在当前会话，正常加载会话列表（包含未读数）并触发通知
       if (!isInCurrentConversation) {
         loadConversations();
+        // ✅ 触发消息通知（通知服务内部会判断是否需要显示）
+        _triggerMessageNotification(event.message);
       } else {
         // 在当前会话时，加载会话列表但清零该会话未读数
         _loadConversationsAndClearUnread();
@@ -127,6 +133,10 @@ class ChatProvider with ChangeNotifier {
     debugPrint('🔧[ChatProvider] 设置前 _currentConversation: ${_currentConversation?.id ?? "null"}');
     _currentConversation = conversation;
     debugPrint('🔧[ChatProvider] 设置后 _currentConversation: ${_currentConversation?.id ?? "null"}');
+
+    // ✅ 同步当前聊天会话到通知服务（用于判断是否需要显示通知）
+    NotificationService().currentChatTargetId = conversation.targetId;
+
     // 延迟通知，避免在 initState 等 build 期间调用 notifyListeners 导致报错
     Future.microtask(() => notifyListeners());
   }
@@ -742,7 +752,79 @@ class ChatProvider with ChangeNotifier {
     debugPrint('🗑️[ChatProvider] clearCurrentConversation 被调用，清空前: ${_currentConversation?.id ?? "null"}');
     _currentConversation = null;
     _messages = [];
+    // ✅ 清除通知服务的当前聊天状态
+    NotificationService().currentChatTargetId = null;
     notifyListeners();
+  }
+
+  /// ✅ 初始化消息通知服务
+  Future<void> _initNotificationService() async {
+    try {
+      final notificationService = NotificationService();
+      await notificationService.initialize();
+
+      // 请求通知权限（Android 13+ 需要）
+      await notificationService.requestPermission();
+      debugPrint('✅[ChatProvider] 消息通知服务初始化完成');
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 消息通知服务初始化失败: $e');
+    }
+  }
+
+  /// ✅ 触发消息通知
+  /// 当收到新消息且用户不在该会话的聊天界面时调用
+  void _triggerMessageNotification(sdk.Message message) {
+    try {
+      final currentUserId = _sdkManager.client.currentUserId;
+
+      // 忽略自己发送的消息（只对收到的消息显示通知）
+      if (currentUserId != null && message.fromId == currentUserId) {
+        return;
+      }
+
+      // 获取发送者信息
+      String nickname = '用户${message.fromId}';
+      String? avatarUrl;
+
+      if (message.senderInfo != null) {
+        nickname = message.senderInfo!.nickname.isNotEmpty
+            ? message.senderInfo!.nickname
+            : '用户${message.fromId}';
+        avatarUrl = message.senderInfo!.avatar.isNotEmpty
+            ? message.senderInfo!.avatar
+            : null;
+      } else {
+        // 尝试从缓存获取联系人信息
+        final contactInfo = _contactInfoCache[message.fromId];
+        if (contactInfo != null) {
+          nickname = contactInfo.nickname.isNotEmpty
+              ? contactInfo.nickname
+              : '用户${message.fromId}';
+          avatarUrl = contactInfo.avatar.isNotEmpty
+              ? contactInfo.avatar
+              : null;
+        }
+      }
+
+      // 确定目标ID和是否为群聊
+      final targetId = message.groupId ?? message.toId;
+      final isGroup = message.groupId != null && message.groupId! > 0;
+
+      final notificationData = NotificationData(
+        senderId: message.fromId,
+        nickname: isGroup ? '$nickname(群)' : nickname,
+        avatarUrl: avatarUrl,
+        content: message.content,
+        time: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
+        targetId: targetId,
+        isGroup: isGroup,
+      );
+
+      // 通过通知服务统一分发通知
+      NotificationService().showMessageNotification(notificationData);
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 触发消息通知失败: $e');
+    }
   }
 
   Future<ContactInfo?> _getContactInfo(int targetId) async {
@@ -832,6 +914,23 @@ class _ChatMessageListener implements sdk.MessageListener {
   final ChatProvider _provider;
   _ChatMessageListener(this._provider);
 
+  /// 判断消息是否属于当前正在查看的会话
+  bool _isMessageBelongsToCurrentConversation(sdk.Message message) {
+    final currentConv = _provider._currentConversation;
+    if (currentConv == null) return false;
+
+    final targetId = currentConv.targetId;
+
+    // 群聊消息：检查 groupId 是否匹配当前会话 targetId
+    if (message.groupId != null && message.groupId! > 0) {
+      return message.groupId == targetId;
+    }
+
+    // 私聊消息：检查 fromId 或 toId 是否匹配当前会话 targetId
+    // （fromId 是发送者，toId 是接收者，targetId 是聊天对象的ID）
+    return message.fromId == targetId || message.toId == targetId;
+  }
+
   @override
   void onMessageReceived(sdk.Message message) {
     final currentUserId = _provider._sdkManager.client.currentUserId;
@@ -883,7 +982,13 @@ class _ChatMessageListener implements sdk.MessageListener {
 
     debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');
 
-    _provider.receiveMessage(model);
+    // ✅ 只有当消息属于当前正在查看的会话时，才添加到消息列表
+    // 否则由 EventBus 的 MessageReceivedEvent 处理器统一管理（刷新会话列表 + 触发通知）
+    if (_isMessageBelongsToCurrentConversation(message)) {
+      _provider.receiveMessage(model);
+    } else {
+      debugPrint('📥[ChatProvider] 消息不属于当前会话，不加载到当前聊天页面（由EventBus处理）');
+    }
   }
 
   @override

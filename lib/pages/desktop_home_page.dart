@@ -36,9 +36,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted && !_initialized) {
           setState(() => _initialized = true);
-          
+
           debugPrint('🖥️ [DesktopHomePage] 初始化开始...');
-          
+
           context.read<ChatProvider>().startListening();
           context.read<ContactProvider>().startListening();
           
