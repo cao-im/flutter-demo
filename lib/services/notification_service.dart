@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 消息通知数据模型
 class NotificationData {
@@ -10,7 +12,7 @@ class NotificationData {
   final String? avatarUrl;
   final String content;
   final DateTime time;
-  final int targetId; // 会话目标ID（私聊为对方userId，群聊为groupId）
+  final int targetId;
   final bool isGroup;
 
   const NotificationData({
@@ -24,13 +26,16 @@ class NotificationData {
   });
 }
 
-/// 消息通知服务 - 统一管理各平台的消息通知
+/// 消息提示服务 - 收到新消息时播放提示音
 ///
-/// 通过 flutter_local_notifications 发送系统原生通知：
-/// - Android/iOS：系统通知栏（显示头像图标、昵称、消息内容、时间）
-/// - Windows：Toast 通知弹窗（桌面右下角）
-/// - macOS：通知中心
-/// - Linux：通知中心（如支持）
+/// 核心逻辑：收到新消息 → 不在当前聊天界面 → 播放 new_msg.wav
+///
+/// 各平台播放方式（均使用 new_msg.wav）：
+/// - Android：通过系统通知渠道的自定义提示音播放
+/// - iOS：通过系统通知的默认提示音播放
+/// - Windows：通过 PowerShell 的 SoundPlayer 播放 wav 文件
+/// - macOS：通过 afplay 命令播放 wav 文件
+/// - Linux：通过 aplay/aplay 命令播放 wav 文件
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -41,119 +46,254 @@ class NotificationService {
 
   bool _isInitialized = false;
 
-  /// 当前正在聊天会话的 targetId，用于判断是否需要显示通知
-  /// 如果收到消息的 targetId 等于此值，则不显示通知（因为用户正在看这个聊天）
+  /// wav 文件在 assets 中的路径
+  static const String _soundAssetPath = 'assets/sounds/new_msg.wav';
+
+  /// 当前正在聊天会话的 targetId
   int? _currentChatTargetId;
 
   set currentChatTargetId(int? value) {
     _currentChatTargetId = value;
   }
 
-  /// 初始化通知服务
+  /// 初始化
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    debugPrint('🔔[NotificationService] 初始化通知服务...');
+    debugPrint('🔔[NotificationService] 初始化...');
 
+    // Android/iOS：初始化通知插件（用于播放提示音）
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
     await _notifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
+      InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
 
-    // Android: 创建通知渠道（重要程度：高）
+    // Android：配置自定义提示音的通知渠道
     if (!kIsWeb && Platform.isAndroid) {
-      const channel = AndroidNotificationChannel(
-        'cao_im_messages',
-        '新消息通知',
-        description: '来自好友和群组的聊天消息通知',
-        importance: Importance.high,
-      );
-      await _notifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+      await _setupAndroidChannel();
+    }
+
+    // 预先将 wav 文件从 assets 复制到本地文件系统（Windows/macOS/Linux 需要文件路径）
+    if (!kIsWeb && !Platform.isAndroid && !Platform.isIOS) {
+      await _extractSoundFile();
     }
 
     _isInitialized = true;
-    debugPrint('✅[NotificationService] 通知服务初始化完成');
+    debugPrint('✅[NotificationService] 初始化完成');
   }
 
-  /// 显示消息通知（统一入口）
-  ///
-  /// [data] - 通知数据（发送者信息、消息内容等）
+  /// Android：创建带自定义提示音的通知渠道（删旧建新确保生效）
+  Future<void> _setupAndroidChannel() async {
+    final plugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (plugin == null) return;
+
+    try {
+      // 先删旧渠道（Android 渠道创建后声音不可修改，必须重建）
+      await plugin.deleteNotificationChannel('cao_im_msg');
+
+      const channel = AndroidNotificationChannel(
+        'cao_im_msg',
+        '新消息',
+        description: '新消息提示',
+        importance: Importance.high,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('new_msg'),
+      );
+      await plugin.createNotificationChannel(channel);
+      debugPrint('✅[NotificationService] Android 提示音渠道已设置');
+    } catch (e) {
+      debugPrint('⚠️[NotificationService] Android 提示音设置失败: $e');
+    }
+  }
+
+  /// 将 assets 中的 wav 提取到本地临时目录（桌面端需要文件路径来播放）
+  Future<void> _extractSoundFile() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/new_msg.wav');
+      if (!await file.exists()) {
+        final byteData = await rootBundle.load(_soundAssetPath);
+        await file.writeAsBytes(byteData.buffer.asUint8List());
+        debugPrint('✅[NotificationService] wav 已提取到: ${file.path}');
+      }
+    } catch (e) {
+      debugPrint('⚠️[NotificationService] wav 提取失败: $e');
+    }
+  }
+
+  /// 显示消息通知（统一入口）→ 实际就是播放提示音
   Future<void> showMessageNotification(NotificationData data) async {
+    // 1. 未初始化 → 不播放
     if (!_isInitialized) {
-      debugPrint('⚠️[NotificationService] 通知服务未初始化，跳过通知');
+      debugPrint('🔕[通知] ❌ 不播放：服务未初始化');
       return;
     }
 
-    // 判断是否需要显示通知：如果用户正在该会话中聊天，则不显示通知
+    // 2. 正在当前会话聊天 → 不播放
     if (_currentChatTargetId != null && _currentChatTargetId == data.targetId) {
-      debugPrint('📍[NotificationService] 用户正在当前会话中聊天(targetId=${data.targetId})，跳过通知');
+      debugPrint('🔕[通知] ⏭️ 不播放：正在与 ${data.nickname} 聊天 (targetId=${data.targetId}, currentChatTargetId=$_currentChatTargetId)');
       return;
     }
 
-    debugPrint('🔔[NotificationService] 显示消息通知: ${data.nickname} - ${data.content}');
+    // 3. 决定播放
+    debugPrint('🔔[通知] ✅ 播放提示音：来自「${data.nickname}」的消息 (targetId=${data.targetId})');
 
-    await _showSystemNotification(data);
+    await _playSound();
   }
 
-  /// 发送系统原生通知
-  Future<void> _showSystemNotification(NotificationData data) async {
-    final androidDetails = AndroidNotificationDetails(
-      'cao_im_messages',
-      '新消息通知',
-      channelDescription: '来自好友和群组的聊天消息通知',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-      when: data.time.millisecondsSinceEpoch,
-    );
-
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    final details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    // 使用 senderId 作为通知ID，同一人的新通知会覆盖旧通知
-    await _notifications.show(
-      data.senderId,
-      data.isGroup ? '[${data.nickname}]' : data.nickname,
-      _formatContent(data.content),
-      details,
-      payload: 'chat_${data.targetId}',
-    );
-  }
-
-  /// 用户点击通知时的回调
-  void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('🔔[NotificationService] 用户点击了通知: payload=${response.payload}');
-    // 可在此处处理跳转到对应聊天页面的逻辑
-  }
-
-  /// 格式化消息内容（截断过长文本）
-  String _formatContent(String content) {
-    if (content.length > 50) {
-      return '${content.substring(0, 50)}...';
+  /// 播放提示音（按平台分发）
+  Future<void> _playSound() async {
+    if (kIsWeb) {
+      debugPrint('🔕[通知] ⏭️ 不播放：当前为 Web 平台');
+      return;
     }
-    return content;
+
+    final platform = _platformLabel();
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      debugPrint('🔊[通知] 📱 使用 $platform 通知渠道播放提示音...');
+      await _playViaNotification();
+    } else if (Platform.isWindows) {
+      debugPrint('🔊[通知] 💻 使用 PowerShell SoundPlayer 播放 wav...');
+      await _playViaPowerShell();
+    } else if (Platform.isMacOS) {
+      debugPrint('🔊[通知] 🍎 使用 afplay 播放 wav...');
+      await _playViaAfplay();
+    } else if (Platform.isLinux) {
+      debugPrint('🔊[通知] 🐧 使用 aplay 播放 wav...');
+      await _playViaAplay();
+    } else {
+      debugPrint('🔕[通知] ⏭️ 不播放：未知平台');
+    }
+  }
+
+  /// 获取当前平台标签
+  String _platformLabel() {
+    if (Platform.isAndroid) return 'Android';
+    if (Platform.isIOS) return 'iOS';
+    if (Platform.isWindows) return 'Windows';
+    if (Platform.isMacOS) return 'macOS';
+    if (Platform.isLinux) return 'Linux';
+    return 'Unknown';
+  }
+
+  /// 移动端：通过通知播放提示音
+  Future<void> _playViaNotification() async {
+    try {
+      await _notifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        '',
+        '',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'cao_im_msg', '新消息',
+            channelDescription: '新消息提示',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentBadge: false,
+            presentSound: true,
+          ),
+        ),
+      );
+      debugPrint('🔊[通知] ✅ 通知已发送，提示音应已播放');
+    } catch (e) {
+      debugPrint('🔕[通知] ❌ 通知提示音播放失败: $e');
+    }
+  }
+
+  /// Windows：PowerShell 播放 wav
+  Future<void> _playViaPowerShell() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final wavPath = '${dir.path}\\new_msg.wav';
+      final file = File(wavPath);
+
+      if (!await file.exists()) {
+        debugPrint('🔕[通知] ❌ Windows 播放失败：wav 文件不存在 ($wavPath)');
+        return;
+      }
+
+      debugPrint('🔊[通知] 📂 wav 文件路径: $wavPath');
+
+      final result = await Process.run(
+        'powershell',
+        ['-Command', '(New-Object System.Media.SoundPlayer "$wavPath").PlaySync()'],
+        runInShell: true,
+      );
+
+      if (result.exitCode == 0) {
+        debugPrint('🔊[通知] ✅ Windows 提示音播放完成');
+      } else {
+        debugPrint('🔕[通知] ❌ Windows 播放异常 (exitCode=${result.exitCode}): ${result.stderr}');
+      }
+    } catch (e) {
+      debugPrint('🔕[通知] ❌ Windows 播放异常: $e');
+    }
+  }
+
+  /// macOS：afplay 播放 wav
+  Future<void> _playViaAfplay() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final wavPath = '$dir/new_msg.wav';
+      final file = File(wavPath);
+
+      if (!await file.exists()) {
+        debugPrint('🔕[通知] ❌ macOS 播放失败：wav 文件不存在 ($wavPath)');
+        return;
+      }
+
+      debugPrint('🔊[通知] 📂 wav 文件路径: $wavPath');
+
+      final result = await Process.run('afplay', [wavPath]);
+
+      if (result.exitCode == 0) {
+        debugPrint('🔊[通知] ✅ macOS 提示音播放完成');
+      } else {
+        debugPrint('🔕[通知] ❌ macOS 播放异常 (exitCode=${result.exitCode}): ${result.stderr}');
+      }
+    } catch (e) {
+      debugPrint('🔕[通知] ❌ macOS 播放异常: $e');
+    }
+  }
+
+  /// Linux：aplay 播放 wav
+  Future<void> _playViaAplay() async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final wavPath = '$dir/new_msg.wav';
+      final file = File(wavPath);
+
+      if (!await file.exists()) {
+        debugPrint('🔕[通知] ❌ Linux 播放失败：wav 文件不存在 ($wavPath)');
+        return;
+      }
+
+      debugPrint('🔊[通知] 📂 wav 文件路径: $wavPath');
+
+      final result = await Process.run('aplay', ['-q', wavPath]);
+
+      if (result.exitCode == 0) {
+        debugPrint('🔊[通知] ✅ Linux 提示音播放完成');
+      } else {
+        debugPrint('🔕[通知] ❌ Linux 播放异常 (exitCode=${result.exitCode}): ${result.stderr}');
+      }
+    } catch (e) {
+      debugPrint('🔕[通知] ❌ Linux 播放异常: $e');
+    }
+  }
+
+  void dispose() {
+    _currentChatTargetId = null;
   }
 
   /// 请求通知权限（Android 13+ 需要）
@@ -162,28 +302,20 @@ class NotificationService {
       final plugin = _notifications.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       if (plugin != null) {
-        final result = await plugin.requestNotificationsPermission();
-        debugPrint('🔔[NotificationService] Android 通知权限请求结果: $result');
-        return result ?? false;
+        return await plugin.requestNotificationsPermission() ?? false;
       }
     }
     if (!kIsWeb && Platform.isIOS) {
       final plugin = _notifications.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
       if (plugin != null) {
-        final result = await plugin.requestPermissions(
+        return await plugin.requestPermissions(
           alert: true,
           badge: true,
           sound: true,
-        );
-        return result ?? false;
+        ) ?? false;
       }
     }
     return true;
-  }
-
-  /// 取消所有通知
-  Future<void> cancelAll() async {
-    await _notifications.cancelAll();
   }
 }

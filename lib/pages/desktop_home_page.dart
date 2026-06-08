@@ -333,12 +333,23 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
   }
 
   Widget _buildRightPanel(LayoutProvider layoutProvider) {
+    // 非消息面板时，清除当前聊天状态以恢复通知功能
+    if (layoutProvider.selectedIndex != 0) {
+      context.read<ChatProvider>().clearCurrentConversation();
+    }
+
     switch (layoutProvider.selectedIndex) {
       case 0:
         // 消息：显示聊天面板
         final conversationId = layoutProvider.currentConversationId ?? '';
         final conversationName = layoutProvider.currentConversationName ?? '';
         final isGroup = layoutProvider.isGroup;
+
+        // 如果没有选中任何会话，也清除当前聊天状态（恢复通知）
+        if (conversationId.isEmpty) {
+          context.read<ChatProvider>().clearCurrentConversation();
+        }
+
         return Expanded(
           key: ValueKey('chat_panel_$conversationId'),
           child: ChatPage(conversationId: conversationId, conversationName: conversationName, isGroup: isGroup, isPanelMode: true, targetId: int.tryParse(conversationId) ?? 0),

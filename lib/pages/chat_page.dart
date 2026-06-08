@@ -211,28 +211,21 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     debugPrint('🗑️[ChatPage] dispose 被调用: conversationId=${widget.conversationId}');
-    final shouldClear = widget.conversationId.isEmpty;
-    debugPrint('🗑️[ChatPage] dispose: shouldClear=$shouldClear');
 
     _messageController.dispose();
     _scrollController.dispose();
 
-    // ✅ 改进的清理逻辑：
-    // 1. 只在占位符页面（conversationId 为空）销毁时才考虑清空
-    // 2. 使用延迟检查，避免在会话切换时误清空新设置的会话
-    if (shouldClear) {
-      Future.microtask(() {
-        // 再次检查：如果当前会话已经被新 Widget 设置过，就不清空
-        if (_chatProvider?.currentConversation != null) {
-          debugPrint('🗑️[ChatPage] dispose microtask: 当前已有会话 ${_chatProvider?.currentConversation?.id}，跳过清空');
-          return;
-        }
-        debugPrint('🗑️[ChatPage] dispose microtask: 确认清空当前会话');
+    // ✅ 退出聊天页面时清除当前会话状态，恢复消息通知功能
+    // 使用延迟检查，避免在会话切换（A→B）时误清空新设置的会话
+    Future.microtask(() {
+      if (_chatProvider?.currentConversation != null &&
+          _chatProvider?.currentConversation?.id == widget.conversationId) {
+        debugPrint('🗑️[ChatPage] dispose: 确认清空当前会话，恢复通知');
         _chatProvider?.clearCurrentConversation();
-      });
-    } else {
-      debugPrint('🗑️[ChatPage] dispose: 聊天页面被销毁，不清空会话');
-    }
+      } else {
+        debugPrint('🗑️[ChatPage] dispose: 当前会话已变更或为空，跳过清空');
+      }
+    });
 
     super.dispose();
   }
