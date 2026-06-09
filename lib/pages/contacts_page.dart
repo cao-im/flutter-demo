@@ -25,6 +25,12 @@ class _ContactsPageState extends State<ContactsPage>
   static const double _sectionHeaderHeight = 32.0;
   static const double _contactItemHeight = 64.0;
 
+  /// 完整的字母索引列表：# + A-Z
+  static const List<String> _fullAlphabet = [
+    '#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+  ];
+
   @override
   bool get wantKeepAlive => true;
 
@@ -173,8 +179,8 @@ class _ContactsPageState extends State<ContactsPage>
                     8,
                 bottom: MediaQuery.of(context).padding.bottom + 8,
                 child: _IndexBar(
-                  letters:
-                      contactProvider.groupedContacts.keys.toList(),
+                  letters: _fullAlphabet,
+                  existingLetters: contactProvider.groupedContacts.keys.toSet(),
                   highlightedLetter: _currentHighlightLetter,
                   onLetterTap: _onIndexBarTap,
                   onDragUpdate: _onIndexBarDragUpdate,
@@ -526,6 +532,7 @@ class _ContactsPageState extends State<ContactsPage>
 
 class _IndexBar extends StatelessWidget {
   final List<String> letters;
+  final Set<String> existingLetters;
   final String? highlightedLetter;
   final ValueChanged<String> onLetterTap;
   final Function(double dy, double totalHeight, List<String> letters)
@@ -534,6 +541,7 @@ class _IndexBar extends StatelessWidget {
 
   const _IndexBar({
     required this.letters,
+    required this.existingLetters,
     this.highlightedLetter,
     required this.onLetterTap,
     required this.onDragUpdate,
@@ -575,25 +583,27 @@ class _IndexBar extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(13),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          mainAxisSize: MainAxisSize.min,
-          children: letters.map((letter) {
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: letters.map((letter) {
             final isHighlighted = letter == highlightedLetter;
+            final hasContacts = existingLetters.contains(letter);
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1.5),
+              padding: EdgeInsets.zero,
               child: Text(
                 letter,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
                   color: isHighlighted
                       ? AppTheme.primaryColor
-                      : Colors.grey[600],
+                      : (hasContacts ? Colors.grey[600] : Colors.grey[300]),
                 ),
               ),
             );
           }).toList(),
+        ),
         ),
       ),
     );

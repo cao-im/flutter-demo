@@ -164,8 +164,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
                 ],
               ),
             ),
-            if (_searchText.isEmpty && groupedContacts.isNotEmpty)
-              _buildAlphabetIndex(groupedContacts.keys.toList()),
+            if (_searchText.isEmpty)
+              _buildAlphabetIndex(),
           ],
         );
       },
@@ -366,10 +366,31 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     ]));
   }
 
-  Widget _buildAlphabetIndex(List<String> letters) {
-    return Container(width: 28, padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14)), child: ListView.builder(itemCount: letters.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemBuilder: (context, index) {
-      final letter = letters[index];
-      return InkWell(onTap: () => _scrollToLetter(letter), child: Container(height: 22, alignment: Alignment.center, child: Text(letter, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryColor.withOpacity(0.7)))));
+  /// 完整的字母索引列表：# + A-Z
+  static const List<String> _fullAlphabet = [
+    '#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+  ];
+
+  Widget _buildAlphabetIndex() {
+    return Container(width: 28, padding: const EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14)), child: ListView.builder(itemCount: _fullAlphabet.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemBuilder: (context, index) {
+      final letter = _fullAlphabet[index];
+      final hasContacts = _sectionKeys.containsKey(letter);
+      return InkWell(
+        onTap: hasContacts ? () => _scrollToLetter(letter) : null,
+        child: Container(
+          height: 13,
+          alignment: Alignment.center,
+          child: Text(
+            letter,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: hasContacts ? AppTheme.primaryColor.withOpacity(0.7) : Colors.grey[300],
+            ),
+          ),
+        ),
+      );
     }));
   }
 
