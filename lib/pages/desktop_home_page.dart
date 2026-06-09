@@ -347,7 +347,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
 
         // 如果没有选中任何会话，也清除当前聊天状态（恢复通知）
         if (conversationId.isEmpty) {
-          context.read<ChatProvider>().clearCurrentConversation();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) context.read<ChatProvider>().clearCurrentConversation();
+          });
         }
 
         return Expanded(

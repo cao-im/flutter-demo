@@ -10,6 +10,7 @@ import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/conversation_item.dart';
 import '../widgets/avatar_widget.dart';
+import '../widgets/desktop_group_create_dialog.dart';
 
 class ConversationListPage extends StatefulWidget {
   final bool isEmbeddedMode;
@@ -453,9 +454,13 @@ class _ConversationListPageState extends State<ConversationListPage>
       if (value == 'add_friend') {
         _showAddFriendDialog(context);
       } else if (value == 'group_chat') {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text('发起群聊功能开发中'), duration: Duration(seconds: 2)),
-        );
+        if (widget.isEmbeddedMode) {
+          // 桌面端嵌入模式：弹出发起群聊对话框
+          DesktopGroupCreateDialog.show(context);
+        } else {
+          // 移动端：导航到发起群聊页面
+          Navigator.pushNamed(context, AppRouter.groupCreate);
+        }
       }
     });
   }

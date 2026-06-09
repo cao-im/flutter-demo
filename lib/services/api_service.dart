@@ -1,6 +1,7 @@
 import 'apis/auth_api.dart';
 import 'apis/user_api.dart';
 import 'apis/contact_api.dart';
+import 'apis/group_api.dart';
 
 /// API 服务统一入口
 ///
@@ -8,6 +9,7 @@ import 'apis/contact_api.dart';
 /// - [authApi] - 认证相关（登录、注册）
 /// - [userApi] - 用户资料（获取/修改个人信息）
 /// - [contactApi] - 联系人/好友（好友列表、好友请求、搜索等）
+/// - [groupApi] - 群组（创建、列表、详情）
 ///
 /// 使用示例：
 /// ```dart
@@ -28,6 +30,9 @@ class ApiService {
 
   /// 联系人/好友相关 API
   final ContactApi contactApi = ContactApi();
+
+  /// 群组相关 API（创建群组、群组列表等）
+  final GroupApi groupApi = GroupApi();
 
   // ==================== 向后兼容方法（委托给各领域 API）====================
 
@@ -114,5 +119,22 @@ class ApiService {
   /// 检查好友状态（委托给 [ContactApi.checkFriendStatus]）
   Future<int> checkFriendStatus(int userId, int targetUserId) async {
     return contactApi.checkFriendStatus(userId, targetUserId);
+  }
+
+  // ---------- 群组相关 ----------
+
+  /// 创建群组（委托给 [GroupApi.createGroup]）
+  Future<Map<String, dynamic>> createGroup(int ownerId, String name, List<int> memberIds) async {
+    return groupApi.createGroup(ownerId, name, memberIds);
+  }
+
+  /// 获取用户的群组列表（委托给 [GroupApi.getUserGroups]）
+  Future<List<dynamic>> getUserGroups(int userId) async {
+    return groupApi.getUserGroups(userId);
+  }
+
+  /// 获取群组信息（委托给 [GroupApi.getGroupInfo]）
+  Future<Map<String, dynamic>> getGroupInfo(int groupId) async {
+    return groupApi.getGroupInfo(groupId);
   }
 }

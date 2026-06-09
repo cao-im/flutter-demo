@@ -216,7 +216,7 @@ class _ContactsPageState extends State<ContactsPage>
                 badgeCount: contactProvider.unreadFriendRequestCount,
               ),
               _buildSpecialItem(Icons.group_outlined, '群聊', () {
-                Navigator.pushNamed(context, AppRouter.groupCreate);
+                Navigator.pushNamed(context, AppRouter.groupList);
               }),
               const Divider(height: 1, indent: 16, endIndent: 16),
             ],

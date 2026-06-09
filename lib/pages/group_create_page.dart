@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_widget.dart';
+import '../providers/contact_provider.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
+import '../router/app_router.dart';
 
 class GroupCreatePage extends StatefulWidget {
   const GroupCreatePage({super.key});
@@ -14,13 +19,16 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
   final _groupNameController = TextEditingController();
   List<String> _selectedMembers = [];
 
-  final List<Map<String, dynamic>> _mockFriends = [
-    {'id': '1', 'name': '张三', 'avatar': null},
-    {'id': '2', 'name': '李四', 'avatar': null},
-    {'id': '3', 'name': '王五', 'avatar': null},
-    {'id': '4', 'name': '赵六', 'avatar': null},
-    {'id': '5', 'name': '钱七', 'avatar': null},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final contactProvider = Provider.of<ContactProvider>(context, listen: false);
+      if (contactProvider.contacts.isEmpty) {
+        contactProvider.loadContacts();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -72,19 +80,52 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
       ),
     );
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final contactProvider = Provider.of<ContactProvider>(context, listen: false);
 
-    if (!mounted) return;
+      // 获取当前用户ID
+      final imUserIdStr = await StorageService.getImUserId();
+      if (imUserIdStr == null) { Navigator.pop(context); return; }
+      final ownerId = int.tryParse(imUserIdStr) ?? 0;
+      if (ownerId <= 0) { Navigator.pop(context); return; }
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('群组"${_groupNameController.text}"创建成功！'),
-        backgroundColor: AppTheme.successColor,
-      ),
-    );
+      // 将选中的成员ID转为 int 列表
+      final memberIds = _selectedMembers
+          .map((id) => int.tryParse(id) ?? 0)
+          .where((id) => id > 0)
+          .toList();
 
-    Navigator.pop(context);
+      // 调用 API 创建群组
+      final apiService = ApiService();
+      final result = await apiService.createGroup(
+        ownerId,
+        _groupNameController.text.trim(),
+        memberIds,
+      );
+
+      final groupData = result['data'] as Map<String, dynamic>?;
+      final groupId = groupData?['id']?.toString() ?? '';
+      final groupName = groupData?['name'] ?? _groupNameController.text.trim();
+
+      if (!mounted) return;
+      Navigator.pop(context); // 关闭 loading
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('群组"$groupName"创建成功！'),
+          backgroundColor: AppTheme.successColor));
+
+      // 跳转到群聊页面
+      Navigator.pushReplacementNamed(
+        context,
+        AppRouter.groupChat,
+        arguments: {'groupId': groupId, 'groupName': groupName},
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // 关闭 loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('创建失败: $e'), backgroundColor: Colors.red));
+    }
   }
 
   @override
@@ -137,22 +178,42 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
               ),
             ),
             Expanded(
-              child: ListView.builder(
-                itemCount: _mockFriends.length,
-                itemBuilder: (context, index) {
-                  final friend = _mockFriends[index];
-                  final isSelected = _selectedMembers.contains(friend['id']);
-                  return CheckboxListTile(
-                    value: isSelected,
-                    onChanged: (_) => _toggleMember(friend['id']),
-                    title: Row(
-                      children: [
-                        AvatarWidget(name: friend['name'], size: 40),
-                        const SizedBox(width: 12),
-                        Text(friend['name']),
-                      ],
-                    ),
-                    activeColor: AppTheme.primaryColor,
+              child: Consumer<ContactProvider>(
+                builder: (context, contactProvider, _) {
+                  final contacts = contactProvider.contacts;
+                  if (contacts.isEmpty && !contactProvider.isLoading) {
+                    return const Center(
+                      child: Text('暂无联系人，请先添加好友',
+                          style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+                  if (contactProvider.isLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  return ListView.builder(
+                    itemCount: contacts.length,
+                    itemBuilder: (context, index) {
+                      final contact = contacts[index];
+                      final contactId = contact.id?.toString() ?? contact.imUserId?.toString() ?? '';
+                      final displayName = contact.nickname?.isNotEmpty == true
+                          ? contact.nickname!
+                          : (contact.username?.isNotEmpty == true
+                              ? contact.username!
+                              : '未知用户');
+                      final isSelected = _selectedMembers.contains(contactId);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        onChanged: (_) => _toggleMember(contactId),
+                        title: Row(
+                          children: [
+                            AvatarWidget(name: displayName, size: 40),
+                            const SizedBox(width: 12),
+                            Text(displayName),
+                          ],
+                        ),
+                        activeColor: AppTheme.primaryColor,
+                      );
+                    },
                   );
                 },
               ),

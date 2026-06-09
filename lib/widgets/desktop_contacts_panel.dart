@@ -9,6 +9,8 @@ import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_widget.dart';
+import '../services/api_service.dart';
+import 'desktop_group_create_dialog.dart';
 
 class DesktopContactsPanel extends StatefulWidget {
   const DesktopContactsPanel({super.key});
@@ -26,6 +28,11 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
 
   // 新的朋友折叠展开状态
   bool _isNewFriendsExpanded = false;
+
+  // 群聊折叠展开状态
+  bool _isGroupChatExpanded = false;
+  List<dynamic> _groups = [];
+  bool _isLoadingGroups = false;
 
   @override
   void initState() {
@@ -123,11 +130,16 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
                   // 新的朋友：可折叠展开（仿微信）
                   _buildNewFriendsExpandableSection(contactProvider),
 
-                  // 其他功能入口
-                  _buildExpandableSection(icon: Icons.group_outlined, title: '群聊', count: null, isExpanded: false, onTap: () {}),
-                  _buildExpandableSection(icon: Icons.article_outlined, title: '公众号', count: null, isExpanded: false, onTap: () {}),
-                  _buildExpandableSection(icon: Icons.support_agent_outlined, title: '服务号', count: null, isExpanded: false, onTap: () {}),
-                  Divider(height: 1, indent: 56, color: Colors.grey[200]),
+                  // 群聊：可折叠展开（仿微信）
+                  _buildGroupChatExpandableSection(),
+
+                  // 其他功能入口（微信风格：图标+文字+箭头+计数）
+                  _buildWechatStyleRow(icon: Icons.article_outlined, title: '公众号', count: null),
+                  _buildWechatStyleRow(icon: Icons.support_agent_outlined, title: '服务号', count: null),
+                  Divider(height: 1, indent: 44, color: Colors.grey[200]),
+
+                  // 联系人（微信风格：显示总数）
+                  _buildWechatStyleRow(icon: Icons.people_outline, title: '联系人', count: allContacts.length, isBold: true),
 
                   // 联系人列表或空状态提示
                   if (allContacts.isEmpty && !contactProvider.isLoading)
@@ -172,7 +184,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     );
   }
 
-  /// 新的朋友：折叠展开区域（仿微信）
+  /// 新的朋友：折叠展开区域（微信风格）
   Widget _buildNewFriendsExpandableSection(ContactProvider contactProvider) {
     final unreadCount = contactProvider.unreadFriendRequestCount;
     final requests = contactProvider.friendRequests;
@@ -180,85 +192,128 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 标题行：点击展开/收起
-        InkWell(
+        // 标题行：微信风格（图标+文字+箭头+计数）
+        _buildCollapsibleRow(
+          icon: Icons.person_add_outlined,
+          title: '新的朋友',
+          count: unreadCount > 0 ? unreadCount : null,
+          isExpanded: _isNewFriendsExpanded,
           onTap: () {
             setState(() => _isNewFriendsExpanded = !_isNewFriendsExpanded);
-            if (_isNewFriendsExpanded) {
-              contactProvider.markFriendRequestsAsRead();
-            }
+            if (_isNewFriendsExpanded) contactProvider.markFriendRequestsAsRead();
           },
-          hoverColor: AppTheme.primaryColor.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.person_add_outlined, size: 22, color: AppTheme.primaryColor),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    '新的朋友',
-                    style: const TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                if (unreadCount > 0)
-                  Container(
-                    margin: const EdgeInsets.only(right: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: AppTheme.errorColor, borderRadius: BorderRadius.circular(10)),
-                    child: Text('$unreadCount', style: const TextStyle(fontSize: 11, color: Colors.white)),
-                  ),
-                AnimatedRotation(
-                  turns: _isNewFriendsExpanded ? 0.5 : 0.0,
-                  duration: Duration(milliseconds: 200),
-                  child: Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.grey[400]),
-                ),
-              ],
-            ),
-          ),
         ),
 
-        // 展开内容：好友请求列表（内联显示）
+        // 展开内容：好友请求列表
         if (_isNewFriendsExpanded) ...[
           Container(
             constraints: BoxConstraints(maxHeight: 280),
             child: requests.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Center(child: Text('暂无好友请求', style: TextStyle(color: Colors.grey[400], fontSize: 13))),
-                  )
+                ? Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('暂无好友请求', style: TextStyle(color: Colors.grey[400], fontSize: 13))))
                 : ListView.separated(
                     shrinkWrap: true,
                     physics: ClampingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     itemCount: requests.length > 5 ? 5 : requests.length,
-                    separatorBuilder: (_, __) => Divider(height: 1, indent: 56, color: Colors.grey.shade100),
+                    separatorBuilder: (_, __) => Divider(height: 1, indent: 44, color: Colors.grey.shade100),
                     itemBuilder: (ctx, i) => _buildCompactRequestItem(requests[i]),
                   ),
           ),
           if (requests.length > 5)
             InkWell(
               onTap: () => Navigator.of(context).pushNamed(AppRouter.newFriends),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(
-                  '查看全部 ${requests.length} 条好友请求',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: AppTheme.primaryColor),
-                ),
-              ),
+              child: Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text('查看全部 ${requests.length} 条好友请求', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppTheme.primaryColor))),
             ),
         ],
       ],
+    );
+  }
+
+  /// 群聊：折叠展开区域（微信风格，无发起群聊按钮）
+  Widget _buildGroupChatExpandableSection() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 标题行：微信风格
+        _buildCollapsibleRow(
+          icon: Icons.group_outlined,
+          title: '群聊',
+          count: _groups.isNotEmpty ? _groups.length : null,
+          isExpanded: _isGroupChatExpanded,
+          onTap: () {
+            setState(() => _isGroupChatExpanded = !_isGroupChatExpanded);
+            if (_isGroupChatExpanded && _groups.isEmpty) _loadGroups();
+          },
+        ),
+
+        // 展开内容：仅群组列表
+        if (_isGroupChatExpanded)
+          Container(
+            constraints: BoxConstraints(maxHeight: 400),
+            child: _isLoadingGroups
+                ? Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator()))
+                : _groups.isEmpty
+                    ? Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('暂无群组', style: TextStyle(color: Colors.grey[400], fontSize: 13))))
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        physics: ClampingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        itemCount: _groups.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, indent: 44, color: Colors.grey.shade100),
+                        itemBuilder: (ctx, i) => _buildGroupItem(_groups[i]),
+                      ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _loadGroups() async {
+    if (_currentUserId == null) return;
+    setState(() => _isLoadingGroups = true);
+    try {
+      final apiService = ApiService();
+      final data = await apiService.getUserGroups(_currentUserId!);
+      if (mounted) setState(() => _groups = data);
+    } catch (e) {
+      debugPrint('加载群组列表失败: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingGroups = false);
+    }
+  }
+
+  Widget _buildGroupItem(dynamic group) {
+    final groupId = group['id']?.toString() ?? '';
+    final groupName = group['name']?.toString() ?? '未命名群组';
+
+    return InkWell(
+      onTap: () {
+        final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
+        layoutProvider.selectNavigation(0);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          layoutProvider.selectConversation(groupId, groupName, true);
+          Provider.of<ChatProvider>(context, listen: false).setCurrentConversation(
+            ConversationModel(id: groupId, targetId: int.tryParse(groupId) ?? 0, name: groupName, isGroup: true, participantIds: []),
+          );
+        });
+      },
+      hoverColor: Colors.grey[100],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+        child: Row(
+          children: [
+            // 群头像（微信风格：小圆角方形+群图标）
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
+              child: Icon(Icons.group, size: 20, color: Colors.grey[600]),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(groupName, style: const TextStyle(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
+          ],
+        ),
+      ),
     );
   }
 
@@ -413,7 +468,8 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   List<Map<String, dynamic>> _filterRequestsByType(List<Map<String, dynamic>> requests, String type) =>
       requests.where((r) => _getRequestType(r) == type).toList();
 
-  Widget _buildExpandableSection({
+  /// 微信风格折叠行（图标+文字+箭头/下箭头+计数）
+  Widget _buildCollapsibleRow({
     required IconData icon,
     required String title,
     int? count,
@@ -423,17 +479,44 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     return InkWell(
       onTap: onTap,
       hoverColor: Colors.grey[100],
-      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         child: Row(
           children: [
-            Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 22, color: Colors.grey[600])),
-            SizedBox(width: 14),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor, fontWeight: FontWeight.w500))),
-            if (count != null) Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500])) else Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+            Icon(icon, size: 20, color: Colors.grey[600]),
+            const SizedBox(width: 14),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor))),
+            if (count != null)
+              Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
+            else
+              const SizedBox(width: 16),
+            const SizedBox(width: 4),
+            Icon(isExpanded ? Icons.keyboard_arrow_down : Icons.chevron_right, size: 18, color: Colors.grey[400]),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 微信风格静态行（图标+文字+箭头+计数，不可折叠）
+  Widget _buildWechatStyleRow({
+    required IconData icon,
+    required String title,
+    int? count,
+    bool isBold = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: isBold ? AppTheme.textPrimaryColor : Colors.grey[600]),
+          const SizedBox(width: 14),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor, fontWeight: isBold ? FontWeight.w600 : FontWeight.normal))),
+          if (count != null)
+            Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
+          else
+            Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+        ],
       ),
     );
   }
@@ -522,6 +605,36 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       barrierDismissible: true,
       builder: (dialogContext) => _AddFriendDialog(),
     );
+  }
+
+  /// 发起群聊弹窗
+  void _showGroupCreateDialog() async {
+    final result = await DesktopGroupCreateDialog.show(context);
+
+    if (result == null || !mounted) return;
+
+    final groupId = result['groupId']?.toString() ?? '';
+    final groupName = result['groupName']?.toString() ?? '';
+
+    if (groupId.isEmpty) return;
+
+    // 切换到消息面板并打开新群聊
+    final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
+    layoutProvider.selectNavigation(0); // 切换到消息标签
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      layoutProvider.selectConversation(groupId, groupName, true);
+
+      // 同时设置 ChatProvider 的当前会话
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      chatProvider.setCurrentConversation(ConversationModel(
+        id: groupId,
+        targetId: int.tryParse(groupId) ?? 0,
+        name: groupName,
+        isGroup: true,
+        participantIds: [],
+      ));
+    });
   }
 
   Future<void> _acceptRequest(dynamic friendId) async {

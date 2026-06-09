@@ -6,6 +6,7 @@ import '../pages/home_page.dart';
 import '../pages/chat_page.dart';
 import '../pages/group_create_page.dart';
 import '../pages/group_chat_page.dart';
+import '../pages/group_list_page.dart';
 import '../pages/search_add_friend_page.dart';
 import '../pages/new_friends_page.dart';
 
@@ -16,6 +17,7 @@ class AppRouter {
   static const String home = '/home';
   static const String chat = '/chat';
   static const String groupCreate = '/group-create';
+  static const String groupList = '/group-list';
   static const String groupChat = '/group-chat';
   static const String searchAddFriend = '/search-add-friend';
   static const String newFriends = '/new-friends';
@@ -43,6 +45,9 @@ class AppRouter {
       case groupCreate:
         return MaterialPageRoute(
             builder: (_) => const GroupCreatePage());
+      case groupList:
+        return MaterialPageRoute(
+            builder: (_) => const GroupListPage());
       case groupChat:
         final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
