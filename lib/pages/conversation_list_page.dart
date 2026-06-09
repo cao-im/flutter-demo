@@ -32,6 +32,7 @@ class _ConversationListPageState extends State<ConversationListPage>
 
   bool _hasLoaded = false;
   final GlobalKey _addButtonKey = GlobalKey();
+  final GlobalKey _appBarAddButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -135,50 +136,52 @@ class _ConversationListPageState extends State<ConversationListPage>
     }
   }
 
-  void _showCreateDialog() {
-    try {
-      showModalBottomSheet(
-        context: context,
-        useRootNavigator: true,
-        builder: (context) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.person_add,
-                    color: AppTheme.primaryColor,
-                  ),
-                  title: const Text('发起单聊'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    final messenger = ScaffoldMessenger.maybeOf(context);
-                    if (messenger != null) {
-                      messenger.showSnackBar(const SnackBar(content: Text('功能开发中...')));
-                    }
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.group_add,
-                    color: AppTheme.primaryColor,
-                  ),
-                  title: const Text('发起群聊'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, AppRouter.groupCreate);
-                  },
-                ),
-              ],
-            ),
-          ),
+  /// 显示+号菜单（仿微信右上角下拉菜单）
+  void _showCreateMenu(BuildContext context) {
+    final RenderBox? button = _appBarAddButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (button == null) return;
+
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        buttonPosition.dx,
+        buttonPosition.dy + button.size.height + 4,
+        overlay.size.width - buttonPosition.dx - button.size.width,
+        0,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'single_chat',
+          height: 44,
+          child: Row(children: [
+            Icon(Icons.person_add, size: 20, color: AppTheme.textSecondaryColor),
+            SizedBox(width: 12),
+            Text('发起单聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+          ]),
         ),
-      );
-    } catch (e) {
-      debugPrint('显示底部弹窗失败: $e');
-    }
+        PopupMenuItem<String>(
+          value: 'group_chat',
+          height: 44,
+          child: Row(children: [
+            Icon(Icons.group_add, size: 20, color: AppTheme.textSecondaryColor),
+            SizedBox(width: 12),
+            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+          ]),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'single_chat') {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        if (messenger != null) {
+          messenger.showSnackBar(const SnackBar(content: Text('功能开发中...')));
+        }
+      } else if (value == 'group_chat') {
+        Navigator.pushNamed(context, AppRouter.groupCreate);
+      }
+    });
   }
 
   @override
@@ -195,7 +198,7 @@ class _ConversationListPageState extends State<ConversationListPage>
       appBar: AppBar(
         title: const Text('消息'),
         actions: [
-          IconButton(icon: const Icon(Icons.add), onPressed: _showCreateDialog),
+          IconButton(key: _appBarAddButtonKey, icon: const Icon(Icons.add), onPressed: () => _showCreateMenu(context)),
         ],
       ),
       body: Column(
