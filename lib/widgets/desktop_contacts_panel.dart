@@ -459,8 +459,6 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimaryColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-              if ((contact.username ?? '').isNotEmpty && contact.username != contact.nickname)
-                Padding(padding: const EdgeInsets.only(top: 2), child: Text(contact.username ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[500]), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ])),
             Icon(Icons.more_vert, size: 18, color: Colors.grey[400]),
           ],

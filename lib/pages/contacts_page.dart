@@ -390,15 +390,6 @@ class _ContactsPageState extends State<ContactsPage>
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        contact.username,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[500],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ],
                   ),
                 ),
