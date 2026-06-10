@@ -72,13 +72,24 @@ class ChatProvider with ChangeNotifier {
       // 判断当前是否在该会话的聊天页面
       bool isInCurrentConversation = false;
       if (_currentConversation != null) {
-        final msgTargetId = event.message.toId;
         final convTargetId = _currentConversation!.targetId;
 
-        if (msgTargetId == convTargetId || event.message.fromId == convTargetId) {
-          isInCurrentConversation = true;
-          debugPrint('📍[ChatProvider] 消息属于当前会话，刷新消息列表但不增加未读数');
-          loadMessages(_currentConversation!.id);
+        // 群聊消息：用 groupId 匹配；私聊消息：用 fromId 或 toId 匹配
+        final message = event.message;
+        if (message.groupId != null && message.groupId! > 0) {
+          // 群聊消息
+          if (message.groupId == convTargetId) {
+            isInCurrentConversation = true;
+            debugPrint('📍[ChatProvider] 群聊消息属于当前会话(groupId=${message.groupId})，刷新消息列表但不增加未读数');
+            loadMessages(_currentConversation!.id);
+          }
+        } else {
+          // 私聊消息
+          if (message.toId == convTargetId || message.fromId == convTargetId) {
+            isInCurrentConversation = true;
+            debugPrint('📍[ChatProvider] 私聊消息属于当前会话，刷新消息列表但不增加未读数');
+            loadMessages(_currentConversation!.id);
+          }
         }
       }
 
