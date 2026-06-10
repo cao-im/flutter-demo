@@ -114,13 +114,20 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                 final isMe = message.isSent || message.senderId == authUserId;
 
                 // 设置发送者头像和昵称
+                // 群聊：优先使用消息自带的 senderInfo（每条消息的发送者可能不同）
+                // 私聊：使用会话目标联系人信息
                 String? senderAvatar;
                 String? senderName;
 
                 if (isMe) {
                   senderAvatar = currentUser?.avatar;
                   senderName = currentUser?.nickname ?? currentUser?.username;
+                } else if (widget.isGroup) {
+                  // 群聊：从消息自身的 senderInfo 获取
+                  senderAvatar = message.senderDisplayAvatar;
+                  senderName = message.senderDisplayName;
                 } else {
+                  // 私聊：使用会话目标的联系人信息
                   senderAvatar = contactAvatar;
                   senderName = contactName;
                 }
