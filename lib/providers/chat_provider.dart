@@ -205,21 +205,12 @@ class ChatProvider with ChangeNotifier {
             }
           }
         } else {
-          // 优先从最后一条消息的senderInfo获取（新方案）
-          if (conv.lastMessage?.senderInfo != null) {
-            final lastMsgSenderInfo = conv.lastMessage!.senderInfo!;
-            displayName = lastMsgSenderInfo.nickname.isNotEmpty 
-                ? lastMsgSenderInfo.nickname 
-                : '用户${conv.targetId}';
-            displayAvatar = lastMsgSenderInfo.avatar.isNotEmpty 
-                ? lastMsgSenderInfo.avatar 
-                : null;
-          } else {
-            // fallback到本地缓存（原有方案）
-            final contactInfo = _contactInfoCache[conv.targetId];
-            displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-            displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
-          }
+          // 私聊：显示聊天对象的信息，使用 targetId 匹配本地联系人
+          // （注意：不能用 lastMessage.senderInfo，因为那是最后一条消息的发送者，
+          //  如果最后一条消息是自己发的，senderInfo 就是自己而非聊天对象）
+          final contactInfo = _contactInfoCache[conv.targetId];
+          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
         }
 
         if (conv.lastMessage != null) {
@@ -335,21 +326,12 @@ class ChatProvider with ChangeNotifier {
             }
           }
         } else {
-          // 优先从最后一条消息的senderInfo获取（新方案）
-          if (conv.lastMessage?.senderInfo != null) {
-            final lastMsgSenderInfo = conv.lastMessage!.senderInfo!;
-            displayName = lastMsgSenderInfo.nickname.isNotEmpty 
-                ? lastMsgSenderInfo.nickname 
-                : '用户${conv.targetId}';
-            displayAvatar = lastMsgSenderInfo.avatar.isNotEmpty 
-                ? lastMsgSenderInfo.avatar 
-                : null;
-          } else {
-            // fallback到本地缓存（原有方案）
-            final contactInfo = _contactInfoCache[conv.targetId];
-            displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-            displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
-          }
+          // 私聊：显示聊天对象的信息，使用 targetId 匹配本地联系人
+          // （注意：不能用 lastMessage.senderInfo，因为那是最后一条消息的发送者，
+          //  如果最后一条消息是自己发的，senderInfo 就是自己而非聊天对象）
+          final contactInfo = _contactInfoCache[conv.targetId];
+          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
+          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
         }
 
         if (conv.lastMessage != null) {
