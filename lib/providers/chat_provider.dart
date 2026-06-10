@@ -184,22 +184,24 @@ class ChatProvider with ChangeNotifier {
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
-          try {
-            final group = await _sdkManager.client.getGroup(conv.targetId);
-            displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
-            
-            // 如果最后一条消息有groupInfo，优先使用
-            if (conv.lastMessage?.groupInfo != null) {
-              displayName = conv.lastMessage!.groupInfo!.groupName;
-            }
-          } catch (e) {
-            debugPrint('⚠️[ChatProvider] 获取群组名称失败: $e');
-            
-            // 尝试从最后一条消息的groupInfo获取
-            if (conv.lastMessage?.groupInfo != null) {
-              displayName = conv.lastMessage!.groupInfo!.groupName;
-            } else {
+          // ✅ 优先使用已有数据（lastMessage.groupInfo 或 SDK 缓存），避免阻塞等待网络请求
+          if (conv.lastMessage?.groupInfo != null &&
+              conv.lastMessage!.groupInfo!.groupName.isNotEmpty) {
+            displayName = conv.lastMessage!.groupInfo!.groupName;
+          } else {
+            // 尝试从 SDK 缓存获取（同步，无网络请求）
+            try {
+              final cachedGroup = _sdkManager.client.groupService.getFromCache(conv.targetId);
+              if (cachedGroup != null && cachedGroup.name.isNotEmpty) {
+                displayName = cachedGroup.name;
+              } else {
+                displayName = '群组 ${conv.targetId}';
+                // 异步刷新：后台获取群信息并缓存（不阻塞 UI）
+                _refreshGroupInfoInBackground(conv.targetId);
+              }
+            } catch (e) {
               displayName = '群组 ${conv.targetId}';
+              _refreshGroupInfoInBackground(conv.targetId);
             }
           }
         } else {
@@ -314,20 +316,22 @@ class ChatProvider with ChangeNotifier {
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
-          try {
-            final group = await _sdkManager.client.getGroup(conv.targetId);
-            displayName = group.name.isNotEmpty ? group.name : '群组 ${conv.targetId}';
-            
-            // 如果最后一条消息有groupInfo，优先使用
-            if (conv.lastMessage?.groupInfo != null) {
-              displayName = conv.lastMessage!.groupInfo!.groupName;
-            }
-          } catch (e) {
-            // 尝试从最后一条消息的groupInfo获取
-            if (conv.lastMessage?.groupInfo != null) {
-              displayName = conv.lastMessage!.groupInfo!.groupName;
-            } else {
+          // ✅ 优先使用已有数据，避免阻塞等待网络请求
+          if (conv.lastMessage?.groupInfo != null &&
+              conv.lastMessage!.groupInfo!.groupName.isNotEmpty) {
+            displayName = conv.lastMessage!.groupInfo!.groupName;
+          } else {
+            try {
+              final cachedGroup = _sdkManager.client.groupService.getFromCache(conv.targetId);
+              if (cachedGroup != null && cachedGroup.name.isNotEmpty) {
+                displayName = cachedGroup.name;
+              } else {
+                displayName = '群组 ${conv.targetId}';
+                _refreshGroupInfoInBackground(conv.targetId);
+              }
+            } catch (e) {
               displayName = '群组 ${conv.targetId}';
+              _refreshGroupInfoInBackground(conv.targetId);
             }
           }
         } else {
@@ -846,6 +850,18 @@ class ChatProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('⚠️[ChatProvider] 触发消息通知失败: $e');
     }
+  }
+
+  /// 后台异步刷新群组信息（不阻塞 UI，成功后触发会话列表更新）
+  void _refreshGroupInfoInBackground(int groupId) {
+    _sdkManager.client.getGroup(groupId).then((group) {
+      if (group.name.isNotEmpty) {
+        debugPrint('✅[ChatProvider] 后台获取群组信息成功: groupId=$groupId, name=${group.name}');
+        loadConversations();
+      }
+    }).catchError((e) {
+      // 静默忽略：服务端 group_get 接口暂未实现，失败是预期行为
+    });
   }
 
   Future<ContactInfo?> _getContactInfo(int targetId) async {
