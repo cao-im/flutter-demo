@@ -80,15 +80,13 @@ class ChatProvider with ChangeNotifier {
           // 群聊消息
           if (message.groupId == convTargetId) {
             isInCurrentConversation = true;
-            debugPrint('📍[ChatProvider] 群聊消息属于当前会话(groupId=${message.groupId})，刷新消息列表但不增加未读数');
-            loadMessages(_currentConversation!.id);
+            debugPrint('📍[ChatProvider] 群聊消息属于当前会话(groupId=${message.groupId})，消息已由 onMessageReceived 增量添加，无需全量刷新');
           }
         } else {
           // 私聊消息
           if (message.toId == convTargetId || message.fromId == convTargetId) {
             isInCurrentConversation = true;
-            debugPrint('📍[ChatProvider] 私聊消息属于当前会话，刷新消息列表但不增加未读数');
-            loadMessages(_currentConversation!.id);
+            debugPrint('📍[ChatProvider] 私聊消息属于当前会话，消息已由 onMessageReceived 增量添加，无需全量刷新');
           }
         }
       }
@@ -99,7 +97,8 @@ class ChatProvider with ChangeNotifier {
         // ✅ 触发消息通知（通知服务内部会判断是否需要显示）
         _triggerMessageNotification(event.message);
       } else {
-        // 在当前会话时，加载会话列表但清零该会话未读数
+        // 在当前会话时：消息已由 receiveMessage() 增量添加到列表，
+        // 只需刷新会话列表以更新 lastMessage/unreadCount
         _loadConversationsAndClearUnread();
       }
     });
