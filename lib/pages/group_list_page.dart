@@ -117,8 +117,13 @@ class _GroupListPageState extends State<GroupListPage> {
     return InkWell(
       onTap: () => Navigator.pushNamed(
         context,
-        '/group-chat',
-        arguments: {'groupId': groupId, 'groupName': groupName},
+        '/chat',
+        arguments: {
+          'conversationId': groupId,
+          'conversationName': groupName,
+          'isGroup': true,
+          'targetId': int.tryParse(groupId) ?? 0,
+        },
       ),
       onLongPress: () => _showGroupMenu(groupName, groupId),
       child: Padding(
@@ -161,7 +166,7 @@ class _GroupListPageState extends State<GroupListPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-              ListTile(leading: Icon(Icons.chat_bubble_outline), title: const Text('进入聊天'), onTap: () { Navigator.pop(ctx); Navigator.pushNamed(context, '/group-chat', arguments: {'groupId': groupId, 'groupName': groupName}); }),
+              ListTile(leading: Icon(Icons.chat_bubble_outline), title: const Text('进入聊天'), onTap: () { Navigator.pop(ctx); Navigator.pushNamed(context, '/chat', arguments: {'conversationId': groupId, 'conversationName': groupName, 'isGroup': true, 'targetId': int.tryParse(groupId) ?? 0}); }),
               ListTile(leading: Icon(Icons.info_outline), title: const Text('群信息'), onTap: () { Navigator.pop(ctx); }),
             ],
           ),

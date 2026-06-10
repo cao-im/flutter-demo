@@ -375,13 +375,16 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> loadMessages(String conversationId) async {
+    // ✅ 立即清空旧消息，避免切换会话时短暂显示上一个会话的消息
+    _messages = [];
     _isLoading = true;
     notifyListeners();
 
     try {
       final targetId = int.tryParse(conversationId) ?? 0;
+      final isGroup = _currentConversation?.isGroup ?? false;
 
-      debugPrint('📍[ChatProvider] 📥 开始加载所有历史消息...');
+      debugPrint('📍[ChatProvider] 📥 开始加载历史消息, conversationId=$conversationId, targetId=$targetId, isGroup=$isGroup');
       
       // ✅ 自动分页加载：循环查询直到获取所有消息
       List<sdk.Message> allMessages = [];
@@ -390,11 +393,19 @@ class ChatProvider with ChangeNotifier {
       bool hasMore = true;
       
       while (hasMore) {
-        final pageMessages = await _sdkManager.client.getHistoryMessages(
-          targetId: targetId,
-          page: currentPage,
-          size: pageSize,
-        );
+        // targetId 是当前会话的目标ID（私聊=对方userId / 群聊=群组ID）
+        // SDK 按会话类型提供不同的查询方法
+        final pageMessages = isGroup
+            ? await _sdkManager.client.getGroupHistoryMessages(
+                groupId: targetId,
+                page: currentPage,
+                size: pageSize,
+              )
+            : await _sdkManager.client.getHistoryMessages(
+                targetId: targetId,
+                page: currentPage,
+                size: pageSize,
+              );
         
         if (pageMessages.isEmpty) {
           hasMore = false;

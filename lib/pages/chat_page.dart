@@ -5,10 +5,11 @@ import '../providers/chat_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
-import '../models/contact_info_model.dart';
 import '../theme/app_theme.dart';
-import '../widgets/message_bubble.dart';
-import '../widgets/time_separator.dart';
+import '../widgets/chat/chat_page_shell.dart';
+import '../widgets/chat/chat_header_widget.dart';
+import '../widgets/chat/message_list_widget.dart';
+import '../widgets/chat/chat_input_widget.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -236,14 +237,6 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  bool _isMessageFromMe(MessageModel message, BuildContext context) {
-    final authUserId = Provider.of<AuthProvider>(
-      context,
-      listen: false,
-    )?.user?.id;
-    return message.isSent || message.senderId == authUserId;
-  }
-
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMore) return;
     _isLoadingMore = true;
@@ -402,262 +395,52 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // ==================== 重构后的 UI 构建部分 ====================
+
   @override
   Widget build(BuildContext context) {
+    // 空状态判断（保持原逻辑）
     if (widget.isPanelMode && widget.conversationId.isEmpty) {
       return _buildPlaceholder();
     }
-    
-    if (widget.isPanelMode) {
-      return _buildPanelLayout();
-    }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.conversationName),
-            if (widget.isGroup)
-              const Text(
-                '群聊',
-                style: TextStyle(fontSize: 12, color: Colors.white70),
-              )
-            else
-              const Text(
-                '在线',
-                style: TextStyle(fontSize: 12, color: Colors.white70),
-              ),
-          ],
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
-        ],
+    // 使用 ChatPageShell 组装页面
+    return ChatPageShell(
+      isPanelMode: widget.isPanelMode,
+      placeholder: (widget.isPanelMode && widget.conversationId.isEmpty) ? _buildPlaceholder() : null,
+
+      // 标题栏：根据平台选择样式
+      header: ChatHeaderWidget(
+        title: widget.conversationName,
+        subtitle: widget.isGroup ? '群聊' : '在线',
+        style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
+        showVoiceCall: widget.isPanelMode,
+        showVideoCall: widget.isPanelMode,
+        onMoreTap: () {},
       ),
-      body: Column(
-        children: [
-          Expanded(child: _buildMessageList()),
-          _buildInputToolbar(),
-        ],
+
+      // 消息列表：使用提取的组件
+      body: MessageListWidget(
+        scrollController: _scrollController,
+        onScrollToBottom: () => _scrollToBottom(),
+        targetId: effectiveTargetId,
+        isGroup: widget.isGroup,
+        onRetry: (message) => _retryMessage(message),
       ),
-    );
-  }
 
-  Widget _buildMessageList() {
-    return Consumer2<ChatProvider, AuthProvider>(
-      builder: (context, chatProvider, authProvider, _) {
-        if (chatProvider.isLoading && chatProvider.messages.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (chatProvider.messages.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline,
-                  size: 80,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '暂无消息',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '发送消息开始聊天吧~',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final currentMessageCount = chatProvider.messages.length;
-        if (currentMessageCount > _lastMessageCount && _lastMessageCount > 0) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
-          });
-        }
-        _lastMessageCount = currentMessageCount;
-
-        final currentUser = authProvider.user;
-
-        return FutureBuilder<ContactInfo?>(
-          future: _getContactInfo(chatProvider),
-          builder: (context, snapshot) {
-            String? contactAvatar;
-            String? contactName;
-
-            if (snapshot.hasData && snapshot.data != null) {
-              contactAvatar = snapshot.data!.avatar.isNotEmpty ? snapshot.data!.avatar : null;
-              contactName = snapshot.data!.nickname.isNotEmpty ? snapshot.data!.nickname : snapshot.data!.username;
-            }
-
-            return ListView.builder(
-              controller: _scrollController,
-              reverse: true,
-              itemCount: chatProvider.messages.length,
-              itemBuilder: (context, index) {
-                final reversedIndex = chatProvider.messages.length - 1 - index;
-                final message = chatProvider.messages[reversedIndex];
-                final previousMessage = (reversedIndex > 0)
-                    ? chatProvider.messages[reversedIndex - 1]
-                    : null;
-
-                final showTimeSeparator = shouldShowTimeSeparator(
-                  message.timestamp,
-                  previousMessage?.timestamp,
-                );
-
-                final isMe = _isMessageFromMe(message, context);
-
-                String? senderAvatar;
-                String? senderName;
-
-                if (isMe) {
-                  senderAvatar = currentUser?.avatar;
-                  senderName = currentUser?.nickname ?? currentUser?.username;
-                } else {
-                  senderAvatar = contactAvatar;
-                  senderName = contactName;
-                }
-
-                return Column(
-                  children: [
-                    if (showTimeSeparator)
-                      TimeSeparator(time: message.timestamp),
-                    MessageBubble(
-                      message: message,
-                      isMe: isMe,
-                      senderAvatar: senderAvatar,
-                      senderName: senderName,
-                      showName: widget.isGroup && !isMe,
-                      onRetry: () => _retryMessage(message),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<ContactInfo?> _getContactInfo(ChatProvider chatProvider) async {
-    try {
-      final targetId = effectiveTargetId;
-
-      if (targetId <= 0) return null;
-
-      return await chatProvider.getContactInfoById(targetId);
-    } catch (e) {
-      debugPrint('获取联系人信息失败: $e');
-      return null;
-    }
-  }
-
-  Widget _buildInputToolbar() {
-    final horizontalPadding = widget.isPanelMode ? 20.0 : 8.0;
-    final iconButtonSize = widget.isPanelMode ? 40.0 : 36.0;
-
-    return Container(
-      padding: EdgeInsets.only(
-        left: horizontalPadding,
-        right: horizontalPadding,
-        top: widget.isPanelMode ? 12 : 8,
-        bottom: MediaQuery.of(context).padding.bottom + (widget.isPanelMode ? 12 : 8),
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            SizedBox(
-              width: iconButtonSize,
-              height: iconButtonSize,
-              child: IconButton(
-                icon: const Icon(Icons.add_circle_outline, size: 24),
-                color: AppTheme.primaryColor,
-                onPressed: _showMoreOptions,
-                tooltip: '更多',
-              ),
-            ),
-            if (widget.isPanelMode) ...[
-              SizedBox(
-                width: iconButtonSize,
-                height: iconButtonSize,
-                child: IconButton(
-                  icon: const Icon(Icons.attach_file_outlined, size: 22),
-                  color: AppTheme.textSecondaryColor,
-                  onPressed: _showMoreOptions,
-                  tooltip: '发送文件',
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                decoration: InputDecoration(
-                  hintText: '输入消息...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: widget.isPanelMode ? 18 : 16,
-                    vertical: widget.isPanelMode ? 11 : 10,
-                  ),
-                  hintStyle: TextStyle(
-                    fontSize: widget.isPanelMode ? 15 : 14,
-                  ),
-                ),
-                style: TextStyle(
-                  fontSize: widget.isPanelMode ? 15 : 14,
-                ),
-                maxLines: null,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-              ),
-            ),
-            if (widget.isPanelMode) const SizedBox(width: 10) else const SizedBox(width: 8),
-            SizedBox(
-              width: iconButtonSize,
-              height: iconButtonSize,
-              child: IconButton(
-                icon: const Icon(Icons.send, size: 22),
-                color: AppTheme.primaryColor,
-                onPressed: _isSending ? null : _sendMessage,
-                tooltip: '发送',
-              ),
-            ),
-          ],
-        ),
+      // 输入栏：使用提取的组件
+      bottomBar: ChatInputWidget(
+        mode: ChatInputMode.text,
+        controller: _messageController,
+        onSend: _sendMessage,
+        isSending: _isSending,
+        onMoreOptions: _showMoreOptions,
+        style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
       ),
     );
   }
 
+  // 占位页面（保持原逻辑完全保留）
   Widget _buildPlaceholder() {
     return Center(
       child: Column(
@@ -686,93 +469,6 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPanelHeader() {
-    final fontSize = widget.isPanelMode ? 17.0 : 16.0;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.isPanelMode ? 20 : 16,
-        vertical: widget.isPanelMode ? 14 : 12,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.dividerColor),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.conversationName,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimaryColor,
-              ),
-            ),
-          ),
-          if (widget.isPanelMode) ...[
-            _buildPanelActionButton(Icons.phone_outlined, '语音通话'),
-            const SizedBox(width: 4),
-            _buildPanelActionButton(Icons.videocam_outlined, '视频通话'),
-            const SizedBox(width: 4),
-          ],
-          _buildPanelActionButton(Icons.more_vert, '更多'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPanelActionButton(IconData icon, String tooltip) {
-    final buttonSize = widget.isPanelMode ? 36.0 : 32.0;
-    return SizedBox(
-      width: buttonSize,
-      height: buttonSize,
-      child: IconButton(
-        icon: Icon(icon, size: widget.isPanelMode ? 22 : 20),
-        tooltip: tooltip,
-        onPressed: () {},
-        style: IconButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPanelLayout() {
-    return Material(
-      color: AppTheme.surfaceColor,
-      child: Column(
-        children: [
-          _buildPanelHeader(),
-          Expanded(child: _buildMessageList()),
-          _buildInputToolbar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingMoreIndicator() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Center(
-        child: _isLoadingMore
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(
-                '- 没有更多了 -',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-              ),
       ),
     );
   }

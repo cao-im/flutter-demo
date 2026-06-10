@@ -114,11 +114,16 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
         SnackBar(content: Text('群组"$groupName"创建成功！'),
           backgroundColor: AppTheme.successColor));
 
-      // 跳转到群聊页面
+      // 跳转到群聊页面（复用 ChatPage，isGroup=true）
       Navigator.pushReplacementNamed(
         context,
-        AppRouter.groupChat,
-        arguments: {'groupId': groupId, 'groupName': groupName},
+        AppRouter.chat,
+        arguments: {
+          'conversationId': groupId,
+          'conversationName': groupName,
+          'isGroup': true,
+          'targetId': int.tryParse(groupId) ?? 0,
+        },
       );
     } catch (e) {
       if (!mounted) return;
