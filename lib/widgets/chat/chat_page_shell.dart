@@ -36,15 +36,18 @@ class ChatPageShell extends StatelessWidget {
     if (placeholder != null) return placeholder!;
 
     if (isPanelMode) {
-      // 桌面端面板模式：Material + Column 布局
-      return Material(
-        color: AppTheme.surfaceColor,
-        child: Column(
-          children: [
-            if (header != null) header!,
-            Expanded(child: body),
-            if (bottomBar != null) bottomBar!,
-          ],
+      // 桌面端面板模式：Scaffold + Column 布局，正确处理 IME 插入
+      return Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: Material(
+          color: AppTheme.surfaceColor,
+          child: Column(
+            children: [
+              if (header != null) header!,
+              Expanded(child: body),
+              if (bottomBar != null) bottomBar!,
+            ],
+          ),
         ),
       );
     }
