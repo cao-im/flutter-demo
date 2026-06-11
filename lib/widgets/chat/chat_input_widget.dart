@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../providers/chat_keyboard_provider.dart';
+import 'emoji_picker_panel.dart';
+import 'chat_overlay_panel.dart';
 
 /// 输入栏模式
 enum ChatInputMode {
-  /// 文本输入模式（私聊/群聊）：显示输入框+发送按钮+附件
   text,
-  /// 公众号模式：显示自定义底部菜单区域
   publicAccount,
-  /// 禁用模式：不显示输入栏或显示提示文字
   disabled,
 }
 
@@ -51,33 +52,24 @@ class ChatInputStyle {
     inputHorizontalPadding: 18.0,
     inputVerticalPadding: 11.0,
   );
+
+  bool get isDesktop => this == desktop;
 }
 
-/// 底部输入栏组件 — 支持多种模式（文本输入/公众号菜单/禁用）
+/// 底部输入栏组件
 class ChatInputWidget extends StatefulWidget {
-  /// 输入模式
   final ChatInputMode mode;
-
-  /// 输入控制器
   final TextEditingController controller;
-
-  /// 发送按钮点击回调
   final VoidCallback? onSend;
-
-  /// 是否正在发送
   final bool isSending;
-
-  /// 更多选项按钮回调（+号/附件）
   final VoidCallback? onMoreOptions;
-
-  /// 样式配置
   final ChatInputStyle style;
-
-  /// 表情按钮回调
   final VoidCallback? onEmoji;
-
-  /// 截图按钮回调
   final VoidCallback? onScreenshot;
+
+  /// 外部传入的 FocusNode（用于页面级键盘高度监听）
+  /// 如果不传则内部自动创建
+  final FocusNode? externalFocusNode;
 
   const ChatInputWidget({
     super.key,
@@ -89,6 +81,7 @@ class ChatInputWidget extends StatefulWidget {
     this.style = ChatInputStyle.mobile,
     this.onEmoji,
     this.onScreenshot,
+    this.externalFocusNode,
   });
 
   @override
@@ -98,95 +91,203 @@ class ChatInputWidget extends StatefulWidget {
 class _ChatInputWidgetState extends State<ChatInputWidget> {
   late final FocusNode _focusNode;
 
+  /// 桌面端：表情按钮的 GlobalKey，用于锚点定位
+  final GlobalKey _emojiButtonKey = GlobalKey();
+
+  /// 桌面端：当前显示的 OverlayEntry
+  OverlayEntry? _overlayEntry;
+
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode(
-      onKeyEvent: _handleKeyEvent,
-    );
+    // 优先使用外部传入的 FocusNode，否则内部创建
+    _focusNode = widget.externalFocusNode ?? FocusNode(onKeyEvent: _handleKeyEvent);
   }
 
-  /// 桌面端键盘事件处理：回车发送，Shift+回车换行
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    final isDesktop = widget.style == ChatInputStyle.desktop;
-    if (!isDesktop) return KeyEventResult.ignored;
+    if (!widget.style.isDesktop) return KeyEventResult.ignored;
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey != LogicalKeyboardKey.enter) {
-      return KeyEventResult.ignored;
-    }
-    // Shift + Enter → 手动插入换行
+    if (event.logicalKey != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
+
     if (HardwareKeyboard.instance.isShiftPressed) {
       final cursorPos = widget.controller.selection.baseOffset;
       final text = widget.controller.text;
       widget.controller.text =
-          text.substring(0, cursorPos) +
-              '\n' +
-          text.substring(cursorPos);
+          '${text.substring(0, cursorPos)}\n${text.substring(cursorPos)}';
       widget.controller.selection = TextSelection(
         baseOffset: cursorPos + 1,
         extentOffset: cursorPos + 1,
       );
       return KeyEventResult.handled;
     }
-    // Enter → 发送消息
     widget.onSend?.call();
     return KeyEventResult.handled;
   }
 
   @override
   void dispose() {
-    _focusNode.dispose();
+    _removeDesktopOverlay();
+    // 仅在 FocusNode 是内部创建时才释放
+    if (widget.externalFocusNode == null) {
+      _focusNode.dispose();
+    }
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (widget.mode == ChatInputMode.disabled) {
-      return const SizedBox.shrink();
+  // ==================== 表情面板切换 ====================
+
+  void _toggleEmojiPanel() {
+    if (widget.style.isDesktop) {
+      _toggleDesktopEmojiPopup();
+    } else {
+      // 移动端：通过 Provider 管理面板状态，实现丝滑切换
+      final provider = Provider.of<ChatKeyboardProvider>(context, listen: false);
+      final willShow = !provider.showEmojiPanel;
+
+      // 先强制隐藏输入法，再切换面板状态
+      _hideKeyboard().then((_) {
+        if (!mounted) return;
+        provider.toggleEmojiPanel(willShow);
+        if (willShow) _focusNode.unfocus();
+      });
     }
+  }
 
-    if (widget.mode == ChatInputMode.publicAccount) {
-      return _buildPublicAccountBar();
+  /// 强制隐藏系统输入法（解决输入法与表情面板共存的问题）
+  Future<void> _hideKeyboard() async {
+    _focusNode.unfocus();
+    await SystemChannels.textInput.invokeMethod('TextInput.hide');
+  }
+
+  void _closeEmojiPanel() {
+    final provider = Provider.of<ChatKeyboardProvider>(context, listen: false);
+    if (provider.showEmojiPanel) {
+      provider.toggleEmojiPanel(false);
     }
+  }
 
-    // === text 模式 ===
-    final hp = widget.style.horizontalPadding;
-    final vs = widget.style.verticalPadding;
-    final bp = widget.style.bottomPadding;
-    final isDesktop = widget.style == ChatInputStyle.desktop;
+  // ==================== 桌面端：锚点弹窗 ====================
 
-    return Container(
-      padding: EdgeInsets.only(
-        left: hp,
-        right: hp,
-        top: vs,
-        bottom: MediaQuery.of(context).padding.bottom + bp,
+  void _toggleDesktopEmojiPopup() {
+    if (_overlayEntry != null) {
+      _removeDesktopOverlay();
+      return;
+    }
+    _showDesktopAnchoredPopup();
+  }
+
+  void _showDesktopAnchoredPopup() {
+    final renderBox = _emojiButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final size = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => _AnchoredEmojiPopup(
+        anchorOffset: offset,
+        anchorSize: size,
+        onEmojiSelected: _insertEmoji,
+        onClose: _removeDesktopOverlay,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: isDesktop ? _buildDesktopInput() : _buildMobileInput(),
-      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeDesktopOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  // ==================== 表情插入 ====================
+
+  void _insertEmoji(String emoji) {
+    final text = widget.controller.text;
+    final cursorPos = widget.controller.selection.baseOffset;
+    final newText = '${text.substring(0, cursorPos)}$emoji${text.substring(cursorPos)}';
+    widget.controller.text = newText;
+    widget.controller.selection = TextSelection(
+      baseOffset: cursorPos + emoji.length,
+      extentOffset: cursorPos + emoji.length,
     );
   }
 
-  /// 桌面端输入区域 — 微信风格：一个边框容器内含 输入框 + 工具栏+发送按钮
+  // ==================== 构建 ====================
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.mode == ChatInputMode.disabled) return const SizedBox.shrink();
+    if (widget.mode == ChatInputMode.publicAccount) return _buildPublicAccountBar();
+
+    final hp = widget.style.horizontalPadding;
+    final vs = widget.style.verticalPadding;
+    final bp = widget.style.bottomPadding;
+    final isDesktop = widget.style.isDesktop;
+
+    // 使用 Consumer 监听面板状态变化，实现动态高度
+    return Consumer<ChatKeyboardProvider>(
+      builder: (context, keyboardProvider, _) {
+        final showEmojiPanel = keyboardProvider.showEmojiPanel;
+        final panelHeight = keyboardProvider.panelHeight;
+        final bottomInset = MediaQuery.of(context).padding.bottom;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 输入栏主体（始终在最上方）
+            Container(
+              padding: EdgeInsets.only(
+                left: hp,
+                right: hp,
+                top: vs,
+                // 移动端表情面板显示时，不加底部安全区（由面板承担）；否则正常加
+                bottom: (!isDesktop && showEmojiPanel) ? bp : bottomInset + bp,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                bottom: isDesktop || !showEmojiPanel,
+                child: isDesktop ? _buildDesktopInput() : _buildMobileInput(showEmojiPanel),
+              ),
+            ),
+
+            // 移动端：表情面板在输入框下方展开，使用 Provider 动态高度
+            if (!isDesktop)
+              ChatOverlayPanel(
+                visible: showEmojiPanel,
+                height: panelHeight > 0 ? panelHeight : 260.0,
+                isDesktop: false,
+                contentBuilder: (_) => SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: EmojiPickerPanel(
+                    onEmojiSelected: _insertEmoji,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ==================== 桌面端输入区域 ====================
+
   Widget _buildDesktopInput() {
     final inputHeight = widget.style.fontSize * 1.8 * 5 +
         widget.style.inputVerticalPadding * 2 + 16;
     return Container(
-      constraints: BoxConstraints(
-        minHeight: inputHeight + 40,
-      ),
+      constraints: BoxConstraints(minHeight: inputHeight + 40),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE5E5E5), width: 1),
@@ -194,7 +295,6 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // 上半部分：输入框（独占一行，固定5行高度）
           SizedBox(
             height: inputHeight,
             child: TextField(
@@ -218,44 +318,36 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                   horizontal: widget.style.inputHorizontalPadding,
                   vertical: widget.style.inputVerticalPadding + 4,
                 ),
-                hintStyle: TextStyle(
-                  fontSize: widget.style.fontSize,
-                  color: Colors.grey[400],
-                ),
+                hintStyle: TextStyle(fontSize: widget.style.fontSize, color: Colors.grey[400]),
                 isDense: true,
               ),
               style: TextStyle(fontSize: widget.style.fontSize),
             ),
           ),
-
-          // 分隔线
-          Divider(height: 1, thickness: 1, color: const Color(0xFFE5E5E5)),
-
-          // 下半部分：工具栏图标 + 发送按钮（同一行，在边框内部）
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
             child: Row(
               children: [
-                _buildToolbarIcon(Icons.sentiment_satisfied_alt_outlined, '表情', widget.onEmoji),
+                // 表情按钮 — 带 GlobalKey 用于锚点定位
+                _buildToolbarIconWithKey(
+                  Icons.sentiment_satisfied_alt_outlined,
+                  '表情',
+                  _toggleEmojiPanel,
+                  key: _emojiButtonKey,
+                ),
                 const SizedBox(width: 16),
                 _buildToolbarIcon(Icons.attach_file_outlined, '发送文件', widget.onMoreOptions),
                 const SizedBox(width: 16),
                 _buildToolbarIcon(Icons.crop_outlined, '截图', widget.onScreenshot),
                 const Spacer(),
-                // 发送按钮 — 文字按钮，和工具栏同行
                 TextButton(
-                  onPressed:
-                      (widget.isSending || widget.onSend == null)
-                          ? null
-                          : () => widget.onSend!(),
+                  onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.primaryColor,
                     minimumSize: const Size(50, 32),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    textStyle: TextStyle(
-                      fontSize: widget.style.fontSize,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    textStyle: TextStyle(fontSize: widget.style.fontSize, fontWeight: FontWeight.w500),
                   ),
                   child: const Text('发送'),
                 ),
@@ -267,8 +359,9 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     );
   }
 
-  /// 移动端输入区域 — 保持原有样式
-  Widget _buildMobileInput() {
+  // ==================== 移动端输入区域 ====================
+
+  Widget _buildMobileInput(bool showEmojiPanel) {
     final ibs = widget.style.iconButtonSize;
     return Row(
       children: [
@@ -276,10 +369,13 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
           width: ibs,
           height: ibs,
           child: IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 24),
+            icon: Icon(
+              showEmojiPanel ? Icons.keyboard_outlined : Icons.sentiment_satisfied_alt_outlined,
+              size: 24,
+            ),
             color: AppTheme.primaryColor,
-            onPressed: widget.onMoreOptions,
-            tooltip: '更多',
+            onPressed: _toggleEmojiPanel,
+            tooltip: showEmojiPanel ? '键盘' : '表情',
           ),
         ),
         const SizedBox(width: 4),
@@ -290,10 +386,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
             autofocus: true,
             decoration: InputDecoration(
               hintText: '输入消息...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
               filled: true,
               fillColor: Colors.grey[100],
               contentPadding: EdgeInsets.symmetric(
@@ -306,73 +399,178 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
             maxLines: null,
             textInputAction: TextInputAction.send,
             onSubmitted: (_) => widget.onSend?.call(),
+            onTap: () => _closeEmojiPanel(),
           ),
         ),
         const SizedBox(width: 8),
         SizedBox(
           width: ibs,
           height: ibs,
-          child: IconButton(
-            icon: const Icon(Icons.send, size: 22),
-            color: AppTheme.primaryColor,
-            onPressed: (widget.isSending || widget.onSend == null)
-                ? null
-                : () => widget.onSend!(),
-            tooltip: '发送',
-          ),
+          child: IconButton(icon: const Icon(Icons.add_circle_outline, size: 24), color: AppTheme.primaryColor, onPressed: widget.onMoreOptions, tooltip: '更多'),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: ibs,
+          height: ibs,
+          child: IconButton(icon: const Icon(Icons.send, size: 22), color: AppTheme.primaryColor, onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(), tooltip: '发送'),
         ),
       ],
     );
   }
 
-  /// 构建工具栏图标按钮
+  // ==================== 工具方法 ====================
+
   Widget _buildToolbarIcon(IconData icon, String tooltip, VoidCallback? onPressed) {
     return SizedBox(
       width: widget.style.iconButtonSize,
       height: widget.style.iconButtonSize,
-      child: IconButton(
-        icon: Icon(icon, size: 22),
-        color: AppTheme.textSecondaryColor,
-        onPressed: onPressed,
-        tooltip: tooltip,
-      ),
+      child: IconButton(icon: Icon(icon, size: 22), color: AppTheme.textSecondaryColor, onPressed: onPressed, tooltip: tooltip),
     );
   }
 
-  /// 构建公众号模式底部菜单栏
+  /// 带 GlobalKey 的工具栏图标（桌面端表情按钮用）
+  Widget _buildToolbarIconWithKey(IconData icon, String tooltip, VoidCallback? onPressed, {required Key key}) {
+    return SizedBox(
+      key: key,
+      width: widget.style.iconButtonSize,
+      height: widget.style.iconButtonSize,
+      child: IconButton(icon: Icon(icon, size: 22), color: AppTheme.textSecondaryColor, onPressed: onPressed, tooltip: tooltip),
+    );
+  }
+
   Widget _buildPublicAccountBar() {
     return Container(
-      padding: EdgeInsets.symmetric(
-        vertical: 10,
-        horizontal: widget.style.horizontalPadding,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: AppTheme.dividerColor),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildPAMenuItem(Icons.article_outlined, '文章'),
-          _buildPAMenuItem(Icons.chat_bubble_outline, '消息'),
-          _buildPAMenuItem(Icons.star_outline, '收藏'),
-          _buildPAMenuItem(Icons.info_outline, '简介'),
-        ],
-      ),
+      padding: EdgeInsets.symmetric(vertical: 10, horizontal: widget.style.horizontalPadding),
+      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: AppTheme.dividerColor))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+        _buildPAMenuItem(Icons.article_outlined, '文章'),
+        _buildPAMenuItem(Icons.chat_bubble_outline, '消息'),
+        _buildPAMenuItem(Icons.star_outline, '收藏'),
+        _buildPAMenuItem(Icons.info_outline, '简介'),
+      ]),
     );
   }
 
-  /// 构建公众号菜单项
   Widget _buildPAMenuItem(IconData icon, String label) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 24, color: Colors.grey[600]),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      ],
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 24, color: Colors.grey[600]),
+      const SizedBox(height: 4),
+      Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+    ]);
+  }
+}
+
+// ==================== 桌面端锚点浮层弹窗 ====================
+
+/// 桌面端表情选择弹窗 — 锚定在表情按钮上方，带小箭头
+class _AnchoredEmojiPopup extends StatelessWidget {
+  final Offset anchorOffset;
+  final Size anchorSize;
+  final void Function(String emoji) onEmojiSelected;
+  final VoidCallback onClose;
+
+  const _AnchoredEmojiPopup({
+    required this.anchorOffset,
+    required this.anchorSize,
+    required this.onEmojiSelected,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const popupWidth = 380.0;
+    const popupHeight = 360.0;
+    const arrowSize = 10.0;       // 箭头高度
+    const arrowWidth = 18.0;     // 箭头底部宽度
+    const bottomGap = 6.0;       // 弹窗底部与工具栏的间距
+
+    // 弹窗位置：居中对齐到按钮上方
+    final left = anchorOffset.dx + anchorSize.width / 2 - popupWidth / 2;
+    final top = anchorOffset.dy - popupHeight - arrowSize - bottomGap;
+
+    return GestureDetector(
+      onTap: onClose,
+      behavior: HitTestBehavior.opaque,
+      child: Material(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 小箭头（向下指向按钮）— 用 ClipPath 确保不溢出
+                  ClipPath(
+                    clipper: _ArrowClipper(),
+                    child: Container(
+                      width: arrowWidth,
+                      height: arrowSize,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 表情面板内容卡片
+                  Container(
+                    width: popupWidth,
+                    height: popupHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: EmojiPickerPanel(
+                      onEmojiSelected: (emoji) {
+                        onEmojiSelected(emoji);
+                        onClose();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+}
+
+/// 箭头裁剪器 — 向下三角形的形状
+class _ArrowClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _ArrowClipper oldClipper) => false;
 }

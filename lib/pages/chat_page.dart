@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../providers/chat_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/chat_keyboard_provider.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
 import '../theme/app_theme.dart';
@@ -31,9 +33,10 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _inputFocusNode = FocusNode(); // 输入框焦点，用于键盘高度监听
   final ImagePicker _picker = ImagePicker();
   bool _isSending = false;
   bool _isLoadingMore = false;
@@ -43,6 +46,9 @@ class _ChatPageState extends State<ChatPage> {
   int _lastMessageCount = 0;
   bool _currentConversationNotSetInInit = false; // 标记 initState 中是否成功设置会话
   int? _resolvedTargetId; // 解析后的 targetId（含兜底查询）
+
+  /// 键盘防抖 Timer（避免 didChangeMetrics 频繁触发）
+  Timer? _keyboardDebounceTimer;
 
   /// 获取 targetId：优先使用传入值，为0时从已加载的会话列表中查找兜底
   int get effectiveTargetId {
@@ -100,6 +106,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     debugPrint('🔄[ChatPage] initState 被调用: conversationId=${widget.conversationId}, conversationName=${widget.conversationName}');
     _scrollController.addListener(_scrollListener);
     _lastMessageCount = 0;
@@ -213,6 +220,9 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     debugPrint('🗑️[ChatPage] dispose 被调用: conversationId=${widget.conversationId}');
 
+    WidgetsBinding.instance.removeObserver(this);
+    _keyboardDebounceTimer?.cancel();
+    _inputFocusNode.dispose();
     _messageController.dispose();
     _scrollController.dispose();
 
@@ -229,6 +239,31 @@ class _ChatPageState extends State<ChatPage> {
     });
 
     super.dispose();
+  }
+
+  // ==================== 键盘高度监听（丝滑切换核心） ====================
+
+  /// 监听键盘/窗口尺寸变化，实时更新面板高度
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+
+    final keyboardProvider = Provider.of<ChatKeyboardProvider>(context, listen: false);
+    final currentKeyboardHeight = EdgeInsets.fromWindowPadding(
+      WidgetsBinding.instance.window.viewInsets,
+      WidgetsBinding.instance.window.devicePixelRatio,
+    ).bottom;
+
+    // 防抖：39ms 后更新，避免频繁触发导致闪烁
+    _keyboardDebounceTimer?.cancel();
+    _keyboardDebounceTimer = Timer(const Duration(milliseconds: 39), () {
+      if (!mounted) return;
+      keyboardProvider.updateKeyboardHeight(
+        currentKeyboardHeight,
+        hasFocus: _inputFocusNode.hasFocus,
+      );
+    });
   }
 
   void _scrollListener() {
@@ -404,38 +439,49 @@ class _ChatPageState extends State<ChatPage> {
       return _buildPlaceholder();
     }
 
-    // 使用 ChatPageShell 组装页面
-    return ChatPageShell(
-      isPanelMode: widget.isPanelMode,
-      placeholder: (widget.isPanelMode && widget.conversationId.isEmpty) ? _buildPlaceholder() : null,
+    // 使用 ChatKeyboardProvider 管理键盘/面板高度，实现丝滑切换
+    return ChangeNotifierProvider(
+      create: (_) => ChatKeyboardProvider(),
+      child: Builder(
+        builder: (context) {
+          // 使用 ChatPageShell 组装页面
+          return ChatPageShell(
+            isPanelMode: widget.isPanelMode,
+            placeholder: (widget.isPanelMode && widget.conversationId.isEmpty)
+                ? _buildPlaceholder()
+                : null,
 
-      // 标题栏：根据平台选择样式
-      header: ChatHeaderWidget(
-        title: widget.conversationName,
-        subtitle: widget.isGroup ? '群聊' : '在线',
-        style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
-        showVoiceCall: widget.isPanelMode,
-        showVideoCall: widget.isPanelMode,
-        onMoreTap: () {},
-      ),
+            // 标题栏：根据平台选择样式
+            header: ChatHeaderWidget(
+              title: widget.conversationName,
+              subtitle: widget.isGroup ? '群聊' : '在线',
+              style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
+              showVoiceCall: widget.isPanelMode,
+              showVideoCall: widget.isPanelMode,
+              onMoreTap: () {},
+            ),
 
-      // 消息列表：使用提取的组件
-      body: MessageListWidget(
-        scrollController: _scrollController,
-        onScrollToBottom: () => _scrollToBottom(),
-        targetId: effectiveTargetId,
-        isGroup: widget.isGroup,
-        onRetry: (message) => _retryMessage(message),
-      ),
+            // 消息列表：使用提取的组件
+            body: MessageListWidget(
+              scrollController: _scrollController,
+              onScrollToBottom: () => _scrollToBottom(),
+              targetId: effectiveTargetId,
+              isGroup: widget.isGroup,
+              onRetry: (message) => _retryMessage(message),
+            ),
 
-      // 输入栏：使用提取的组件
-      bottomBar: ChatInputWidget(
-        mode: ChatInputMode.text,
-        controller: _messageController,
-        onSend: _sendMessage,
-        isSending: _isSending,
-        onMoreOptions: _showMoreOptions,
-        style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
+            // 输入栏：使用提取的组件，传入动态面板高度
+            bottomBar: ChatInputWidget(
+              mode: ChatInputMode.text,
+              controller: _messageController,
+              onSend: _sendMessage,
+              isSending: _isSending,
+              onMoreOptions: _showMoreOptions,
+              style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
+              externalFocusNode: _inputFocusNode,
+            ),
+          );
+        },
       ),
     );
   }
