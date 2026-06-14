@@ -20,6 +20,7 @@ class MessageModel {
   final bool canRecall;
   final SenderInfoModel? senderInfo;
   final GroupInfoModel? groupInfo;
+  final int? mid; // SDK 生成的雪花算法消息ID
 
   MessageModel({
     required this.id,
@@ -37,6 +38,7 @@ class MessageModel {
     this.canRecall = false,
     this.senderInfo,
     this.groupInfo,
+    this.mid,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -144,6 +146,7 @@ class MessageModel {
     bool? canRecall,
     SenderInfoModel? senderInfo,
     GroupInfoModel? groupInfo,
+    int? mid,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -161,6 +164,7 @@ class MessageModel {
       canRecall: canRecall ?? this.canRecall,
       senderInfo: senderInfo ?? this.senderInfo,
       groupInfo: groupInfo ?? this.groupInfo,
+      mid: mid ?? this.mid,
     );
   }
 }

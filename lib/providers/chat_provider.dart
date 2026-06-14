@@ -497,6 +497,7 @@ class ChatProvider with ChangeNotifier {
       isSent: true,
       status: MessageStatus.sending,
       senderInfo: currentUserInfo,
+      canRecall: true,
     );
 
     debugPrint('📤[ChatProvider] 发送消息(本地) senderInfo=${tempMessage.senderInfo?.toJson()}');
@@ -532,11 +533,12 @@ class ChatProvider with ChangeNotifier {
 
       final index = _messages.indexWhere((m) => m.id == tempMessage.id);
       if (index != -1) {
+        // 使用 SDK 返回的消息信息更新本地消息
         _messages[index] = _messages[index].copyWith(
           isSending: false,
           isSent: true,
           status: MessageStatus.sent,
-          id: sentMessage.id?.toString() ?? tempMessage.id,
+          mid: sentMessage.mid,
         );
         notifyListeners();
       }
@@ -662,16 +664,16 @@ class ChatProvider with ChangeNotifier {
   /// 撤回消息
   Future<void> recallMessage(MessageModel message) async {
     try {
-      debugPrint('🗑️[ChatProvider] 撤回消息: messageId=${message.id}');
+      debugPrint('🗑️[ChatProvider] 撤回消息: messageId=${message.id}, mid=${message.mid}');
 
-      // 调用SDK撤回消息
-      final messageId = int.tryParse(message.id);
-      if (messageId == null) {
-        debugPrint('❌[ChatProvider] 消息ID无效，无法撤回: ${message.id}');
+      // 优先使用 SDK 的 mid（雪花算法生成的全局唯一ID）
+      final messageMid = message.mid ?? int.tryParse(message.id);
+      if (messageMid == null) {
+        debugPrint('❌[ChatProvider] 消息ID无效，无法撤回');
         return;
       }
 
-      await _sdkManager.client.recallMessage(messageId);
+      await _sdkManager.client.recallMessage(messageMid);
 
       // 更新本地消息状态
       final index = _messages.indexWhere((m) => m.id == message.id);
@@ -923,6 +925,15 @@ class ChatProvider with ChangeNotifier {
     final currentUserId = _sdkManager.client.currentUserId;
     final isFromMe = currentUserId != null && msg.fromId == currentUserId;
 
+    // 判断是否可以撤回：自己发的消息 + 2分钟内
+    bool canRecall = false;
+    if (isFromMe) {
+      final msgTime = DateTime.fromMillisecondsSinceEpoch(msg.timestamp);
+      final now = DateTime.now();
+      final diff = now.difference(msgTime);
+      canRecall = diff.inMinutes < 2;
+    }
+
     SenderInfoModel? senderInfo;
     if (msg.senderInfo != null) {
       senderInfo = SenderInfoModel(
@@ -953,10 +964,31 @@ class ChatProvider with ChangeNotifier {
       content: msg.content,
       timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
       isSent: isFromMe,
-      status: MessageStatus.delivered,
+      status: _convertSdkStatus(msg.status),
       senderInfo: senderInfo,
       groupInfo: groupInfo,
+      canRecall: canRecall,
+      mid: msg.mid,
     );
+  }
+
+  MessageStatus _convertSdkStatus(sdk.MessageStatus sdkStatus) {
+    switch (sdkStatus) {
+      case sdk.MessageStatus.sending:
+        return MessageStatus.sending;
+      case sdk.MessageStatus.sent:
+        return MessageStatus.sent;
+      case sdk.MessageStatus.delivered:
+        return MessageStatus.delivered;
+      case sdk.MessageStatus.read:
+        return MessageStatus.read;
+      case sdk.MessageStatus.failed:
+        return MessageStatus.failed;
+      case sdk.MessageStatus.recalled:
+        return MessageStatus.recalled;
+      default:
+        return MessageStatus.delivered;
+    }
   }
 }
 
