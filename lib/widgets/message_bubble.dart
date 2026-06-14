@@ -15,6 +15,7 @@ class MessageBubble extends StatelessWidget {
   final bool showName;
   final VoidCallback? onRetry;
   final VoidCallback? onImageTap;
+  final Function(MessageModel)? onRecall;
 
   const MessageBubble({
     super.key,
@@ -25,6 +26,7 @@ class MessageBubble extends StatelessWidget {
     this.showName = false,
     this.onRetry,
     this.onImageTap,
+    this.onRecall,
   });
 
   @override
@@ -330,14 +332,18 @@ class MessageBubble extends StatelessWidget {
         );
         break;
       case 'recall':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('撤回消息: ${message.displayText}'),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
+        if (onRecall != null) {
+          onRecall!(message);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('撤回消息: ${message.displayText}'),
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
         break;
       case 'delete':
         ScaffoldMessenger.of(context).showSnackBar(

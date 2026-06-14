@@ -323,6 +323,52 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollToBottom();
   }
 
+  Future<void> _recallMessage(MessageModel message) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+    // 显示确认对话框
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('撤回消息'),
+        content: const Text('确定要撤回这条消息吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确定', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await chatProvider.recallMessage(message);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('消息已撤回'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('撤回失败: $e'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _pickImage() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -468,6 +514,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               targetId: effectiveTargetId,
               isGroup: widget.isGroup,
               onRetry: (message) => _retryMessage(message),
+              onRecall: (message) => _recallMessage(message),
             ),
 
             // 输入栏：使用提取的组件，传入动态面板高度

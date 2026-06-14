@@ -659,6 +659,37 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 撤回消息
+  Future<void> recallMessage(MessageModel message) async {
+    try {
+      debugPrint('🗑️[ChatProvider] 撤回消息: messageId=${message.id}');
+
+      // 调用SDK撤回消息
+      final messageId = int.tryParse(message.id);
+      if (messageId == null) {
+        debugPrint('❌[ChatProvider] 消息ID无效，无法撤回: ${message.id}');
+        return;
+      }
+
+      await _sdkManager.client.recallMessage(messageId);
+
+      // 更新本地消息状态
+      final index = _messages.indexWhere((m) => m.id == message.id);
+      if (index != -1) {
+        _messages[index] = _messages[index].copyWith(
+          status: MessageStatus.recalled,
+          content: '[消息已撤回]',
+        );
+        notifyListeners();
+      }
+
+      debugPrint('✅[ChatProvider] 消息撤回成功: messageId=${message.id}');
+    } catch (e) {
+      debugPrint('❌[ChatProvider] 撤回消息失败: $e');
+      rethrow;
+    }
+  }
+
   Future<void> markConversationAsRead({
     required int targetId,
     required bool isGroup,

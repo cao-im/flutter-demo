@@ -100,26 +100,23 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
   @override
   void initState() {
     super.initState();
-    // 优先使用外部传入的 FocusNode，否则内部创建
-    _focusNode = widget.externalFocusNode ?? FocusNode(onKeyEvent: _handleKeyEvent);
+    // 桌面端：创建带键盘事件处理的 FocusNode
+    if (widget.style.isDesktop) {
+      _focusNode = FocusNode(onKeyEvent: _handleKeyEvent);
+    } else {
+      _focusNode = widget.externalFocusNode ?? FocusNode();
+    }
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!widget.style.isDesktop) return KeyEventResult.ignored;
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
 
     if (HardwareKeyboard.instance.isShiftPressed) {
-      final cursorPos = widget.controller.selection.baseOffset;
-      final text = widget.controller.text;
-      widget.controller.text =
-          '${text.substring(0, cursorPos)}\n${text.substring(cursorPos)}';
-      widget.controller.selection = TextSelection(
-        baseOffset: cursorPos + 1,
-        extentOffset: cursorPos + 1,
-      );
-      return KeyEventResult.handled;
+      // Shift+Enter: 插入换行，让 TextField 处理
+      return KeyEventResult.ignored;
     }
+    // Enter: 发送消息
     widget.onSend?.call();
     return KeyEventResult.handled;
   }
