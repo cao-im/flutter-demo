@@ -949,8 +949,16 @@ class ChatProvider with ChangeNotifier {
       canRecall = diff.inMinutes < 2;
     }
 
+    // 优先使用消息中存储的发送者信息（已持久化到数据库）
     SenderInfoModel? senderInfo;
-    if (msg.senderInfo != null) {
+    if (msg.senderNickname != null || msg.senderAvatar != null) {
+      senderInfo = SenderInfoModel(
+        userId: msg.fromId,
+        nickname: msg.senderNickname ?? '用户${msg.fromId}',
+        avatar: msg.senderAvatar ?? '',
+      );
+    } else if (msg.senderInfo != null) {
+      // 兼容旧消息（没有存储发送者信息的情况）
       senderInfo = SenderInfoModel(
         userId: msg.senderInfo!.userId,
         nickname: msg.senderInfo!.nickname,
@@ -1032,8 +1040,15 @@ class _ChatMessageListener implements sdk.MessageListener {
   void onMessageReceived(sdk.Message message) {
     final currentUserId = _provider._sdkManager.client.currentUserId;
 
+    // 优先使用消息中存储的发送者信息
     SenderInfoModel? senderInfo;
-    if (message.senderInfo != null) {
+    if (message.senderNickname != null || message.senderAvatar != null) {
+      senderInfo = SenderInfoModel(
+        userId: message.fromId,
+        nickname: message.senderNickname ?? '用户${message.fromId}',
+        avatar: message.senderAvatar ?? '',
+      );
+    } else if (message.senderInfo != null) {
       senderInfo = SenderInfoModel(
         userId: message.senderInfo!.userId,
         nickname: message.senderInfo!.nickname,
@@ -1041,9 +1056,8 @@ class _ChatMessageListener implements sdk.MessageListener {
         groupNickname: message.senderInfo!.groupNickname,
       );
     } else {
-      // 如果消息中没有senderInfo，尝试从缓存获取
-      final fromId = message.fromId;
-      final contactInfo = _provider._contactInfoCache[fromId];
+      // 尝试从缓存获取
+      final contactInfo = _provider._contactInfoCache[message.fromId];
       if (contactInfo != null) {
         senderInfo = SenderInfoModel(
           userId: contactInfo.id,
@@ -1075,6 +1089,7 @@ class _ChatMessageListener implements sdk.MessageListener {
       status: MessageStatus.delivered,
       senderInfo: senderInfo,
       groupInfo: groupInfo,
+      mid: message.mid,
     );
 
     debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');
