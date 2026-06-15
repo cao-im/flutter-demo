@@ -8,6 +8,7 @@ import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
+import '../services/storage_service.dart';
 import '../utils/display_name_helper.dart';
 import '../sdk/im_sdk_manager.dart';
 
@@ -522,12 +523,16 @@ class ChatProvider with ChangeNotifier {
           groupId: targetId,
           content: content,
           msgType: type == 'image' ? 1 : 0,
+          senderNickname: currentUserInfo?.nickname,
+          senderAvatar: currentUserInfo?.avatar,
         );
       } else {
         sentMessage = await _sdkManager.client.sendMessage(
           toId: targetId,
           content: content,
           msgType: type == 'image' ? 1 : 0,
+          senderNickname: currentUserInfo?.nickname,
+          senderAvatar: currentUserInfo?.avatar,
         );
       }
 
@@ -575,6 +580,16 @@ class ChatProvider with ChangeNotifier {
         );
       }
 
+      // 从 StorageService 获取登录时保存的用户信息
+      final nickname = await StorageService.getNickname();
+      if (nickname != null && nickname.isNotEmpty) {
+        return SenderInfoModel(
+          userId: currentUserId,
+          nickname: nickname,
+          avatar: '',
+        );
+      }
+
       // 缓存未命中，从数据库查询
       final contactService = ContactDatabaseService();
       await contactService.init(userId: currentUserId);
@@ -593,7 +608,7 @@ class ChatProvider with ChangeNotifier {
       // 都没有，返回基本信息
       return SenderInfoModel(
         userId: currentUserId,
-        nickname: '我',
+        nickname: '用户$currentUserId',
         avatar: '',
       );
     } catch (e) {
