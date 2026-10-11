@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cao_im_sdk_flutter/utils/network_log_interceptor.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' show NetworkLogInterceptor;
+import '../config/server_config.dart';
 import '../services/storage_service.dart';
 
 /// API 基础封装类
@@ -15,10 +16,10 @@ import '../services/storage_service.dart';
 /// 使用方式：各领域 API 类继承此类，直接使用封装好的请求方法
 abstract class BaseApi {
   /// App Server 基础地址（认证、用户资料等）
-  static const String appServerUrl = 'http://192.168.0.138:8081/api';
+  static const String appServerUrl = ServerConfig.appServerUrl;
 
   /// IM Server 基础地址（联系人、好友、群组等）
-  static const String imServerUrl = 'http://192.168.0.138:8080/api';
+  static const String imServerUrl = ServerConfig.imServerUrl;
 
   /// 连接超时时间（秒）
   static const int connectTimeoutSeconds = 10;

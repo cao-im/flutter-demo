@@ -1,11 +1,15 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import 'package:lpinyin/lpinyin.dart';
+import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../models/contact_info_model.dart';
+import '../providers/layout_provider.dart';
+import '../router/app_router.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../services/contact_database_service.dart';
 
@@ -18,8 +22,13 @@ class ContactProvider with ChangeNotifier {
   List<UserModel> _searchResults = [];
   List<Map<String, dynamic>> _friendRequests = [];
   int _unreadFriendRequestCount = 0;
+  final Set<String> _seenFriendRequestIds = {};
   bool _isLoading = false;
   bool _isListening = false;
+  _ContactFriendRequestListener? _friendRequestListener;
+
+  /// 点击「查看」时切到通讯录。由首页注入。
+  VoidCallback? onOpenContacts;
 
   final Map<int, ContactInfo> _contactCache = {};
   bool _isCacheInitialized = false;
@@ -179,8 +188,8 @@ class ContactProvider with ChangeNotifier {
         _contacts.add(contact);
       }
 
-      // contact.id 现在是真正的用户ID（来自 _toUserModel 映射的 row.userId）
-      final userId = int.tryParse(contact.id) ?? int.tryParse(contact.imUserId ?? '') ?? 0;
+      // 业务键必须是 IM 用户 ID（优先 imUserId，避免误用联系人表主键）
+      final userId = int.tryParse(contact.imUserId ?? '') ?? int.tryParse(contact.id) ?? 0;
       if (userId > 0) {
         final contactInfo = ContactInfo(
           id: 0,  // 本地自增ID，此处无法获取，由数据库填充
@@ -315,8 +324,13 @@ class ContactProvider with ChangeNotifier {
   }
 
   UserModel _convertFriendToUserModel(Map<String, dynamic> json) {
+    // contactUserId / friendId 才是对方 IM 用户 ID；id 多为联系人表主键，不能当业务键
+    final imUserId = json['contactUserId']?.toString() ??
+        json['friendId']?.toString() ??
+        json['id']?.toString() ??
+        '';
     return UserModel(
-      id: json['id']?.toString() ?? '',
+      id: imUserId,
       username: json['username']?.toString() ??
           json['friendUsername']?.toString() ?? '',
       nickname: json['nickname']?.toString() ??
@@ -324,7 +338,7 @@ class ContactProvider with ChangeNotifier {
       avatar: json['avatar'] ?? json['friendAvatar'],
       email: json['email'],
       phone: json['phone'],
-      imUserId: json['contactUserId']?.toString() ?? json['friendId']?.toString(),
+      imUserId: imUserId,
     );
   }
 
@@ -345,7 +359,7 @@ class ContactProvider with ChangeNotifier {
       _friendRequests = data
           .map((json) => json as Map<String, dynamic>)
           .toList();
-      _calculateUnreadCount();
+      _calculateUnreadCount(userId);
     } catch (e) {
       debugPrint('加载好友请求失败: $e');
     } finally {
@@ -353,20 +367,13 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
-  void _calculateUnreadCount() async {
-    final imUserIdStr = await StorageService.getImUserId();
-    if (imUserIdStr == null) return;
-
-    final currentUserId = int.tryParse(imUserIdStr) ?? 0;
+  void _calculateUnreadCount(int currentUserId) {
     int count = 0;
 
     for (final request in _friendRequests) {
-      final status = request['status']?.toString() ?? '0';
-      final userId = request['userId'];
-
-      if (status == '0' && userId != currentUserId) {
-        count++;
-      }
+      if (!_isIncomingPending(request, currentUserId)) continue;
+      if (_seenFriendRequestIds.contains(_friendRequestKey(request))) continue;
+      count++;
     }
 
     if (_unreadFriendRequestCount != count) {
@@ -375,7 +382,90 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
+  bool _isIncomingPending(Map<String, dynamic> request, int currentUserId) {
+    final status = request['status']?.toString() ?? '0';
+    final toUserId = int.tryParse(request['toUserId']?.toString() ?? '');
+    return status == '0' && toUserId == currentUserId;
+  }
+
+  String _friendRequestKey(Map<String, dynamic> request) {
+    final id = request['id']?.toString();
+    if (id != null && id.isNotEmpty) return id;
+    return '${request['fromUserId']}_${request['createTime']}';
+  }
+
+  String _requesterName(int fromId) {
+    for (final request in _friendRequests) {
+      if (request['fromUserId']?.toString() != fromId.toString()) continue;
+      final nickname = request['fromNickname']?.toString() ?? '';
+      if (nickname.isNotEmpty) return nickname;
+      final username = request['fromUsername']?.toString() ?? '';
+      if (username.isNotEmpty) return username;
+    }
+    return '用户$fromId';
+  }
+
+  /// 实时收到好友申请：刷新列表、点亮未读，并弹出可点击的提示。
+  Future<void> handleIncomingFriendRequest(int fromId) async {
+    await loadFriendRequests();
+
+    var matched = false;
+    for (final request in _friendRequests) {
+      if (request['fromUserId']?.toString() != fromId.toString()) continue;
+      if ((request['status']?.toString() ?? '0') != '0') continue;
+      _seenFriendRequestIds.remove(_friendRequestKey(request));
+      matched = true;
+    }
+
+    final currentUserId = int.tryParse(await StorageService.getImUserId() ?? '');
+    if (currentUserId != null) {
+      _calculateUnreadCount(currentUserId);
+    }
+    if (!matched) {
+      _unreadFriendRequestCount += 1;
+      notifyListeners();
+    }
+
+    _presentFriendRequestNotice(_requesterName(fromId));
+  }
+
+  void _presentFriendRequestNotice(String name) {
+    final context = AppRouter.navigatorKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$name 请求添加你为好友'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () {
+              onOpenContacts?.call();
+              context.read<LayoutProvider>().selectNavigation(1);
+            },
+          ),
+        ),
+      );
+    }
+
+    NotificationService().showMessageNotification(
+      NotificationData(
+        senderId: 0,
+        nickname: name,
+        content: '请求添加你为好友',
+        time: DateTime.now(),
+        targetId: -1,
+      ),
+    );
+  }
+
   void markFriendRequestsAsRead() {
+    for (final request in _friendRequests) {
+      final status = request['status']?.toString() ?? '0';
+      if (status == '0') {
+        _seenFriendRequestIds.add(_friendRequestKey(request));
+      }
+    }
     if (_unreadFriendRequestCount > 0) {
       _unreadFriendRequestCount = 0;
       notifyListeners();
@@ -390,14 +480,8 @@ class ContactProvider with ChangeNotifier {
       final userId = int.tryParse(imUserIdStr);
       if (userId == null) return;
 
-      await _apiService.acceptFriendRequest(friendId, userId);
-
-      final newContact = await _fetchAndConvertFriend(friendId.toString());
-      if (newContact != null) {
-        await addContactToLocal(newContact);
-      }
-
-      await loadFriendRequests();
+      await _apiService.acceptFriendRequest(userId, friendId);
+      await _finalizeAcceptedFriend(friendId.toString());
     } catch (e) {
       debugPrint('接受好友请求失败: $e');
       rethrow;
@@ -410,16 +494,44 @@ class ContactProvider with ChangeNotifier {
       if (imUserIdStr == null) return;
 
       await _apiService.acceptFriendRequestWithString(imUserIdStr, friendId);
-
-      final newContact = await _fetchAndConvertFriend(friendId);
-      if (newContact != null) {
-        await addContactToLocal(newContact);
-      }
-
-      await loadFriendRequests();
+      await _finalizeAcceptedFriend(friendId);
     } catch (e) {
       debugPrint('接受好友请求失败（字符串ID）: $e');
       rethrow;
+    }
+  }
+
+  /// 同意后：落本地联系人 + 本端创建会话（对端靠 friend_accepted 推送创建）
+  Future<void> _finalizeAcceptedFriend(String friendId) async {
+    final newContact = await _fetchAndConvertFriend(friendId);
+    if (newContact != null) {
+      await addContactToLocal(newContact);
+    } else {
+      await syncContactsFromServer();
+    }
+
+    final peerId = int.tryParse(friendId);
+    if (peerId != null && peerId > 0) {
+      await _imClient.createAcceptedFriendConversation(peerId);
+    }
+
+    await loadFriendRequests();
+  }
+
+  /// 申请方收到「对方已同意」：同步联系人，补全会话昵称
+  Future<void> handlePeerAcceptedFriendship(int friendId) async {
+    try {
+      final newContact = await _fetchAndConvertFriend(friendId.toString());
+      if (newContact != null) {
+        await addContactToLocal(newContact);
+      } else {
+        await syncContactsFromServer();
+      }
+      await loadFriendRequests();
+    } catch (e) {
+      debugPrint('⚠️ 处理好友同意通知失败: $e');
+      loadContacts();
+      loadFriendRequests();
     }
   }
 
@@ -432,17 +544,15 @@ class ContactProvider with ChangeNotifier {
       if (userId == null) return null;
 
       final data = await _apiService.getFriendList(userId);
-      final friendData = data.firstWhere(
-        (json) {
-          final jsonMap = json as Map<String, dynamic>;
-          return jsonMap['friendId']?.toString() == friendId ||
-              jsonMap['id']?.toString() == friendId;
-        },
-        orElse: () => null,
-      );
-
-      if (friendData != null) {
-        return _convertFriendToUserModel(friendData as Map<String, dynamic>);
+      for (final json in data) {
+        if (json is! Map) continue;
+        final jsonMap = Map<String, dynamic>.from(json);
+        final peerId = jsonMap['contactUserId']?.toString() ??
+            jsonMap['friendId']?.toString() ??
+            '';
+        if (peerId == friendId) {
+          return _convertFriendToUserModel(jsonMap);
+        }
       }
       return null;
     } catch (e) {
@@ -459,7 +569,7 @@ class ContactProvider with ChangeNotifier {
       final userId = int.tryParse(imUserIdStr);
       if (userId == null) return;
 
-      await _apiService.rejectFriendRequest(friendId, userId);
+      await _apiService.rejectFriendRequest(userId, friendId);
       await loadFriendRequests();
     } catch (e) {
       debugPrint('拒绝好友请求失败: $e');
@@ -492,12 +602,17 @@ class ContactProvider with ChangeNotifier {
 
   void startListening() {
     if (_isListening) return;
-    _imClient.addFriendRequestListener(_ContactFriendRequestListener(this));
+    _friendRequestListener = _ContactFriendRequestListener(this);
+    _imClient.addFriendRequestListener(_friendRequestListener!);
     _isListening = true;
   }
 
   void stopListening() {
-    _imClient.removeFriendRequestListener(_ContactFriendRequestListener(this));
+    final listener = _friendRequestListener;
+    if (listener != null) {
+      _imClient.removeFriendRequestListener(listener);
+    }
+    _friendRequestListener = null;
     _isListening = false;
   }
 
@@ -598,6 +713,7 @@ class ContactProvider with ChangeNotifier {
     _searchResults = [];
     _friendRequests = [];
     _unreadFriendRequestCount = 0;
+    _seenFriendRequestIds.clear();
     clearCache();
     await _dbService.reset();
     debugPrint('📍[ContactProvider] ✓ 状态已重置（通讯录、搜索结果、好友请求、缓存、数据库）');
@@ -612,15 +728,14 @@ class _ContactFriendRequestListener implements sdk.FriendRequestListener {
   @override
   void onFriendRequestReceived(int fromId, int toId) {
     debugPrint('🔔 收到好友请求通知: fromId=$fromId, toId=$toId');
-    _provider._unreadFriendRequestCount++;
-    _provider.loadFriendRequests();
+    _provider.handleIncomingFriendRequest(fromId);
   }
 
   @override
   void onFriendAccepted(int fromId, int toId) {
     debugPrint('✅ 收到好友接受通知: fromId=$fromId (同意者), toId=$toId (你)');
-    _provider.loadContacts();
-    _provider.loadFriendRequests();
+    // fromId=同意者，对申请方来说就是新好友；同步联系人以便会话显示真实昵称
+    _provider.handlePeerAcceptedFriendship(fromId);
   }
 
   @override

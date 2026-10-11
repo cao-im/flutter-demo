@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/layout_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/contact_provider.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
 
@@ -28,6 +29,7 @@ class DesktopNavigationRail extends StatelessWidget {
     final layoutProvider = Provider.of<LayoutProvider>(context);
     final selectedIndex = layoutProvider.selectedIndex;
     final authProvider = Provider.of<AuthProvider>(context);
+    final friendRequestCount = context.watch<ContactProvider>().unreadFriendRequestCount;
 
     return Material(
       elevation: 0,
@@ -64,6 +66,7 @@ class DesktopNavigationRail extends StatelessWidget {
                 icon: item.icon,
                 label: item.label,
                 isSelected: isSelected,
+                badgeCount: index == 1 ? friendRequestCount : 0,
                 onTap: () => layoutProvider.selectNavigation(index),
               );
             }),
@@ -100,6 +103,7 @@ class DesktopNavigationRail extends StatelessWidget {
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
+    int badgeCount = 0,
   }) {
     return Tooltip(
       message: label,
@@ -116,12 +120,36 @@ class DesktopNavigationRail extends StatelessWidget {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            size: _iconSize,
-            color: isSelected
-                ? AppTheme.primaryColor
-                : AppTheme.textSecondaryColor,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                icon,
+                size: _iconSize,
+                color: isSelected
+                    ? AppTheme.primaryColor
+                    : AppTheme.textSecondaryColor,
+              ),
+              if (badgeCount > 0)
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.4),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

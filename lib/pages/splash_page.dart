@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/server_config.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/connection_provider.dart';
@@ -59,7 +60,7 @@ class _SplashPageState extends State<SplashPage>
 
     try {
       debugPrint('📍[SplashPage] [步骤1/3] 调用 connectionProvider.initialize()...');
-      await connectionProvider.initialize('ws://192.168.0.138/api/ws');
+      await connectionProvider.initialize(ServerConfig.imWebSocketUrl);
       debugPrint('✅[SplashPage] [步骤1/3] initialize 完成');
     } catch (e) {
       debugPrint('❌[SplashPage] [步骤1/3] SDK 初始化失败: $e');

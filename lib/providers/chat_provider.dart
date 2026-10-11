@@ -6,6 +6,7 @@ import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
+import '../services/apis/file_api.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
@@ -206,12 +207,9 @@ class ChatProvider with ChangeNotifier {
             }
           }
         } else {
-          // 私聊：显示聊天对象的信息，使用 targetId 匹配本地联系人
-          // （注意：不能用 lastMessage.senderInfo，因为那是最后一条消息的发送者，
-          //  如果最后一条消息是自己发的，senderInfo 就是自己而非聊天对象）
-          final contactInfo = _contactInfoCache[conv.targetId];
-          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          final resolved = _resolvePrivatePeerDisplay(conv);
+          displayName = resolved.$1;
+          displayAvatar = resolved.$2;
         }
 
         if (conv.lastMessage != null) {
@@ -249,6 +247,54 @@ class ChatProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// 私聊会话显示名：本地联系人优先；否则用对方发来的消息里的 senderInfo/nickname
+  (String, String?) _resolvePrivatePeerDisplay(sdk.Conversation conv) {
+    final contactInfo = _contactInfoCache[conv.targetId];
+    final fromContact = DisplayNameHelper.getDisplayName(contactInfo);
+    if (fromContact != null && fromContact.isNotEmpty) {
+      return (fromContact, DisplayNameHelper.getDisplayAvatar(contactInfo));
+    }
+
+    final last = conv.lastMessage;
+    if (last != null && last.fromId == conv.targetId) {
+      final nick = last.senderInfo?.nickname.isNotEmpty == true
+          ? last.senderInfo!.nickname
+          : (last.senderNickname ?? '');
+      final avatar = last.senderInfo?.avatar.isNotEmpty == true
+          ? last.senderInfo!.avatar
+          : last.senderAvatar;
+      if (nick.isNotEmpty) {
+        _seedContactCache(
+          userId: conv.targetId,
+          nickname: nick,
+          avatar: avatar ?? '',
+        );
+        return (nick, (avatar != null && avatar.isNotEmpty) ? avatar : null);
+      }
+    }
+
+    return ('用户${conv.targetId}', null);
+  }
+
+  void _seedContactCache({
+    required int userId,
+    required String nickname,
+    String avatar = '',
+    String username = '',
+  }) {
+    if (userId <= 0 || nickname.isEmpty) return;
+    final existing = _contactInfoCache[userId];
+    if (existing != null && existing.nickname.isNotEmpty) return;
+    _contactInfoCache[userId] = ContactInfo(
+      id: existing?.id ?? 0,
+      userId: userId,
+      username: username.isNotEmpty ? username : (existing?.username ?? ''),
+      nickname: nickname,
+      avatar: avatar.isNotEmpty ? avatar : (existing?.avatar ?? ''),
+      remark: existing?.remark ?? '',
+    );
   }
 
   /// 批量预加载联系人信息到缓存（性能优化）
@@ -327,12 +373,9 @@ class ChatProvider with ChangeNotifier {
             }
           }
         } else {
-          // 私聊：显示聊天对象的信息，使用 targetId 匹配本地联系人
-          // （注意：不能用 lastMessage.senderInfo，因为那是最后一条消息的发送者，
-          //  如果最后一条消息是自己发的，senderInfo 就是自己而非聊天对象）
-          final contactInfo = _contactInfoCache[conv.targetId];
-          displayName = DisplayNameHelper.getDisplayNameOrDefault(contactInfo, conv.targetId);
-          displayAvatar = DisplayNameHelper.getDisplayAvatar(contactInfo);
+          final resolved = _resolvePrivatePeerDisplay(conv);
+          displayName = resolved.$1;
+          displayAvatar = resolved.$2;
         }
 
         if (conv.lastMessage != null) {
@@ -473,6 +516,11 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  Future<void> sendImage(Uint8List bytes, String filename) async {
+    final url = await FileApi().uploadBytes(bytes, filename);
+    await sendMessage(url, type: 'image');
+  }
+
   Future<void> sendMessage(String content, {String type = 'text'}) async {
     debugPrint('📤[ChatProvider] sendMessage 被调用: content=$content, type=$type');
     debugPrint('📤[ChatProvider] 当前 _currentConversation: ${_currentConversation?.id ?? "null"}');
@@ -493,6 +541,7 @@ class ChatProvider with ChangeNotifier {
       receiverId: '',
       type: type == 'image' ? MessageType.image : MessageType.text,
       content: content,
+      mediaUrl: type == 'image' ? content : null,
       timestamp: DateTime.now(),
       isSending: true,
       isSent: true,
@@ -540,9 +589,6 @@ class ChatProvider with ChangeNotifier {
       if (index != -1) {
         // 使用 SDK 返回的消息信息更新本地消息
         _messages[index] = _messages[index].copyWith(
-          isSending: false,
-          isSent: true,
-          status: MessageStatus.sent,
           mid: sentMessage.mid,
         );
         notifyListeners();
@@ -985,6 +1031,9 @@ class ChatProvider with ChangeNotifier {
           ? MessageType.image
           : MessageType.text,
       content: msg.content,
+      mediaUrl: msg.msgType == sdk.MessageType.image
+          ? (msg.localPath ?? msg.content)
+          : null,
       timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
       isSent: isFromMe,
       status: _convertSdkStatus(msg.status),
@@ -993,6 +1042,22 @@ class ChatProvider with ChangeNotifier {
       canRecall: canRecall,
       mid: msg.mid,
     );
+  }
+
+  void applySendConfirmation(sdk.Message message) {
+    final mid = message.mid;
+    if (mid == null) return;
+    final index = _messages.indexWhere((item) => item.mid == mid);
+    if (index == -1) return;
+    _messages[index] = _messages[index].copyWith(
+      isSending: false,
+      isSent: true,
+      status: _convertSdkStatus(message.status),
+      mediaUrl: message.msgType == sdk.MessageType.image
+          ? message.content
+          : _messages[index].mediaUrl,
+    );
+    notifyListeners();
   }
 
   MessageStatus _convertSdkStatus(sdk.MessageStatus sdkStatus) {
@@ -1040,6 +1105,21 @@ class _ChatMessageListener implements sdk.MessageListener {
   void onMessageReceived(sdk.Message message) {
     final currentUserId = _provider._sdkManager.client.currentUserId;
 
+    // 用消息里的发送者信息补全联系人缓存，避免会话列表一直显示「用户XX」
+    final incomingNick = message.senderInfo?.nickname.isNotEmpty == true
+        ? message.senderInfo!.nickname
+        : message.senderNickname;
+    final incomingAvatar = message.senderInfo?.avatar.isNotEmpty == true
+        ? message.senderInfo!.avatar
+        : message.senderAvatar;
+    if (incomingNick != null && incomingNick.isNotEmpty) {
+      _provider._seedContactCache(
+        userId: message.fromId,
+        nickname: incomingNick,
+        avatar: incomingAvatar ?? '',
+      );
+    }
+
     // 优先使用消息中存储的发送者信息
     SenderInfoModel? senderInfo;
     if (message.senderNickname != null || message.senderAvatar != null) {
@@ -1060,7 +1140,7 @@ class _ChatMessageListener implements sdk.MessageListener {
       final contactInfo = _provider._contactInfoCache[message.fromId];
       if (contactInfo != null) {
         senderInfo = SenderInfoModel(
-          userId: contactInfo.id,
+          userId: contactInfo.userId,
           nickname: contactInfo.nickname,
           avatar: contactInfo.avatar,
         );
@@ -1104,7 +1184,9 @@ class _ChatMessageListener implements sdk.MessageListener {
   }
 
   @override
-  void onMessageSent(sdk.Message message) {}
+  void onMessageSent(sdk.Message message) {
+    _provider.applySendConfirmation(message);
+  }
 
   @override
   void onMessageRecalled(sdk.Message message) {}

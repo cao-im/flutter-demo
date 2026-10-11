@@ -11,6 +11,10 @@ import '../pages/search_add_friend_page.dart';
 import '../pages/new_friends_page.dart';
 
 class AppRouter {
+  /// 全局导航，供认证失效等无 BuildContext 场景跳转登录页
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';

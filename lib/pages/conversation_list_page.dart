@@ -32,6 +32,7 @@ class _ConversationListPageState extends State<ConversationListPage>
   bool get wantKeepAlive => true;
 
   bool _hasLoaded = false;
+  String _conversationKeyword = '';
   final GlobalKey _addButtonKey = GlobalKey();
   final GlobalKey _appBarAddButtonKey = GlobalKey();
 
@@ -44,6 +45,18 @@ class _ConversationListPageState extends State<ConversationListPage>
         _loadConversationsIfNeeded();
       }
     });
+  }
+
+  List<ConversationModel> _visibleConversations(List<ConversationModel> source) {
+    final keyword = _conversationKeyword.trim().toLowerCase();
+    if (keyword.isEmpty) {
+      return source;
+    }
+    return source.where((conversation) {
+      final name = conversation.name.toLowerCase();
+      final last = conversation.lastMessage?.content.toLowerCase() ?? '';
+      return name.contains(keyword) || last.contains(keyword);
+    }).toList();
   }
 
   /// 智能加载：只在首次加载时执行，避免重复请求
@@ -379,6 +392,7 @@ class _ConversationListPageState extends State<ConversationListPage>
         children: [
           Expanded(
             child: TextField(
+              onChanged: (value) => setState(() => _conversationKeyword = value),
               decoration: InputDecoration(
                 hintText: '搜索',
                 prefixIcon: const Icon(Icons.search, size: 20),
@@ -477,11 +491,12 @@ class _ConversationListPageState extends State<ConversationListPage>
   Widget _buildBody() {
     return Consumer<ChatProvider>(
       builder: (context, chatProvider, _) {
+        final conversations = _visibleConversations(chatProvider.conversations);
         if (chatProvider.isLoading && chatProvider.conversations.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (chatProvider.conversations.isEmpty) {
+        if (conversations.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -493,7 +508,7 @@ class _ConversationListPageState extends State<ConversationListPage>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '暂无会话',
+                  _conversationKeyword.trim().isEmpty ? '暂无会话' : '没有匹配的会话',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 8),
@@ -512,9 +527,9 @@ class _ConversationListPageState extends State<ConversationListPage>
               final selectedId = layoutProvider.currentConversationId;
 
               return ListView.builder(
-                itemCount: chatProvider.conversations.length,
+                itemCount: conversations.length,
                 itemBuilder: (context, index) {
-                  final conversation = chatProvider.conversations[index];
+                  final conversation = conversations[index];
                   final isSelected = conversation.id == selectedId;
 
                   return ConversationItem(
@@ -547,9 +562,9 @@ class _ConversationListPageState extends State<ConversationListPage>
               final selectedId = layoutProvider.currentConversationId;
 
               return ListView.builder(
-                itemCount: chatProvider.conversations.length,
+                itemCount: conversations.length,
                 itemBuilder: (context, index) {
-                  final conversation = chatProvider.conversations[index];
+                  final conversation = conversations[index];
                   final isSelected = widget.isEmbeddedMode && conversation.id == selectedId;
 
                   return ConversationItem(
@@ -690,6 +705,7 @@ class _AddFriendDialogState extends State<_AddFriendDialog> {
   Widget _buildSearchResultItem(UserModel user) {
     final displayName = user.nickname.isNotEmpty ? user.nickname : user.username;
     return InkWell(onTap: () async {
+      if (user.friendStatus != 0) return;
       try {
         await context.read<ContactProvider>().sendFriendRequest(int.tryParse(user.id) ?? 0);
         if (mounted) Navigator.of(context).pop();

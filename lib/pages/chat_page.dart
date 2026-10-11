@@ -373,10 +373,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
+        final bytes = await image.readAsBytes();
         await Provider.of<ChatProvider>(
           context,
           listen: false,
-        ).sendMessage(image.path, type: 'image');
+        ).sendImage(bytes, image.name);
         _scrollToBottom();
       }
     } catch (e) {
@@ -428,10 +429,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           source: ImageSource.camera,
                         );
                         if (photo != null) {
+                          final bytes = await photo.readAsBytes();
                           await Provider.of<ChatProvider>(
                             context,
                             listen: false,
-                          ).sendMessage(photo.path, type: 'image');
+                          ).sendImage(bytes, photo.name);
                           _scrollToBottom();
                         }
                       } catch (e) {

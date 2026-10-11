@@ -196,7 +196,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         _buildCollapsibleRow(
           icon: Icons.person_add_outlined,
           title: '新的朋友',
-          count: unreadCount > 0 ? unreadCount : null,
+          badgeCount: unreadCount,
           isExpanded: _isNewFriendsExpanded,
           onTap: () {
             setState(() => _isNewFriendsExpanded = !_isNewFriendsExpanded);
@@ -473,6 +473,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     required IconData icon,
     required String title,
     int? count,
+    int badgeCount = 0,
     required bool isExpanded,
     required VoidCallback onTap,
   }) {
@@ -486,7 +487,21 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
             Icon(icon, size: 20, color: Colors.grey[600]),
             const SizedBox(width: 14),
             Expanded(child: Text(title, style: const TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor))),
-            if (count != null)
+            if (badgeCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                child: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              )
+            else if (count != null)
               Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
             else
               const SizedBox(width: 16),

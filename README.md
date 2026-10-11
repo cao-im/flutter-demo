@@ -143,19 +143,14 @@ flutter run chrome
 项目已配置好与后端对接的接口地址：
 
 #### App Server (HTTP API)
-- **Base URL**: `http://localhost:8080/api`
-- **登录**: `POST /auth/login`
-- **注册**: `POST /auth/register`
-- **获取用户信息**: `GET /users/{id}`
-- **会话列表**: `GET /conversations`
-- **创建会话**: `POST /conversations`
-- **消息列表**: `GET /conversations/{id}/messages`
-- **发送消息**: `POST /conversations/{id}/messages`
-- **联系人列表**: `GET /contacts`
+- **Base URL**: `http://localhost:8081/api`（可用 `--dart-define=APP_SERVER_URL=...` 覆盖）
+- **登录**: `POST /client/login`
+- **注册**: `POST /client/register`
 
-#### IM Server (WebSocket)
-- **WebSocket URL**: `ws://localhost:8081/api/ws`
-- 用于实时消息推送
+#### IM Server
+- **HTTP Base URL**: `http://localhost:8080/api`
+- **WebSocket**: `ws://localhost:8080/api/ws`
+- 好友、群组和实时消息都连这个服务。Android 模拟器访问宿主机时把 `localhost` 换成 `10.0.2.2`。
 
 ### 对接 im-sdk 说明
 
@@ -200,8 +195,8 @@ flutter run chrome
 2. iOS 需要配置权限（相机、相册访问）
 
 3. 需要启动后端服务才能正常使用完整功能：
-   - App Server: `localhost:8080`
-   - IM Server: `localhost:8081`
+   - App Server: `localhost:8081`
+   - IM Server: `localhost:8080`
 
 ### 已知限制
 

@@ -8,6 +8,7 @@ import '../pages/profile_page.dart';
 import '../pages/desktop_home_page.dart';
 import '../providers/contact_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/layout_provider.dart';
 import '../widgets/badge_navigation_bar_item.dart';
 
 class HomePage extends StatefulWidget {
@@ -29,7 +30,14 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ContactProvider>().startListening();
+      final contactProvider = context.read<ContactProvider>();
+      contactProvider.onOpenContacts = () {
+        if (!mounted) return;
+        setState(() => _currentIndex = 1);
+        context.read<LayoutProvider>().selectNavigation(1);
+      };
+      contactProvider.startListening();
+      contactProvider.loadFriendRequests();
       context.read<ChatProvider>().startListening();
 
       _syncContactsAutomatically();

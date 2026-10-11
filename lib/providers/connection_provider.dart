@@ -15,6 +15,9 @@ class ConnectionProvider with ChangeNotifier {
   ImConnectionState _state = ImConnectionState.disconnected;
   String? _errorMessage;
 
+  /// 宿主注册：SDK 报告认证永久失效时回调（清理登录态并跳转登录页）
+  void Function(String reason)? onAuthExpiredCallback;
+
   ImConnectionState get state => _state;
   String? get errorMessage => _errorMessage;
   bool get isConnected => _state == ImConnectionState.connected;
@@ -47,7 +50,7 @@ class ConnectionProvider with ChangeNotifier {
   }
 
   Future<void> connect(String token, {int? userId, String? refreshToken}) async {
-    debugPrint('📍[ConnProvider] ====== connect() 开始 | token长度:${token?.length ?? 0}, refreshToken:${refreshToken != null ? "有" : "无"}, userId:$userId, isInitialized:${_sdkManager.isInitialized}, 状态:$_state ======');
+    debugPrint('📍[ConnProvider] ====== connect() 开始 | token长度:${token.length}, refreshToken:${refreshToken != null ? "有" : "无"}, userId:$userId, isInitialized:${_sdkManager.isInitialized}, 状态:$_state ======');
 
     if (!_sdkManager.isInitialized) {
       debugPrint('⚠️[ConnProvider] SDK 未初始化，跳过连接');
@@ -60,6 +63,12 @@ class ConnectionProvider with ChangeNotifier {
       debugPrint('📍[ConnProvider] 调用 IMSdkManager.connect(token, userId: $userId, refreshToken: ${refreshToken != null ? "有" : "无"})...');
       await _sdkManager.connect(token, userId: userId, refreshToken: refreshToken);
       debugPrint('✅[ConnProvider] IMSdkManager.connect() 返回成功');
+    } on IMException catch (e) {
+      debugPrint('❌[ConnProvider] connect IMException: $e');
+      _setError(e.message);
+      _setState(ImConnectionState.disconnected);
+      // 认证永久失败交给 AuthProvider 清理登录态
+      rethrow;
     } catch (e, stack) {
       debugPrint('❌[ConnProvider] connect 失败: $e | stackTrace: $stack');
       _setError(e.toString());
@@ -73,6 +82,13 @@ class ConnectionProvider with ChangeNotifier {
     debugPrint('📍[ConnProvider] disconnect() 被调用');
     await _sdkManager.disconnect();
     _setState(ImConnectionState.disconnected);
+  }
+
+  void _handleAuthExpired(String reason) {
+    debugPrint('🔐[ConnProvider] 认证失效: $reason');
+    _setState(ImConnectionState.disconnected);
+    _setError(reason);
+    onAuthExpiredCallback?.call(reason);
   }
 
   void _setState(ImConnectionState newState) {
@@ -138,5 +154,11 @@ class _ConnectionListener implements ConnectionListener {
     if (isReconnecting) {
       _provider._setState(ImConnectionState.reconnecting);
     }
+  }
+
+  @override
+  void onAuthExpired(String reason) {
+    debugPrint('🔐[ConnListener] 收到 onAuthExpired: $reason');
+    _provider._handleAuthExpired(reason);
   }
 }

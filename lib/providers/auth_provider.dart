@@ -1,7 +1,9 @@
+import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
+import '../router/app_router.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import 'connection_provider.dart';
@@ -147,8 +149,9 @@ class AuthProvider with ChangeNotifier {
     final token = await StorageService.getToken();
     final imToken = await StorageService.getImToken();
     final imRefreshToken = await StorageService.getImRefreshToken();
-    
-    debugPrint('📍[AuthProvider] token:${token != null ? "有" : "无"}, imToken:${imToken != null ? "有" : "无"}, imRefreshToken:${imRefreshToken != null ? "有" : "无"}');
+
+    debugPrint(
+        '📍[AuthProvider] token:${token != null ? "有" : "无"}, imToken:${imToken != null ? "有" : "无"}, imRefreshToken:${imRefreshToken != null ? "有" : "无"}');
 
     if (token != null && token.isNotEmpty) {
       final userId = await StorageService.getUserId();
@@ -157,11 +160,12 @@ class AuthProvider with ChangeNotifier {
 
       if (userId != null) {
         try {
-          final connectionProvider =
-              context.read<ConnectionProvider>();
-          debugPrint('📍[AuthProvider] isInitialized=${connectionProvider.isInitialized}, isConnected=${connectionProvider.isConnected}');
+          final connectionProvider = context.read<ConnectionProvider>();
+          debugPrint(
+              '📍[AuthProvider] isInitialized=${connectionProvider.isInitialized}, isConnected=${connectionProvider.isConnected}');
 
-          if (connectionProvider.isInitialized && !connectionProvider.isConnected) {
+          if (connectionProvider.isInitialized &&
+              !connectionProvider.isConnected) {
             final connectToken = imToken ?? token;
             final uid = int.tryParse(imUserIdStr ?? userId) ?? 0;
             debugPrint('📍[AuthProvider] 准备连接IM (SDK会自动处理Token刷新)...');
@@ -174,8 +178,8 @@ class AuthProvider with ChangeNotifier {
           }
 
           debugPrint('ℹ️[AuthProvider] SDK已接管用户信息获取和Token管理');
-          
-          // 优先从服务端获取最新用户资料
+
+          // 优先从服务端获取最新用户资料；401/403 视为登录失效，禁止降级本地缓存
           try {
             final profileResponse = await _apiService.getUserProfile();
             final profileCode = profileResponse['code'];
@@ -183,15 +187,30 @@ class AuthProvider with ChangeNotifier {
               final userData = profileResponse['data'];
               if (userData != null) {
                 _user = UserModel.fromJson(userData);
-                // 同步更新本地存储
                 await StorageService.saveNickname(_user!.nickname);
-                debugPrint('✅[AuthProvider] 从服务端获取到最新用户资料, nickname=${_user!.nickname}');
+                debugPrint(
+                    '✅[AuthProvider] 从服务端获取到最新用户资料, nickname=${_user!.nickname}');
               }
+            } else if (_isAuthFailureCode(profileCode) ||
+                _isAuthFailureMessage(profileResponse['message']?.toString())) {
+              debugPrint(
+                  '🔐[AuthProvider] 用户资料认证失败 code=$profileCode，清理登录态');
+              await _clearLocalSession(context);
+              return;
             } else {
-              debugPrint('⚠️[AuthProvider] 服务端返回非200: ${profileResponse['message']}');
+              debugPrint(
+                  '⚠️[AuthProvider] 服务端返回非200: ${profileResponse['message']}');
               throw Exception('服务端返回异常');
             }
           } catch (e) {
+            if (e is IMException && e.code == ErrorCode.authFailed) {
+              rethrow;
+            }
+            if (_isAuthHttpFailure(e)) {
+              debugPrint('🔐[AuthProvider] 用户资料请求认证失败($e)，清理登录态');
+              await _clearLocalSession(context);
+              return;
+            }
             debugPrint('⚠️[AuthProvider] 从服务端获取用户资料失败($e)，降级使用本地缓存');
             final username = await StorageService.getUsername();
             final nickname = await StorageService.getNickname();
@@ -202,14 +221,21 @@ class AuthProvider with ChangeNotifier {
               imUserId: imUserIdStr,
             );
           }
-          
+
           notifyListeners();
+        } on IMException catch (e) {
+          debugPrint('❌[AuthProvider] IM认证失败: $e');
+          if (e.code == ErrorCode.authFailed) {
+            await _clearLocalSession(context);
+          }
         } catch (e, stack) {
           debugPrint('❌[AuthProvider] 加载失败: $e | stackTrace: $stack');
-          
-          if (e.toString().contains('401') || e.toString().contains('Token无效')) {
+
+          if (_isAuthHttpFailure(e) ||
+              e.toString().contains('Token无效') ||
+              e.toString().contains('请重新登录')) {
             debugPrint('⚠️[AuthProvider] Token无效，执行登出');
-            await logout(context);
+            await _clearLocalSession(context);
           } else {
             debugPrint('⚠️[AuthProvider] 使用本地存储的基本信息作为降级方案');
             final username = await StorageService.getUsername();
@@ -233,9 +259,72 @@ class AuthProvider with ChangeNotifier {
     debugPrint('📍[AuthProvider] ====== loadUserFromStorage() 结束 ======');
   }
 
+  /// SDK 报告认证永久失效（如 RefreshToken 无效）时调用
+  Future<void> handleAuthExpired(String reason) async {
+    debugPrint('🔐[AuthProvider] handleAuthExpired: $reason');
+    await _clearLocalSession(null);
+    final nav = AppRouter.navigatorKey.currentState;
+    if (nav != null) {
+      nav.pushNamedAndRemoveUntil(AppRouter.login, (route) => false);
+    }
+  }
+
+  Future<void> _clearLocalSession(BuildContext? context) async {
+    try {
+      if (context != null && context.mounted) {
+        final connectionProvider = context.read<ConnectionProvider>();
+        if (connectionProvider.isConnected ||
+            connectionProvider.state == ImConnectionState.reconnecting ||
+            connectionProvider.state == ImConnectionState.connecting) {
+          await connectionProvider.disconnect();
+        }
+        final contactProvider = context.read<ContactProvider>();
+        await contactProvider.resetState();
+      } else {
+        // 无 context：仅断开 IM，避免无限重连
+        // ConnectionProvider 由 Provider 树持有，通过 navigator context 取
+        final navContext = AppRouter.navigatorKey.currentContext;
+        if (navContext != null) {
+          final connectionProvider = navContext.read<ConnectionProvider>();
+          await connectionProvider.disconnect();
+          try {
+            await navContext.read<ContactProvider>().resetState();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️[AuthProvider] _clearLocalSession disconnect 异常: $e');
+    }
+
+    await StorageService.clearAll();
+    _user = null;
+    notifyListeners();
+  }
+
+  bool _isAuthFailureCode(dynamic code) {
+    return code == 401 || code == 403 || code == 1002 || code == 1005;
+  }
+
+  bool _isAuthFailureMessage(String? message) {
+    if (message == null) return false;
+    return message.contains('未认证') ||
+        message.contains('Token无效') ||
+        message.contains('无效的Refresh') ||
+        message.contains('请先登录') ||
+        message.contains('请重新登录');
+  }
+
+  bool _isAuthHttpFailure(Object e) {
+    final s = e.toString();
+    return s.contains('401') ||
+        s.contains('403') ||
+        s.contains('status code of 401') ||
+        s.contains('status code of 403') ||
+        _isAuthFailureMessage(s);
+  }
+
   Future<void> logout(BuildContext context) async {
-    final connectionProvider =
-        context.read<ConnectionProvider>();
+    final connectionProvider = context.read<ConnectionProvider>();
     if (connectionProvider.isConnected) {
       await connectionProvider.disconnect();
     }
