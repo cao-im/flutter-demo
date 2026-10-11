@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/chat_keyboard_provider.dart';
 import 'emoji_picker_panel.dart';
 import 'chat_overlay_panel.dart';
+import 'windows_ime_caret.dart';
 
 /// 输入栏模式
 enum ChatInputMode {
@@ -94,6 +95,11 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
   /// 桌面端：表情按钮的 GlobalKey，用于锚点定位
   final GlobalKey _emojiButtonKey = GlobalKey();
 
+  /// 桌面端输入框，用于测量真实光标位置（修正 Windows 输入法候选窗）
+  final GlobalKey _desktopTextFieldKey = GlobalKey();
+
+  WindowsImeCaret? _windowsImeCaret;
+
   /// 桌面端：当前显示的 OverlayEntry
   OverlayEntry? _overlayEntry;
 
@@ -103,6 +109,13 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     // 桌面端：创建带键盘事件处理的 FocusNode
     if (widget.style.isDesktop) {
       _focusNode = FocusNode(onKeyEvent: _handleKeyEvent);
+      if (WindowsImeCaret.supported) {
+        _windowsImeCaret = WindowsImeCaret(
+          controller: widget.controller,
+          focusNode: _focusNode,
+          textFieldKey: _desktopTextFieldKey,
+        )..bind();
+      }
     } else {
       _focusNode = widget.externalFocusNode ?? FocusNode();
     }
@@ -124,6 +137,8 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
   @override
   void dispose() {
     _removeDesktopOverlay();
+    _windowsImeCaret?.dispose();
+    _windowsImeCaret = null;
     // 仅在 FocusNode 是内部创建时才释放
     if (widget.externalFocusNode == null) {
       _focusNode.dispose();
@@ -281,25 +296,31 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
   // ==================== 桌面端输入区域 ====================
 
   Widget _buildDesktopInput() {
-    final inputHeight = widget.style.fontSize * 1.8 * 5 +
-        widget.style.inputVerticalPadding * 2 + 16;
+    // 不要用 expands:true 撑满固定高度：Windows 上这样上报的光标矩形会偏，
+    // 候选窗容易盖住输入文字。改成跟 Web textarea 一样按内容增高，候选窗随光标走。
+    final lineHeight = widget.style.fontSize * 1.8;
+    final verticalPad = widget.style.inputVerticalPadding + 4;
+    final minHeight = lineHeight * 5 + verticalPad * 2;
+    final maxHeight = lineHeight * 8 + verticalPad * 2;
     return Container(
-      constraints: BoxConstraints(minHeight: inputHeight + 40),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE5E5E5), width: 1),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: inputHeight,
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
             child: TextField(
+              key: _desktopTextFieldKey,
               controller: widget.controller,
               focusNode: _focusNode,
               autofocus: true,
+              keyboardType: TextInputType.multiline,
               maxLines: null,
-              expands: true,
+              minLines: 5,
               textInputAction: TextInputAction.newline,
               textAlignVertical: TextAlignVertical.top,
               decoration: InputDecoration(
@@ -313,12 +334,12 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 focusColor: Colors.transparent,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: widget.style.inputHorizontalPadding,
-                  vertical: widget.style.inputVerticalPadding + 4,
+                  vertical: verticalPad,
                 ),
                 hintStyle: TextStyle(fontSize: widget.style.fontSize, color: Colors.grey[400]),
                 isDense: true,
               ),
-              style: TextStyle(fontSize: widget.style.fontSize),
+              style: TextStyle(fontSize: widget.style.fontSize, height: 1.8),
             ),
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),

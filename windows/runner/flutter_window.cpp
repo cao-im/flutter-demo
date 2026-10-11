@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "ime_caret.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -26,6 +27,9 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  ime_caret_ = std::make_unique<ImeCaret>(
+      flutter_controller_->engine()->messenger(), GetHandle(),
+      flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -40,6 +44,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  ime_caret_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -51,11 +56,22 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (ime_caret_ && ime_caret_->HandleMessage(hwnd, message, wparam, lparam)) {
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);
+    // Flutter often parks the IME window at caret offset 0. Re-apply the true
+    // caret after that update, deferred so we never re-enter IMM APIs.
+    if (ime_caret_ && ime_caret_->active() &&
+        (message == WM_IME_STARTCOMPOSITION || message == WM_IME_COMPOSITION ||
+         message == WM_IME_NOTIFY || message == WM_IME_SETCONTEXT)) {
+      ime_caret_->ScheduleReapply();
+    }
     if (result) {
       return *result;
     }
