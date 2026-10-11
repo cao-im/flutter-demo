@@ -71,58 +71,59 @@ class MessageBubble extends StatelessWidget {
                       ),
                     GestureDetector(
                       onLongPress: () => _showMessageContextMenu(context),
-                      child: Container(
-                        constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                      child: _isImageMessage
+                          ? _buildImageBubble(context, bubbleMaxWidth / 4)
+                          : Container(
+                              constraints:
+                                  BoxConstraints(maxWidth: bubbleMaxWidth),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: message.status == MessageStatus.recalled
+                                    ? Colors.grey[200]
+                                    : isMe
+                                        ? AppTheme.primaryColor
+                                        : Colors.white,
+                                borderRadius: BorderRadius.only(
+                                  topLeft: const Radius.circular(16),
+                                  topRight: const Radius.circular(16),
+                                  bottomLeft: Radius.circular(isMe ? 16 : 4),
+                                  bottomRight: Radius.circular(isMe ? 4 : 16),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: _buildContent(context),
+                            ),
                     ),
-                    decoration: BoxDecoration(
-                      color: message.status == MessageStatus.recalled
-                          ? Colors.grey[200]
-                          : isMe
-                              ? AppTheme.primaryColor
-                              : Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(isMe ? 16 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 16),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildContent(context),
-                      ],
-                    ),
-                  ),
+                  ],
+                ),
+              ),
+              if (isMe) ...[
+                const SizedBox(width: 8),
+                AvatarWidget(
+                  imageUrl: senderAvatar,
+                  name: senderName,
+                  size: 40,
                 ),
               ],
-            ),
+            ],
           ),
-          if (isMe) ...[
-            const SizedBox(width: 8),
-            AvatarWidget(
-              imageUrl: senderAvatar,
-              name: senderName,
-              size: 40,
-            ),
-          ],
-        ],
-      ),
-    );
-  },
+        );
+      },
     );
   }
+
+  bool get _isImageMessage =>
+      message.type == MessageType.image &&
+      message.status != MessageStatus.recalled;
 
   Widget _buildStatusIcon() {
     switch (message.status) {
@@ -165,32 +166,8 @@ class MessageBubble extends StatelessWidget {
 
     switch (message.type) {
       case MessageType.image:
-        return GestureDetector(
-          onTap: () => _showImageViewer(context),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: message.mediaUrl != null &&
-                    message.mediaUrl!.startsWith('http')
-                ? Image.network(
-                    message.mediaUrl!,
-                    width: 200,
-                    height: 200,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        _buildImagePlaceholder(),
-                  )
-                : message.mediaUrl != null
-                    ? Image.file(
-                        File(message.mediaUrl!),
-                        width: 200,
-                        height: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildImagePlaceholder(),
-                      )
-                    : _buildImagePlaceholder(),
-          ),
-        );
+        // 图片气泡由外层单独渲染，避免套上文字消息的蓝色背景
+        return _buildImageContent(context, maxWidth: 220);
       case MessageType.text:
       default:
         return SelectableText(
@@ -204,17 +181,70 @@ class MessageBubble extends StatelessWidget {
     }
   }
 
-  Widget _buildImagePlaceholder() {
+  /// 图片消息：无彩色气泡底，仅圆角 + 轻阴影，收发两端一致
+  Widget _buildImageBubble(BuildContext context, double maxWidth) {
     return Container(
-      width: 200,
-      height: 200,
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _buildImageContent(context, maxWidth: maxWidth),
+    );
+  }
+
+  /// 按原图比例缩放：限制最大宽高，不强制裁成方图
+  Widget _buildImageContent(BuildContext context, {required double maxWidth}) {
+    final source = message.imageSource;
+    final maxHeight = maxWidth * 1.6;
+
+    return GestureDetector(
+      onTap: () => _showImageViewer(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: source == null
+            ? _buildImagePlaceholder(maxWidth)
+            : ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
+                  maxHeight: maxHeight,
+                ),
+                child: source.startsWith('http')
+                    ? Image.network(
+                        source,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildImagePlaceholder(maxWidth),
+                      )
+                    : Image.file(
+                        File(source),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildImagePlaceholder(maxWidth),
+                      ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder(double width) {
+    return Container(
+      width: width,
+      height: width * 0.75,
       color: Colors.grey[300],
       child: const Icon(Icons.image, size: 48),
     );
   }
 
   Future<void> _showImageViewer(BuildContext context) async {
-    if (message.mediaUrl == null) return;
+    final source = message.imageSource;
+    if (source == null) return;
 
     Navigator.push(
       context,
@@ -224,14 +254,14 @@ class MessageBubble extends StatelessWidget {
           body: Stack(
             children: [
               Center(
-                child: message.mediaUrl!.startsWith('http')
+                child: source.startsWith('http')
                     ? PhotoView(
-                        imageProvider: NetworkImage(message.mediaUrl!),
+                        imageProvider: NetworkImage(source),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3,
                       )
                     : PhotoView(
-                        imageProvider: FileImage(File(message.mediaUrl!)),
+                        imageProvider: FileImage(File(source)),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3,
                       ),

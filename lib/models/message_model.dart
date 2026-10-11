@@ -94,6 +94,15 @@ class MessageModel {
     };
   }
 
+  /// 图片地址：优先 mediaUrl，实时消息只带 content 里的 URL 时也能显示
+  String? get imageSource {
+    if (type != MessageType.image) return null;
+    final url = mediaUrl;
+    if (url != null && url.isNotEmpty) return url;
+    if (content.startsWith('http')) return content;
+    return null;
+  }
+
   String get displayText {
     switch (type) {
       case MessageType.image:

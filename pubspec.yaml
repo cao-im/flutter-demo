@@ -65,6 +65,7 @@ flutter:
   # 音频资源
   assets:
     - assets/sounds/
+    - assets/images/caoim_logo.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

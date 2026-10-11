@@ -1165,6 +1165,9 @@ class _ChatMessageListener implements sdk.MessageListener {
           ? MessageType.image
           : MessageType.text,
       content: message.content,
+      mediaUrl: message.msgType == sdk.MessageType.image
+          ? (message.localPath ?? message.content)
+          : null,
       timestamp: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
       status: MessageStatus.delivered,
       senderInfo: senderInfo,

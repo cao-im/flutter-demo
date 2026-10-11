@@ -152,13 +152,19 @@ class _LoginPageState extends State<LoginPage> {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
-                      child: const Icon(
-                        Icons.chat_bubble_rounded,
-                        size: 68,
-                        color: Colors.white,
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/images/caoim_logo.jpg',
+                        fit: BoxFit.cover,
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -397,13 +403,12 @@ class _LoginPageState extends State<LoginPage> {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Icon(
-                    Icons.chat_bubble_rounded,
-                    size: 56,
-                    color: AppTheme.primaryColor,
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset(
+                    'assets/images/caoim_logo.jpg',
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),

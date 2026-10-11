@@ -125,20 +125,19 @@ class _SplashPageState extends State<SplashPage>
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.chat_bubble_rounded,
-                        size: 64,
-                        color: AppTheme.primaryColor,
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/images/caoim_logo.jpg',
+                        fit: BoxFit.cover,
                       ),
                     ),
                     const SizedBox(height: 32),

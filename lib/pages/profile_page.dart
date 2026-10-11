@@ -400,17 +400,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   context: context,
                   applicationName: 'CaoIM',
                   applicationVersion: '1.0.0',
-                  applicationIcon: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.chat_bubble_rounded,
-                      color: AppTheme.primaryColor,
-                      size: 28,
+                  applicationIcon: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      'assets/images/caoim_logo.jpg',
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
                     ),
                   ),
                   children: [const Text('即时通讯应用 Demo 版本')],
