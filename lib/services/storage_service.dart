@@ -8,6 +8,7 @@ class StorageService {
   static const String _imUserIdKey = 'im_user_id';
   static const String _usernameKey = 'username';
   static const String _nicknameKey = 'nickname';
+  static const String _avatarKey = 'avatar';
   static const String _passwordKey = 'password';
   static const String _autoLoginKey = 'auto_login';
 
@@ -93,6 +94,16 @@ class StorageService {
   static Future<String?> getNickname() async {
     final prefs = await _prefs;
     return prefs.getString(_nicknameKey);
+  }
+
+  static Future<void> saveAvatar(String avatar) async {
+    final prefs = await _prefs;
+    await prefs.setString(_avatarKey, avatar);
+  }
+
+  static Future<String?> getAvatar() async {
+    final prefs = await _prefs;
+    return prefs.getString(_avatarKey);
   }
 
   static Future<void> savePassword(String password) async {

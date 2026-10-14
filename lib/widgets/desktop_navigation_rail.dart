@@ -48,7 +48,7 @@ class DesktopNavigationRail extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(height: 8),
-            _buildUserAvatar(authProvider),
+            _buildUserAvatar(context, authProvider),
             SizedBox(height: 12),
             Container(
               width: _railWidth - 20,
@@ -77,17 +77,17 @@ class DesktopNavigationRail extends StatelessWidget {
     );
   }
 
-  Widget _buildUserAvatar(AuthProvider authProvider) {
+  Widget _buildUserAvatar(BuildContext context, AuthProvider authProvider) {
     final user = authProvider.user;
     final avatarUrl = user?.avatar;
     final userName = user?.nickname ?? user?.username ?? '用户';
 
     return Tooltip(
-      message: userName,
+      message: '$userName · 编辑资料',
       preferBelow: false,
       child: InkWell(
         borderRadius: BorderRadius.circular(_avatarSize / 2),
-        onTap: () {},
+        onTap: () => context.read<LayoutProvider>().selectNavigation(4),
         child: AvatarWidget(
           imageUrl: avatarUrl,
           name: userName,

@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../widgets/desktop_navigation_rail.dart';
+import '../widgets/profile_editor.dart';
 import '../widgets/desktop_contacts_panel.dart';
 import '../widgets/avatar_widget.dart';
 import '../theme/app_theme.dart';
@@ -200,19 +201,12 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.dividerColor))),
           child: Row(children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-              child: avatarUrl == null || avatarUrl.isEmpty
-                  ? Text(userName.isNotEmpty ? userName[0] : '?', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryColor))
-                  : null,
-            ),
+            AvatarWidget(imageUrl: avatarUrl, name: userName, size: 56),
             SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(userName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor), maxLines: 1, overflow: TextOverflow.ellipsis),
               SizedBox(height: 2),
-              Text(user?.email ?? '', style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text('在右侧修改头像、昵称、邮箱和手机号', style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor), maxLines: 2, overflow: TextOverflow.ellipsis),
             ])),
           ]),
         ),
@@ -385,8 +379,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         return const Expanded(child: _PlaceholderPanel(icon: Icons.folder_outlined, title: '文件管理', subtitle: '此功能开发中...'));
 
       case 4:
-        // 设置：右侧空占位（设置内容在中间面板展示）
-        return const Expanded(child: _PlaceholderPanel(icon: Icons.settings_outlined, title: '设置', subtitle: ''));
+        return const Expanded(child: _DesktopProfilePanel());
 
       default:
         return const Expanded(child: _PlaceholderPanel(icon: Icons.construction_outlined, title: '功能开发中', subtitle: '敬请期待'));
@@ -413,6 +406,26 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
               style: TextStyle(fontSize: 13, color: Colors.grey[400]),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopProfilePanel extends StatelessWidget {
+  const _DesktopProfilePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.backgroundColor,
+      child: SingleChildScrollView(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: const ProfileEditor(),
+          ),
         ),
       ),
     );

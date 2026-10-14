@@ -53,7 +53,7 @@ class AuthProvider with ChangeNotifier {
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
-          await StorageService.saveNickname(user.nickname);
+          await _rememberProfile(user);
           
           if (user.imUserId != null) {
             await StorageService.saveImUserId(user.imUserId!);
@@ -122,7 +122,7 @@ class AuthProvider with ChangeNotifier {
           _user = user;
           await StorageService.saveUserId(user.id);
           await StorageService.saveUsername(user.username);
-          await StorageService.saveNickname(user.nickname);
+          await _rememberProfile(user);
           
           if (user.imUserId != null) {
             await StorageService.saveImUserId(user.imUserId!);
@@ -187,7 +187,7 @@ class AuthProvider with ChangeNotifier {
               final userData = profileResponse['data'];
               if (userData != null) {
                 _user = UserModel.fromJson(userData);
-                await StorageService.saveNickname(_user!.nickname);
+                await _rememberProfile(_user!);
                 debugPrint(
                     '✅[AuthProvider] 从服务端获取到最新用户资料, nickname=${_user!.nickname}');
               }
@@ -214,10 +214,12 @@ class AuthProvider with ChangeNotifier {
             debugPrint('⚠️[AuthProvider] 从服务端获取用户资料失败($e)，降级使用本地缓存');
             final username = await StorageService.getUsername();
             final nickname = await StorageService.getNickname();
+            final avatar = await StorageService.getAvatar();
             _user = UserModel(
               id: userId,
               username: username ?? userId,
               nickname: nickname ?? username ?? '用户',
+              avatar: avatar,
               imUserId: imUserIdStr,
             );
           }
@@ -240,10 +242,12 @@ class AuthProvider with ChangeNotifier {
             debugPrint('⚠️[AuthProvider] 使用本地存储的基本信息作为降级方案');
             final username = await StorageService.getUsername();
             final nickname = await StorageService.getNickname();
+            final avatar = await StorageService.getAvatar();
             _user = UserModel(
               id: userId,
               username: username ?? userId,
               nickname: nickname ?? username ?? '用户',
+              avatar: avatar,
               imUserId: imUserIdStr,
             );
             notifyListeners();
@@ -356,7 +360,7 @@ class AuthProvider with ChangeNotifier {
           _user = _user!.copyWith(nickname: newNickname);
         }
         // 同步持久化昵称到本地存储
-        await StorageService.saveNickname(_user!.nickname);
+        await _rememberProfile(_user!);
         notifyListeners();
         return true;
       }
@@ -383,8 +387,7 @@ class AuthProvider with ChangeNotifier {
         final userData = response['data'];
         if (userData != null && _user != null) {
           _user = UserModel.fromJson(userData);
-          // 同步持久化到本地存储
-          await StorageService.saveNickname(_user!.nickname);
+          await _rememberProfile(_user!);
         }
         notifyListeners();
         return true;
@@ -396,6 +399,14 @@ class AuthProvider with ChangeNotifier {
       return false;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> _rememberProfile(UserModel user) async {
+    await StorageService.saveNickname(user.nickname);
+    final avatar = user.avatar;
+    if (avatar != null && avatar.isNotEmpty) {
+      await StorageService.saveAvatar(avatar);
     }
   }
 

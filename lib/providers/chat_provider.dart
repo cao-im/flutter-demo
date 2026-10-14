@@ -294,6 +294,24 @@ class ChatProvider with ChangeNotifier {
     return ('用户${conv.targetId}', null);
   }
 
+  /// 自己的资料变更后覆盖缓存，后续发出的消息带上新昵称和头像。
+  void applySelfProfile({
+    required int userId,
+    required String nickname,
+    String avatar = '',
+  }) {
+    if (userId <= 0 || nickname.isEmpty) return;
+    final existing = _contactInfoCache[userId];
+    _contactInfoCache[userId] = ContactInfo(
+      id: existing?.id ?? userId,
+      userId: userId,
+      username: existing?.username ?? '',
+      nickname: nickname,
+      avatar: avatar.isNotEmpty ? avatar : (existing?.avatar ?? ''),
+      remark: existing?.remark ?? '',
+    );
+  }
+
   void _seedContactCache({
     required int userId,
     required String nickname,
@@ -725,10 +743,11 @@ class ChatProvider with ChangeNotifier {
       // 从 StorageService 获取登录时保存的用户信息
       final nickname = await StorageService.getNickname();
       if (nickname != null && nickname.isNotEmpty) {
+        final avatar = await StorageService.getAvatar();
         return SenderInfoModel(
           userId: currentUserId,
           nickname: nickname,
-          avatar: '',
+          avatar: avatar ?? '',
         );
       }
 

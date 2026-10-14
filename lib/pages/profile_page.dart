@@ -1,12 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
+import '../widgets/profile_editor.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -16,113 +15,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String? _avatarPath;
-  final ImagePicker _picker = ImagePicker();
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  Future<void> _pickAvatar() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
-      if (image != null) {
-        setState(() => _avatarPath = image.path);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('头像已更新'),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('选择头像失败: $e');
-    }
-  }
-
-  Future<void> _editNickname(String currentNickname) async {
-    final controller = TextEditingController(text: currentNickname);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('修改昵称'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 20,
-          decoration: InputDecoration(
-            hintText: '请输入新昵称',
-            counterText: '',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isNotEmpty) {
-                Navigator.pop(context, text);
-              }
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-
-    // 注意：不手动 dispose controller，因为 Dialog 的 TextField 可能还在异步释放中
-    // controller 会被 GC 自动回收（无原生资源需要立即清理）
-
-    if (result != null && result.isNotEmpty && mounted) {
-      // 如果昵称没有变化，不调用API
-      if (result == currentNickname) return;
-
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.updateNickname(result);
-
-      if (!mounted) return;
-
-      if (success) {
-        // 使用 addPostFrameCallback 确保在 frame 结束后显示 SnackBar，避免 _dependents.isEmpty 错误
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('昵称已修改为: $result'),
-              duration: const Duration(seconds: 1),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          );
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('修改失败: ${authProvider.errorMessage ?? "未知错误"}'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _showLogoutDialog(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -279,162 +171,51 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, _) {
-        final user = authProvider.user;
-        return Scaffold(
-          appBar: AppBar(title: const Text('我的')),
-          body: ListView(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 32,
-                  horizontal: 20,
-                ),
-                color: AppTheme.primaryColor,
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: _pickAvatar,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 40,
-                            backgroundColor: Colors.white24,
-                            backgroundImage:
-                                (_avatarPath != null && _avatarPath!.isNotEmpty)
-                                ? FileImage(File(_avatarPath!))
-                                : null,
-                            child: (_avatarPath == null || _avatarPath!.isEmpty)
-                                ? Icon(
-                                    Icons.person,
-                                    size: 40,
-                                    color: Colors.white70,
-                                  )
-                                : null,
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: _pickAvatar,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.15),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  color: AppTheme.primaryColor,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: () => _editNickname(user?.nickname ?? '用户'),
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    user?.nickname ?? '用户',
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                const Icon(
-                                  Icons.edit,
-                                  size: 16,
-                                  color: Colors.white70,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'ID: ${user?.username ?? "---"}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.white.withOpacity(0.8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.qr_code, color: Colors.white),
-                      onPressed: () {},
-                    ),
-                  ],
+    return Scaffold(
+      appBar: AppBar(title: const Text('我的')),
+      body: ListView(
+        children: [
+          const ProfileEditor(),
+          const Divider(height: 1, indent: 16),
+          _buildMenuItem(Icons.delete_sweep, '清空聊天记录', () => _showClearChatDataDialog(context)),
+          _buildMenuItem(Icons.info_outline, '关于我们', () {
+            showAboutDialog(
+              context: context,
+              applicationName: 'CaoIM',
+              applicationVersion: '1.0.0',
+              applicationIcon: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/caoim_logo.jpg',
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(height: 12),
-              _buildMenuItem(Icons.person_outline, '个人信息', () {}),
-              _buildMenuItem(Icons.security, '账号与安全', () {}),
-              _buildMenuItem(Icons.notifications_outlined, '通知设置', () {}),
-              const Divider(height: 1, indent: 16),
-              _buildMenuItem(Icons.privacy_tip_outlined, '隐私设置', () {}),
-              _buildMenuItem(Icons.delete_sweep, '清空聊天记录', () => _showClearChatDataDialog(context)),
-              _buildMenuItem(Icons.info_outline, '关于我们', () {
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'CaoIM',
-                  applicationVersion: '1.0.0',
-                  applicationIcon: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/images/caoim_logo.jpg',
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  children: [const Text('即时通讯应用 Demo 版本')],
-                );
-              }),
-              const Divider(height: 1, indent: 16),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: OutlinedButton.icon(
-                  onPressed: () => _showLogoutDialog(context),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('退出登录', style: TextStyle(fontSize: 16)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.errorColor,
-                    side: const BorderSide(color: AppTheme.errorColor),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+              children: [const Text('即时通讯应用 Demo 版本')],
+            );
+          }),
+          const Divider(height: 1, indent: 16),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: OutlinedButton.icon(
+              onPressed: () => _showLogoutDialog(context),
+              icon: const Icon(Icons.logout),
+              label: const Text('退出登录', style: TextStyle(fontSize: 16)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.errorColor,
+                side: const BorderSide(color: AppTheme.errorColor),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 
