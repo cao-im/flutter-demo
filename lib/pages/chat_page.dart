@@ -305,15 +305,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     setState(() => _isSending = true);
     final content = _messageController.text.trim();
 
-    await Provider.of<ChatProvider>(
-      context,
-      listen: false,
-    ).sendMessage(content);
-
-    _messageController.clear();
-    setState(() => _isSending = false);
-
-    _scrollToBottom();
+    try {
+      await Provider.of<ChatProvider>(
+        context,
+        listen: false,
+      ).sendMessage(content);
+      if (!mounted) return;
+      _messageController.clear();
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   Future<void> _retryMessage(MessageModel message) async {
@@ -535,36 +543,137 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     );
   }
 
-  // 占位页面（保持原逻辑完全保留）
   Widget _buildPlaceholder() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 96,
-            color: Colors.grey[300],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '选择一个会话开始聊天',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
-              fontWeight: FontWeight.w400,
+    return const Material(
+      color: AppTheme.backgroundColor,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ChatEmptyMark(),
+            SizedBox(height: 28),
+            Text(
+              '选择一个会话开始聊天',
+              style: TextStyle(
+                fontSize: 16,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF4E5964),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '在左侧列表中选择联系人或群组',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[400],
+            SizedBox(height: 6),
+            Text(
+              '在左侧列表中选择联系人或群组',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: Color(0xFF9AA3AB),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+/// 未选中会话时的占位插画：浅色底盘上的两条对话气泡。
+class _ChatEmptyMark extends StatelessWidget {
+  const _ChatEmptyMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 168,
+      height: 168,
+      child: CustomPaint(painter: _ChatEmptyMarkPainter()),
+    );
+  }
+}
+
+class _ChatEmptyMarkPainter extends CustomPainter {
+  const _ChatEmptyMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    canvas.drawCircle(
+      center,
+      76,
+      Paint()..color = AppTheme.primaryColor.withValues(alpha: 0.06),
+    );
+
+    canvas.drawCircle(
+      center.translate(0, 4),
+      56,
+      Paint()
+        ..color = const Color(0x141A3A5C)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+    canvas.drawCircle(center, 58, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      center,
+      58,
+      Paint()
+        ..color = const Color(0xFFE3EDF5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    final incoming = RRect.fromRectAndRadius(
+      Rect.fromLTWH(center.dx - 42, center.dy - 36, 68, 44),
+      const Radius.circular(14),
+    );
+    canvas.drawRRect(incoming, Paint()..color = const Color(0xFFF3F7FB));
+    canvas.drawRRect(
+      incoming,
+      Paint()
+        ..color = const Color(0xFFD5E3EE)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+
+    final line = Paint()
+      ..color = const Color(0xFFC5D3DE)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3;
+    canvas.drawLine(
+      Offset(center.dx - 28, center.dy - 22),
+      Offset(center.dx + 14, center.dy - 22),
+      line,
+    );
+    canvas.drawLine(
+      Offset(center.dx - 28, center.dy - 10),
+      Offset(center.dx + 4, center.dy - 10),
+      line,
+    );
+
+    final outgoing = RRect.fromRectAndRadius(
+      Rect.fromLTWH(center.dx - 6, center.dy + 4, 54, 38),
+      const Radius.circular(14),
+    );
+    canvas.drawRRect(
+      outgoing,
+      Paint()..color = AppTheme.primaryColor.withValues(alpha: 0.16),
+    );
+
+    final outLine = Paint()
+      ..color = AppTheme.primaryColor.withValues(alpha: 0.55)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3;
+    canvas.drawLine(
+      Offset(center.dx + 6, center.dy + 18),
+      Offset(center.dx + 36, center.dy + 18),
+      outLine,
+    );
+    canvas.drawLine(
+      Offset(center.dx + 6, center.dy + 28),
+      Offset(center.dx + 24, center.dy + 28),
+      outLine,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

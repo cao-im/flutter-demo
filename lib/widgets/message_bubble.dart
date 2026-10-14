@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:photo_view/photo_view.dart';
 import '../models/message_model.dart';
+import '../pages/full_text_page.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
 
@@ -69,39 +69,57 @@ class MessageBubble extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    GestureDetector(
-                      onLongPress: () => _showMessageContextMenu(context),
-                      child: _isImageMessage
-                          ? _buildImageBubble(context, bubbleMaxWidth / 4)
-                          : Container(
-                              constraints:
-                                  BoxConstraints(maxWidth: bubbleMaxWidth),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: message.status == MessageStatus.recalled
-                                    ? Colors.grey[200]
-                                    : isMe
-                                        ? AppTheme.primaryColor
-                                        : Colors.white,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(16),
-                                  topRight: const Radius.circular(16),
-                                  bottomLeft: Radius.circular(isMe ? 16 : 4),
-                                  bottomRight: Radius.circular(isMe ? 4 : 16),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (isMe && message.status == MessageStatus.failed) ...[
+                          _buildStatusIcon(),
+                          const SizedBox(width: 6),
+                        ],
+                        GestureDetector(
+                          onLongPress: () => _showMessageContextMenu(context),
+                          child: _isImageMessage
+                              ? _buildImageBubble(context, bubbleMaxWidth / 4)
+                              : Container(
+                                  constraints: BoxConstraints(
+                                    maxWidth: bubbleMaxWidth,
                                   ),
-                                ],
-                              ),
-                              child: _buildContent(context),
-                            ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: message.status ==
+                                            MessageStatus.recalled
+                                        ? Colors.grey[200]
+                                        : isMe
+                                            ? AppTheme.primaryColor
+                                            : Colors.white,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(16),
+                                      topRight: const Radius.circular(16),
+                                      bottomLeft:
+                                          Radius.circular(isMe ? 16 : 4),
+                                      bottomRight:
+                                          Radius.circular(isMe ? 4 : 16),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: _buildContent(
+                                    context,
+                                    maxTextWidth: bubbleMaxWidth - 32,
+                                  ),
+                                ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -145,14 +163,16 @@ class MessageBubble extends StatelessWidget {
       case MessageStatus.failed:
         return GestureDetector(
           onTap: onRetry,
-          child: Icon(Icons.error_outline, size: 14, color: Colors.redAccent),
+          child: const Icon(Icons.error_outline, size: 20, color: Colors.redAccent),
         );
       case MessageStatus.recalled:
         return const SizedBox.shrink();
     }
   }
 
-  Widget _buildContent(BuildContext context) {
+  static const int _foldMaxLines = 6;
+
+  Widget _buildContent(BuildContext context, {required double maxTextWidth}) {
     if (message.status == MessageStatus.recalled) {
       return Text(
         '已撤回',
@@ -170,15 +190,73 @@ class MessageBubble extends StatelessWidget {
         return _buildImageContent(context, maxWidth: 220);
       case MessageType.text:
       default:
-        return SelectableText(
-          message.content,
-          style: TextStyle(
-            fontSize: 15,
-            color: isMe ? Colors.white : AppTheme.textPrimaryColor,
-            height: 1.4,
-          ),
-        );
+        return _buildFoldableText(context, maxTextWidth);
     }
+  }
+
+  Widget _buildFoldableText(BuildContext context, double maxTextWidth) {
+    final style = TextStyle(
+      fontSize: 15,
+      color: isMe ? Colors.white : AppTheme.textPrimaryColor,
+      height: 1.4,
+    );
+    final exceeds = _textExceedsMaxLines(
+      message.content,
+      style,
+      maxTextWidth,
+      _foldMaxLines,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          message.content,
+          style: style,
+          maxLines: exceeds ? _foldMaxLines : null,
+          overflow: exceeds ? TextOverflow.ellipsis : TextOverflow.visible,
+        ),
+        if (exceeds)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => FullTextPage(content: message.content),
+                  ),
+                );
+              },
+              child: Text(
+                '全文',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: isMe
+                      ? Colors.white.withValues(alpha: 0.92)
+                      : AppTheme.primaryColor,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  bool _textExceedsMaxLines(
+    String text,
+    TextStyle style,
+    double maxWidth,
+    int maxLines,
+  ) {
+    if (text.isEmpty) return false;
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: maxLines,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: maxWidth > 0 ? maxWidth : 240);
+    return painter.didExceedMaxLines;
   }
 
   /// 图片消息：无彩色气泡底，仅圆角 + 轻阴影，收发两端一致

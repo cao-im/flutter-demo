@@ -29,6 +29,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
   static const double _middlePanelWidth = 320.0;
   static const double _minWindowWidth = 900.0;
   bool _initialized = false;
+  bool _clearConversationScheduled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -332,25 +333,34 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     ]));
   }
 
-  Widget _buildRightPanel(LayoutProvider layoutProvider) {
-    // 非消息面板时，清除当前聊天状态以恢复通知功能
-    if (layoutProvider.selectedIndex != 0) {
+  /// 离开聊天面板、或没有选中会话时，清掉当前会话以恢复消息通知。
+  /// 只在确实有内容可清时排队一次，避免 build → notifyListeners → build 死循环。
+  void _scheduleClearCurrentConversationIfNeeded() {
+    final chatProvider = context.read<ChatProvider>();
+    if (chatProvider.currentConversation == null && chatProvider.messages.isEmpty) {
+      return;
+    }
+    if (_clearConversationScheduled) return;
+    _clearConversationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _clearConversationScheduled = false;
+      if (!mounted) return;
       context.read<ChatProvider>().clearCurrentConversation();
+    });
+  }
+
+  Widget _buildRightPanel(LayoutProvider layoutProvider) {
+    final conversationId = layoutProvider.currentConversationId ?? '';
+    // 非消息面板，或消息面板但未选中会话：恢复通知
+    if (layoutProvider.selectedIndex != 0 || conversationId.isEmpty) {
+      _scheduleClearCurrentConversationIfNeeded();
     }
 
     switch (layoutProvider.selectedIndex) {
       case 0:
         // 消息：显示聊天面板
-        final conversationId = layoutProvider.currentConversationId ?? '';
         final conversationName = layoutProvider.currentConversationName ?? '';
         final isGroup = layoutProvider.isGroup;
-
-        // 如果没有选中任何会话，也清除当前聊天状态（恢复通知）
-        if (conversationId.isEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) context.read<ChatProvider>().clearCurrentConversation();
-          });
-        }
 
         return Expanded(
           key: ValueKey('chat_panel_$conversationId'),

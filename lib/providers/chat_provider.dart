@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
@@ -6,6 +9,7 @@ import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
+import '../router/app_router.dart';
 import '../services/apis/file_api.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
@@ -14,6 +18,8 @@ import '../utils/display_name_helper.dart';
 import '../sdk/im_sdk_manager.dart';
 
 class ChatProvider with ChangeNotifier {
+  static const int maxTextBytes = 60 * 1024;
+
   final IMSdkManager _sdkManager = IMSdkManager();
   final EventBus _eventBus = EventBus();
 
@@ -61,10 +67,18 @@ class ChatProvider with ChangeNotifier {
     if (_isEventListening) return;
     _isEventListening = true;
 
-    // 监听消息发送成功 → 刷新会话列表
+    // 监听消息发送成功/状态更新 → 同步气泡状态并刷新会话列表
     _eventBus.on<MessageSentEvent>().listen((event) {
-      debugPrint('📍[ChatProvider] 📢 收到 MessageSentEvent, 自动刷新会话列表');
+      debugPrint('📍[ChatProvider] 📢 收到 MessageSentEvent, status=${event.message.status.name}');
+      _syncLocalMessageStatus(event.message);
       loadConversations();
+    });
+
+    // 服务端拒绝发送（消息过长等）→ 标记失败并提示用户
+    _eventBus.on<MessageSendFailedEvent>().listen((event) {
+      debugPrint('❌[ChatProvider] 📢 收到 MessageSendFailedEvent: ${event.reason}, mid=${event.mid}');
+      _markLocalMessageFailed(event.mid);
+      _showSendErrorTip(event.reason);
     });
 
     // 监听收到新消息 → 刷新会话列表
@@ -522,7 +536,10 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> sendMessage(String content, {String type = 'text'}) async {
-    debugPrint('📤[ChatProvider] sendMessage 被调用: content=$content, type=$type');
+    debugPrint('📤[ChatProvider] sendMessage 被调用: bytes=${utf8.encode(content).length}, type=$type');
+    if (type == 'text' && utf8.encode(content).length > maxTextBytes) {
+      throw StateError('消息过长，单条最多 60KB');
+    }
     debugPrint('📤[ChatProvider] 当前 _currentConversation: ${_currentConversation?.id ?? "null"}');
 
     if (_currentConversation == null) {
@@ -849,7 +866,75 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  void _syncLocalMessageStatus(sdk.Message sdkMessage) {
+    final mid = sdkMessage.mid;
+    if (mid == null) return;
+
+    final index = _messages.indexWhere((m) => m.mid == mid);
+    if (index == -1) return;
+
+    final mapped = _mapSdkStatus(sdkMessage.status);
+    _messages[index] = _messages[index].copyWith(
+      isSending: mapped == MessageStatus.sending,
+      isSent: mapped != MessageStatus.failed && mapped != MessageStatus.sending,
+      status: mapped,
+    );
+    notifyListeners();
+  }
+
+  void _markLocalMessageFailed(int? mid) {
+    var index = -1;
+    if (mid != null) {
+      index = _messages.indexWhere((m) => m.mid == mid);
+    }
+    if (index == -1) {
+      index = _messages.lastIndexWhere(
+        (m) => m.isSending || m.status == MessageStatus.sending,
+      );
+    }
+    if (index == -1) return;
+
+    _messages[index] = _messages[index].copyWith(
+      isSending: false,
+      isSent: false,
+      status: MessageStatus.failed,
+    );
+    notifyListeners();
+  }
+
+  MessageStatus _mapSdkStatus(sdk.MessageStatus status) {
+    switch (status) {
+      case sdk.MessageStatus.sending:
+        return MessageStatus.sending;
+      case sdk.MessageStatus.sent:
+        return MessageStatus.sent;
+      case sdk.MessageStatus.delivered:
+        return MessageStatus.delivered;
+      case sdk.MessageStatus.read:
+        return MessageStatus.read;
+      case sdk.MessageStatus.failed:
+        return MessageStatus.failed;
+      case sdk.MessageStatus.recalled:
+        return MessageStatus.recalled;
+    }
+  }
+
+  void _showSendErrorTip(String reason) {
+    final context = AppRouter.navigatorKey.currentContext;
+    if (context == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(reason),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   void clearCurrentConversation() {
+    if (_currentConversation == null && _messages.isEmpty) {
+      return;
+    }
     debugPrint('🗑️[ChatProvider] clearCurrentConversation 被调用，清空前: ${_currentConversation?.id ?? "null"}');
     _currentConversation = null;
     _messages = [];
