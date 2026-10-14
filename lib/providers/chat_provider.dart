@@ -739,6 +739,28 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 仅从本机删除这条消息，不影响对方。
+  Future<void> deleteMessage(MessageModel message) async {
+    final mid = message.mid;
+    final localId = int.tryParse(message.id);
+    _messages.removeWhere((item) {
+      if (item.id == message.id) return true;
+      if (mid != null && mid > 0 && item.mid == mid) return true;
+      return false;
+    });
+    notifyListeners();
+
+    try {
+      await _sdkManager.client.deleteLocalMessage(
+        id: localId,
+        mid: (mid != null && mid > 0) ? mid : null,
+      );
+      loadConversations();
+    } catch (e) {
+      debugPrint('❌[ChatProvider] 删除本地消息失败: $e');
+    }
+  }
+
   /// 撤回消息
   Future<void> recallMessage(MessageModel message) async {
     try {

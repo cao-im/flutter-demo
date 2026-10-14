@@ -16,6 +16,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onRetry;
   final VoidCallback? onImageTap;
   final Function(MessageModel)? onRecall;
+  final void Function(MessageModel)? onDelete;
 
   const MessageBubble({
     super.key,
@@ -27,6 +28,7 @@ class MessageBubble extends StatelessWidget {
     this.onRetry,
     this.onImageTap,
     this.onRecall,
+    this.onDelete,
   });
 
   @override
@@ -77,8 +79,11 @@ class MessageBubble extends StatelessWidget {
                           _buildStatusIcon(),
                           const SizedBox(width: 6),
                         ],
-                        GestureDetector(
-                          onLongPress: () => _showMessageContextMenu(context),
+                        Builder(
+                          builder: (bubbleContext) {
+                            return GestureDetector(
+                          onLongPress: () =>
+                              _showMessageContextMenu(bubbleContext),
                           child: _isImageMessage
                               ? _buildImageBubble(context, bubbleMaxWidth / 4)
                               : Container(
@@ -118,6 +123,8 @@ class MessageBubble extends StatelessWidget {
                                     maxTextWidth: bubbleMaxWidth - 32,
                                   ),
                                 ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -365,17 +372,20 @@ class MessageBubble extends StatelessWidget {
   }
 
   void _showMessageContextMenu(BuildContext context) {
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final bubble = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (bubble == null || overlay == null || !bubble.hasSize) return;
+
+    final offset = bubble.localToGlobal(Offset.zero, ancestor: overlay);
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(offset.dx, offset.dy, bubble.size.width, bubble.size.height),
+      Offset.zero & overlay.size,
+    );
 
     showMenu(
       context: context,
-      position: RelativeRect.fromLTRB(
-        overlay.size.width * 0.25,
-        overlay.size.height * 0.4,
-        overlay.size.width * 0.25,
-        overlay.size.height * 0.4,
-      ),
+      position: position,
       items: [
         PopupMenuItem(
           value: 'copy',
@@ -398,16 +408,17 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              const Icon(Icons.delete, size: 20, color: AppTheme.errorColor),
-              const SizedBox(width: 8),
-              const Text('删除'),
-            ],
+        if (onDelete != null)
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                const Icon(Icons.delete, size: 20, color: AppTheme.errorColor),
+                const SizedBox(width: 8),
+                const Text('删除'),
+              ],
+            ),
           ),
-        ),
         PopupMenuItem(
           value: 'forward',
           child: Row(
@@ -454,14 +465,7 @@ class MessageBubble extends StatelessWidget {
         }
         break;
       case 'delete':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('消息已删除'),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
+        onDelete?.call(message);
         break;
       case 'forward':
         ScaffoldMessenger.of(context).showSnackBar(

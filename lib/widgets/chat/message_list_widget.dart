@@ -16,6 +16,7 @@ class MessageListWidget extends StatefulWidget {
   final bool isGroup;
   final void Function(MessageModel) onRetry;
   final void Function(MessageModel)? onRecall;
+  final void Function(MessageModel)? onDelete;
 
   const MessageListWidget({
     super.key,
@@ -25,6 +26,7 @@ class MessageListWidget extends StatefulWidget {
     this.isGroup = false,
     required this.onRetry,
     this.onRecall,
+    this.onDelete,
   });
 
   @override
@@ -146,6 +148,7 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                       showName: widget.isGroup && !isMe,
                       onRetry: () => widget.onRetry(message),
                       onRecall: widget.onRecall,
+                      onDelete: widget.onDelete,
                     ),
                   ],
                 );

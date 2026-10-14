@@ -331,6 +331,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _scrollToBottom();
   }
 
+  Future<void> _deleteMessage(MessageModel message) async {
+    await Provider.of<ChatProvider>(context, listen: false).deleteMessage(message);
+  }
+
   Future<void> _recallMessage(MessageModel message) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
 
@@ -525,6 +529,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               isGroup: widget.isGroup,
               onRetry: (message) => _retryMessage(message),
               onRecall: (message) => _recallMessage(message),
+              onDelete: (message) => _deleteMessage(message),
             ),
 
             // 输入栏：使用提取的组件，传入动态面板高度
