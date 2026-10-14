@@ -29,6 +29,9 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
   /// 更多按钮回调
   final VoidCallback? onMoreTap;
 
+  /// 点击标题，进入对方资料页
+  final VoidCallback? onTitleTap;
+
   /// 语音通话回调
   final VoidCallback? onVoiceCallTap;
 
@@ -43,6 +46,7 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
     this.showVoiceCall = false,
     this.showVideoCall = false,
     this.onMoreTap,
+    this.onTitleTap,
     this.onVoiceCallTap,
     this.onVideoCallTap,
   });
@@ -61,14 +65,17 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     if (style == ChatHeaderStyle.appBar) {
       return AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title),
-            if (subtitle != null && subtitle!.isNotEmpty)
-              Text(subtitle!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-          ],
+        title: GestureDetector(
+          onTap: onTitleTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title),
+              if (subtitle != null && subtitle!.isNotEmpty)
+                Text(subtitle!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            ],
+          ),
         ),
         actions: [
           IconButton(icon: const Icon(Icons.more_vert), onPressed: onMoreTap ?? () {}),
@@ -91,12 +98,15 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: style == ChatHeaderStyle.panel ? 17.0 : 16.0,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimaryColor,
+            child: GestureDetector(
+              onTap: onTitleTap,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: style == ChatHeaderStyle.panel ? 17.0 : 16.0,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimaryColor,
+                ),
               ),
             ),
           ),

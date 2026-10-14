@@ -83,7 +83,8 @@ class _MessageListWidgetState extends State<MessageListWidget> {
         _lastMessageCount = currentMessageCount;
 
         final currentUser = authProvider.user;
-        final authUserId = currentUser?.id;
+        final appUserId = currentUser?.id;
+        final imUserId = currentUser?.imUserId;
 
         // 异步获取联系人头像和昵称
         return FutureBuilder<ContactInfo?>(
@@ -114,8 +115,11 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                   previousMessage?.timestamp,
                 );
 
-                // 判断消息是否来自自己
-                final isMe = message.isSent || message.senderId == authUserId;
+                // senderId 存的是 IM 用户 ID，账号 id 对不上时不能把自己的消息画到左边。
+                final senderId = message.senderId;
+                final isMe = (senderId.isNotEmpty &&
+                        (senderId == imUserId || senderId == appUserId)) ||
+                    message.isSent;
 
                 // 设置发送者头像和昵称
                 // 群聊：优先使用消息自带的 senderInfo（每条消息的发送者可能不同）

@@ -588,6 +588,16 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
           layoutProvider.selectConversation(contactId, name, false);
           Provider.of<ChatProvider>(context, listen: false).setCurrentConversation(ConversationModel(id: contactId, targetId: realUserId, name: name, isGroup: false, participantIds: []));
         });
+      } else if (value == 'profile') {
+        final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
+        final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
+        layoutProvider.selectContact(UserModel(
+          id: contact.id?.toString() ?? '$realUserId',
+          username: contact.username?.toString() ?? '',
+          nickname: contact.nickname?.toString() ?? '',
+          avatar: contact.avatar?.toString(),
+          imUserId: realUserId > 0 ? '$realUserId' : contact.imUserId?.toString(),
+        ));
       } else if (value == 'delete') {
         _confirmDeleteContact(contact, name);
       }

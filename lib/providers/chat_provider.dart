@@ -1012,7 +1012,6 @@ class ChatProvider with ChangeNotifier {
     final mapped = _mapSdkStatus(sdkMessage.status);
     _messages[index] = _messages[index].copyWith(
       isSending: mapped == MessageStatus.sending,
-      isSent: mapped != MessageStatus.failed && mapped != MessageStatus.sending,
       status: mapped,
     );
     notifyListeners();
@@ -1032,7 +1031,6 @@ class ChatProvider with ChangeNotifier {
 
     _messages[index] = _messages[index].copyWith(
       isSending: false,
-      isSent: false,
       status: MessageStatus.failed,
     );
     notifyListeners();

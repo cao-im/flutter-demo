@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,7 +27,8 @@ class _ProfileEditorState extends State<ProfileEditor> {
 
   bool _seeded = false;
   bool _saving = false;
-  String? _pickedPath;
+  Uint8List? _pickedBytes;
+  String? _pickedName;
 
   @override
   void dispose() {
@@ -54,7 +55,12 @@ class _ProfileEditorState extends State<ProfileEditor> {
         imageQuality: 85,
       );
       if (image == null || !mounted) return;
-      setState(() => _pickedPath = image.path);
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _pickedBytes = bytes;
+        _pickedName = image.name;
+      });
     } catch (e) {
       _showTip('选择头像失败');
     }
@@ -88,11 +94,11 @@ class _ProfileEditorState extends State<ProfileEditor> {
 
     setState(() => _saving = true);
     try {
-      if (_pickedPath != null) {
-        final bytes = await File(_pickedPath!).readAsBytes();
-        final ext = _extensionOf(_pickedPath!);
+      final picked = _pickedBytes;
+      if (picked != null) {
+        final ext = _extensionOf(_pickedName ?? '');
         final url = await FileApi().uploadBytes(
-          bytes,
+          picked,
           'avatar_${DateTime.now().millisecondsSinceEpoch}.$ext',
         );
         data['avatar'] = url;
@@ -116,7 +122,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
               avatar: updated.avatar ?? '',
             );
       }
-      setState(() => _pickedPath = null);
+      setState(() {
+        _pickedBytes = null;
+        _pickedName = null;
+      });
       _showTip('资料已保存');
     } catch (e) {
       _showTip(e.toString().replaceFirst('Exception: ', ''));
@@ -179,10 +188,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
             onTap: _saving ? null : _pickAvatar,
             child: Stack(
               children: [
-                _pickedPath != null
+                _pickedBytes != null
                     ? ClipOval(
-                        child: Image.file(
-                          File(_pickedPath!),
+                        child: Image.memory(
+                          _pickedBytes!,
                           width: 88,
                           height: 88,
                           fit: BoxFit.cover,

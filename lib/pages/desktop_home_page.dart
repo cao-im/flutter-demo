@@ -531,12 +531,55 @@ class _SettingsItem extends StatelessWidget {
 }
 
 /// 联系人详情面板（桌面端右侧展示）
-class _ContactDetailPanel extends StatelessWidget {
+class _ContactDetailPanel extends StatefulWidget {
   final UserModel contact;
   const _ContactDetailPanel({required this.contact});
 
   @override
+  State<_ContactDetailPanel> createState() => _ContactDetailPanelState();
+}
+
+class _ContactDetailPanelState extends State<_ContactDetailPanel> {
+  late UserModel _contact;
+
+  @override
+  void initState() {
+    super.initState();
+    _contact = widget.contact;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshProfile());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ContactDetailPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contact.id != widget.contact.id ||
+        oldWidget.contact.imUserId != widget.contact.imUserId) {
+      _contact = widget.contact;
+      _refreshProfile();
+    } else if (widget.contact.nickname != _contact.nickname ||
+        widget.contact.avatar != _contact.avatar) {
+      _contact = widget.contact;
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    final imUserId = int.tryParse(_contact.imUserId ?? '') ??
+        int.tryParse(_contact.id) ??
+        0;
+    if (imUserId <= 0 || !mounted) return;
+    final updated = await context.read<ContactProvider>().refreshContactFromServer(imUserId);
+    if (!mounted || updated == null) return;
+    final name = updated.nickname.isNotEmpty ? updated.nickname : updated.username;
+    setState(() => _contact = updated);
+    final layout = context.read<LayoutProvider>();
+    layout.replaceSelectedContact(updated);
+    layout.renameConversationIfOpen(updated.id, name);
+    layout.renameConversationIfOpen('$imUserId', name);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final contact = _contact;
     final displayName = contact.nickname.isNotEmpty ? contact.nickname : contact.username;
     final avatarUrl = contact.avatar;
 

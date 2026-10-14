@@ -23,6 +23,15 @@ class ContactApi extends BaseApi {
     return extractList(response);
   }
 
+  /// 查询指定用户的最新资料（昵称、头像等）。
+  Future<Map<String, dynamic>?> getUser(int userId) async {
+    final response = await getIm('/user/info/$userId');
+    final data = extractData(response);
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return null;
+  }
+
   /// 搜索用户
   ///
   /// [keyword] 搜索关键词（用户名/昵称）

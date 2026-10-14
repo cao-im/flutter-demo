@@ -242,6 +242,21 @@ class ContactDatabaseService {
     print('[ContactDatabaseService] 📝 联系人昵称已更新: userId=$userId, nickname=$nickname');
   }
 
+  /// 只更新昵称和头像，保留备注等本地字段。
+  Future<void> updateContactProfile(
+    int userId, {
+    required String nickname,
+    required String avatar,
+  }) async {
+    final db = database;
+    if (userId <= 0) return;
+    await (db.update(db.contacts)..where((tbl) => tbl.userId.equals(userId)))
+        .write(ContactsCompanion(
+          nickname: Value(nickname),
+          avatar: Value(avatar),
+        ));
+  }
+
   /// 兼容旧接口：字符串形式的昵称更新
   Future<void> updateContactNicknameString(String id, String nickname) async {
     final userId = int.tryParse(id) ?? 0;

@@ -71,6 +71,11 @@ class ApiService {
     return contactApi.getFriendList(userId);
   }
 
+  /// 查询指定 IM 用户的最新资料。
+  Future<Map<String, dynamic>?> getImUser(int userId) async {
+    return contactApi.getUser(userId);
+  }
+
   /// 发送好友请求（委托给 [ContactApi.sendFriendRequest]）
   Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
     return contactApi.sendFriendRequest(fromUserId, toUserId);

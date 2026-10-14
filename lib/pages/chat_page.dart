@@ -5,13 +5,16 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/chat_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_keyboard_provider.dart';
+import '../providers/layout_provider.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
+import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat/chat_page_shell.dart';
 import '../widgets/chat/chat_header_widget.dart';
 import '../widgets/chat/message_list_widget.dart';
 import '../widgets/chat/chat_input_widget.dart';
+import 'user_profile_page.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -527,11 +530,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
             // 标题栏：根据平台选择样式
             header: ChatHeaderWidget(
-              title: widget.conversationName,
+              title: _liveConversationName(context.watch<ChatProvider>()),
               subtitle: widget.isGroup ? '群聊' : '在线',
               style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
               showVoiceCall: widget.isPanelMode,
               showVideoCall: widget.isPanelMode,
+              onTitleTap: widget.isGroup ? null : () => _openPeerProfile(context),
               onMoreTap: () {},
             ),
 
@@ -560,6 +564,37 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           );
         },
       ),
+    );
+  }
+
+  String _liveConversationName(ChatProvider chatProvider) {
+    for (final conversation in chatProvider.conversations) {
+      if (conversation.isGroup == widget.isGroup &&
+          conversation.targetId == effectiveTargetId &&
+          conversation.name.isNotEmpty) {
+        return conversation.name;
+      }
+    }
+    return widget.conversationName;
+  }
+
+  void _openPeerProfile(BuildContext context) {
+    final userId = effectiveTargetId;
+    if (userId <= 0) return;
+    final contact = UserModel(
+      id: '$userId',
+      username: '',
+      nickname: widget.conversationName,
+      imUserId: '$userId',
+    );
+    if (widget.isPanelMode) {
+      final layout = context.read<LayoutProvider>();
+      layout.selectNavigation(1);
+      layout.selectContact(contact);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfilePage(contact: contact)),
     );
   }
 

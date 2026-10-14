@@ -165,6 +165,64 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
+  /// 进入用户主页时拉取服务器上的最新昵称和头像，并写回本地联系人。
+  Future<UserModel?> refreshContactFromServer(int imUserId) async {
+    if (imUserId <= 0) return null;
+    try {
+      final data = await _apiService.getImUser(imUserId);
+      if (data == null) return null;
+      final user = UserModel(
+        id: imUserId.toString(),
+        username: data['username']?.toString() ?? '',
+        nickname: data['nickname']?.toString() ?? '',
+        avatar: data['avatar']?.toString(),
+        phone: data['phone']?.toString(),
+        email: data['email']?.toString(),
+        imUserId: imUserId.toString(),
+      );
+
+      await _initDatabaseIfNeeded();
+      final existing = await _dbService.getContactByUserId(imUserId);
+      if (existing != null) {
+        await _dbService.updateContactProfile(
+          imUserId,
+          nickname: user.nickname,
+          avatar: user.avatar ?? '',
+        );
+      } else {
+        await _dbService.upsertContacts([user]);
+      }
+
+      final index = _contacts.indexWhere(
+        (c) => c.imUserId == user.imUserId || c.id == user.id,
+      );
+      if (index != -1) {
+        final previous = _contacts[index];
+        _contacts[index] = user.copyWith(
+          id: previous.id,
+          phone: user.phone ?? previous.phone,
+          email: user.email ?? previous.email,
+        );
+      }
+      updateCache(ContactInfo(
+        id: 0,
+        userId: imUserId,
+        username: user.username,
+        nickname: user.nickname,
+        avatar: user.avatar ?? '',
+      ));
+      _eventBus.fire(ContactDataChangedEvent(
+        contactId: imUserId,
+        changeType: 'updated',
+      ));
+      notifyListeners();
+      return index != -1 ? _contacts[index] : user;
+    } catch (e) {
+      debugPrint('❌ 刷新用户资料失败: userId=$imUserId, error=$e');
+      return null;
+    }
+  }
+
   Future<List<UserModel>> loadContactsFromLocal() async {
     try {
       final contacts = await _dbService.getAllContacts();
