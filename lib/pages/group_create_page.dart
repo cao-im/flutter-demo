@@ -1,10 +1,9 @@
+import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_widget.dart';
 import '../providers/contact_provider.dart';
-import '../services/api_service.dart';
-import '../services/storage_service.dart';
 import '../router/app_router.dart';
 
 class GroupCreatePage extends StatefulWidget {
@@ -81,31 +80,17 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
     );
 
     try {
-      final contactProvider = Provider.of<ContactProvider>(context, listen: false);
-
-      // 获取当前用户ID
-      final imUserIdStr = await StorageService.getImUserId();
-      if (imUserIdStr == null) { Navigator.pop(context); return; }
-      final ownerId = int.tryParse(imUserIdStr) ?? 0;
-      if (ownerId <= 0) { Navigator.pop(context); return; }
-
-      // 将选中的成员ID转为 int 列表
       final memberIds = _selectedMembers
           .map((id) => int.tryParse(id) ?? 0)
           .where((id) => id > 0)
           .toList();
-
-      // 调用 API 创建群组
-      final apiService = ApiService();
-      final result = await apiService.createGroup(
-        ownerId,
-        _groupNameController.text.trim(),
-        memberIds,
+      final groupNameInput = _groupNameController.text.trim();
+      final group = await IMClient.instance.createGroup(
+        name: groupNameInput,
+        memberIds: memberIds,
       );
-
-      final groupData = result['data'] as Map<String, dynamic>?;
-      final groupId = groupData?['id']?.toString() ?? '';
-      final groupName = groupData?['name'] ?? _groupNameController.text.trim();
+      final groupId = group.id.toString();
+      final groupName = group.name.isNotEmpty ? group.name : groupNameInput;
 
       if (!mounted) return;
       Navigator.pop(context); // 关闭 loading

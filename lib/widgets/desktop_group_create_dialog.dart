@@ -1,9 +1,8 @@
+import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../providers/contact_provider.dart';
-import '../services/api_service.dart';
 import '../widgets/avatar_widget.dart';
 import '../theme/app_theme.dart';
 
@@ -75,26 +74,17 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
     setState(() => _isCreating = true);
 
     try {
-      final storage = await SharedPreferences.getInstance();
-      final userIdStr = storage.getString('im_user_id');
-      final ownerId = int.tryParse(userIdStr ?? '');
-      if (ownerId == null || ownerId <= 0) {
-        throw Exception('无法获取当前用户 ID');
-      }
-
       final memberIds = _selectedMemberIds.map((id) => int.tryParse(id) ?? 0).where((id) => id > 0).toList();
       final groupName = _groupNameController.text.trim();
-
-      final apiService = ApiService();
-      final result = await apiService.groupApi.createGroup(ownerId, groupName, memberIds);
-
-      // 从 Result 包裹中提取 data 字段
-      final groupData = result['data'] as Map<String, dynamic>? ?? result;
+      final group = await IMClient.instance.createGroup(
+        name: groupName,
+        memberIds: memberIds,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop({
-        'groupId': groupData['id']?.toString(),
-        'groupName': groupName,
+        'groupId': group.id.toString(),
+        'groupName': group.name.isNotEmpty ? group.name : groupName,
       });
     } catch (e) {
       if (!mounted) return;

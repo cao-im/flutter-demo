@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:cao_im_sdk_flutter/utils/network_log_interceptor.dart';
-import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' show NetworkLogInterceptor;
+import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' show IMClient, NetworkLogInterceptor;
 import '../config/server_config.dart';
 import '../services/storage_service.dart';
 
@@ -29,6 +28,15 @@ abstract class BaseApi {
 
   late final Dio _appDio;
   late final Dio _imDio;
+  static String? _persistedImToken;
+
+  static String? _liveImAccessToken() {
+    try {
+      final current = IMClient.instance.token;
+      if (current.isNotEmpty) return current;
+    } catch (_) {}
+    return null;
+  }
 
   BaseApi() {
     _appDio = _createAppDio();
@@ -91,9 +99,16 @@ abstract class BaseApi {
 
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final imToken = await StorageService.getImToken();
+        final liveToken = _liveImAccessToken();
+        final imToken = (liveToken != null && liveToken.isNotEmpty)
+            ? liveToken
+            : await StorageService.getImToken();
         if (imToken != null && imToken.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $imToken';
+          if (liveToken != null && liveToken != _persistedImToken) {
+            _persistedImToken = liveToken;
+            await StorageService.saveImToken(liveToken);
+          }
         }
         handler.next(options);
       },
