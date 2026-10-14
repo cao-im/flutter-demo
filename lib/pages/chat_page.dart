@@ -324,6 +324,20 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _sendVoice(String path, int seconds) async {
+    try {
+      await Provider.of<ChatProvider>(context, listen: false).sendVoiceFile(path, seconds);
+      if (!mounted) return;
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
+  }
+
   Future<void> _retryMessage(MessageModel message) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
 
@@ -539,6 +553,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onSend: _sendMessage,
               isSending: _isSending,
               onMoreOptions: _showMoreOptions,
+              onVoiceRecorded: _sendVoice,
               style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
               externalFocusNode: _inputFocusNode,
             ),

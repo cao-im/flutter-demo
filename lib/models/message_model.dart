@@ -1,4 +1,5 @@
 import 'sender_info_model.dart';
+import 'voice_content.dart';
 
 enum MessageType { text, image, video, audio, file }
 
@@ -101,6 +102,24 @@ class MessageModel {
     if (url != null && url.isNotEmpty) return url;
     if (content.startsWith('http')) return content;
     return null;
+  }
+
+  VoiceContent? get _voice =>
+      type == MessageType.audio ? VoiceContent.tryParse(content) : null;
+
+  /// 可播放地址：发送中用本地文件，发出后用上传地址。
+  String? get voiceSource {
+    if (type != MessageType.audio) return null;
+    final url = mediaUrl;
+    if (url != null && url.isNotEmpty) return url;
+    return _voice?.url;
+  }
+
+  int get voiceDuration {
+    final seconds = _voice?.duration ?? 1;
+    if (seconds < 1) return 1;
+    if (seconds > 60) return 60;
+    return seconds;
   }
 
   String get displayText {

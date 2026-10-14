@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
+import '../models/voice_content.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../router/app_router.dart';
@@ -535,6 +537,79 @@ class ChatProvider with ChangeNotifier {
     await sendMessage(url, type: 'image');
   }
 
+  /// 先在列表里放一条本地语音，上传成功后再按语音类型发出。
+  Future<void> sendVoiceFile(String path, int durationSeconds) async {
+    if (_currentConversation == null) {
+      throw StateError('请先选择会话');
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      throw StateError('录音文件不存在');
+    }
+    final seconds = durationSeconds.clamp(1, 60);
+    final currentUserId = _sdkManager.client.currentUserId;
+    final currentUserInfo = await _getCurrentUserInfo();
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    _messages.add(MessageModel(
+      id: tempId,
+      conversationId: _currentConversation!.id,
+      senderId: currentUserId?.toString() ?? '',
+      receiverId: '',
+      type: MessageType.audio,
+      content: VoiceContent.encode(path, seconds),
+      mediaUrl: path,
+      timestamp: DateTime.now(),
+      isSending: true,
+      isSent: true,
+      status: MessageStatus.sending,
+      senderInfo: currentUserInfo,
+      canRecall: true,
+    ));
+    notifyListeners();
+
+    try {
+      final content = await _uploadVoice(path, seconds);
+      final remote = VoiceContent.tryParse(content);
+      _replaceMessage(tempId, (m) => m.copyWith(
+        content: content,
+        mediaUrl: remote?.url ?? m.mediaUrl,
+      ));
+
+      final targetId = _currentConversation!.targetId;
+      if (targetId <= 0) {
+        throw StateError('会话无效，无法发送');
+      }
+      final sentMessage = _currentConversation!.isGroup
+          ? await _sdkManager.client.sendGroupMessage(
+              groupId: targetId,
+              content: content,
+              msgType: sdk.MessageType.voice.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            )
+          : await _sdkManager.client.sendMessage(
+              toId: targetId,
+              content: content,
+              msgType: sdk.MessageType.voice.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            );
+      _replaceMessage(tempId, (m) => m.copyWith(mid: sentMessage.mid));
+      loadConversations();
+    } catch (e) {
+      debugPrint('发送语音失败: $e');
+      await _keepFailedOutgoing(
+        tempId: tempId,
+        content: VoiceContent.encode(path, seconds),
+        msgType: sdk.MessageType.voice.value,
+        localPath: path,
+        nickname: currentUserInfo?.nickname,
+        avatar: currentUserInfo?.avatar,
+      );
+      rethrow;
+    }
+  }
+
   Future<void> sendMessage(String content, {String type = 'text'}) async {
     debugPrint('📤[ChatProvider] sendMessage 被调用: bytes=${utf8.encode(content).length}, type=$type');
     if (type == 'text' && utf8.encode(content).length > maxTextBytes) {
@@ -556,9 +631,13 @@ class ChatProvider with ChangeNotifier {
       conversationId: _currentConversation!.id,
       senderId: currentUserId?.toString() ?? '',
       receiverId: '',
-      type: type == 'image' ? MessageType.image : MessageType.text,
+      type: _uiTypeFromWire(type),
       content: content,
-      mediaUrl: type == 'image' ? content : null,
+      mediaUrl: type == 'image'
+          ? content
+          : type == 'voice'
+              ? VoiceContent.tryParse(content)?.url
+              : null,
       timestamp: DateTime.now(),
       isSending: true,
       isSent: true,
@@ -588,7 +667,7 @@ class ChatProvider with ChangeNotifier {
         sentMessage = await _sdkManager.client.sendGroupMessage(
           groupId: targetId,
           content: content,
-          msgType: type == 'image' ? 1 : 0,
+          msgType: _sdkTypeFromWire(type),
           senderNickname: currentUserInfo?.nickname,
           senderAvatar: currentUserInfo?.avatar,
         );
@@ -596,7 +675,7 @@ class ChatProvider with ChangeNotifier {
         sentMessage = await _sdkManager.client.sendMessage(
           toId: targetId,
           content: content,
-          msgType: type == 'image' ? 1 : 0,
+          msgType: _sdkTypeFromWire(type),
           senderNickname: currentUserInfo?.nickname,
           senderAvatar: currentUserInfo?.avatar,
         );
@@ -697,18 +776,34 @@ class ChatProvider with ChangeNotifier {
       final targetId = _currentConversation!.targetId;
       final isGroup = _currentConversation!.isGroup;
 
-      sdk.Message sentMessage;
-      if (isGroup) {
+      var content = message.content;
+      if (message.type == MessageType.audio) {
+        content = await _uploadVoiceIfNeeded(message);
+        final voice = VoiceContent.tryParse(content);
+        _replaceMessage(message.id, (m) => m.copyWith(
+          content: content,
+          mediaUrl: voice?.url ?? m.mediaUrl,
+        ));
+      }
+
+      final sdk.Message sentMessage;
+      final savedMid = message.mid;
+      if (savedMid != null && savedMid > 0) {
+        sentMessage = await _sdkManager.client.resendSavedMessage(
+          mid: savedMid,
+          content: content,
+        );
+      } else if (isGroup) {
         sentMessage = await _sdkManager.client.sendGroupMessage(
           groupId: targetId,
-          content: message.content,
-          msgType: message.type == MessageType.image ? 1 : 0,
+          content: content,
+          msgType: _sdkTypeFromModel(message),
         );
       } else {
         sentMessage = await _sdkManager.client.sendMessage(
           toId: targetId,
-          content: message.content,
-          msgType: message.type == MessageType.image ? 1 : 0,
+          content: content,
+          msgType: _sdkTypeFromModel(message),
         );
       }
 
@@ -1089,6 +1184,145 @@ class ChatProvider with ChangeNotifier {
     debugPrint('📍[ChatProvider] 🗑️ 已清空联系人信息缓存，共移除 $count 条记录');
   }
 
+  Future<void> _keepFailedOutgoing({
+    required String tempId,
+    required String content,
+    required int msgType,
+    String? localPath,
+    String? nickname,
+    String? avatar,
+  }) async {
+    final conversation = _currentConversation;
+    if (conversation == null || conversation.targetId <= 0) {
+      _replaceMessage(tempId, (m) => m.copyWith(
+        isSending: false,
+        status: MessageStatus.failed,
+      ));
+      return;
+    }
+    try {
+      final saved = await _sdkManager.client.saveLocalOutgoing(
+        toId: conversation.targetId,
+        groupId: conversation.isGroup ? conversation.targetId : null,
+        content: content,
+        msgType: msgType,
+        status: sdk.MessageStatus.failed,
+        localPath: localPath,
+        senderNickname: nickname,
+        senderAvatar: avatar,
+      );
+      _replaceMessage(tempId, (m) => m.copyWith(
+        id: saved.id?.toString() ?? tempId,
+        mid: saved.mid,
+        isSending: false,
+        status: MessageStatus.failed,
+      ));
+      loadConversations();
+    } catch (e) {
+      debugPrint('保存失败消息到本地失败: $e');
+      _replaceMessage(tempId, (m) => m.copyWith(
+        isSending: false,
+        status: MessageStatus.failed,
+      ));
+    }
+  }
+
+  void _replaceMessage(String id, MessageModel Function(MessageModel) update) {
+    final index = _messages.indexWhere((m) => m.id == id);
+    if (index == -1) return;
+    _messages[index] = update(_messages[index]);
+    notifyListeners();
+  }
+
+  MessageType _uiTypeFromWire(String type) {
+    switch (type) {
+      case 'image':
+        return MessageType.image;
+      case 'voice':
+        return MessageType.audio;
+      default:
+        return MessageType.text;
+    }
+  }
+
+  int _sdkTypeFromWire(String type) {
+    switch (type) {
+      case 'image':
+        return sdk.MessageType.image.value;
+      case 'voice':
+        return sdk.MessageType.voice.value;
+      default:
+        return sdk.MessageType.text.value;
+    }
+  }
+
+  int _sdkTypeFromModel(MessageModel message) {
+    switch (message.type) {
+      case MessageType.image:
+        return sdk.MessageType.image.value;
+      case MessageType.audio:
+        return sdk.MessageType.voice.value;
+      case MessageType.file:
+        return sdk.MessageType.file.value;
+      case MessageType.video:
+        return 4;
+      case MessageType.text:
+        return sdk.MessageType.text.value;
+    }
+  }
+
+  MessageType _uiTypeFromSdk(sdk.MessageType type) {
+    switch (type) {
+      case sdk.MessageType.image:
+        return MessageType.image;
+      case sdk.MessageType.voice:
+        return MessageType.audio;
+      case sdk.MessageType.file:
+        return MessageType.file;
+      case sdk.MessageType.text:
+      case sdk.MessageType.system:
+        return MessageType.text;
+    }
+  }
+
+  String? _mediaUrlFromSdk(sdk.Message msg) {
+    switch (msg.msgType) {
+      case sdk.MessageType.image:
+        return msg.localPath ?? msg.content;
+      case sdk.MessageType.voice:
+        final remote = VoiceContent.tryParse(msg.content)?.url;
+        if (remote != null &&
+            (remote.startsWith('http://') || remote.startsWith('https://'))) {
+          return remote;
+        }
+        return msg.localPath ?? remote;
+      case sdk.MessageType.text:
+      case sdk.MessageType.file:
+      case sdk.MessageType.system:
+        return null;
+    }
+  }
+
+  Future<String> _uploadVoice(String path, int seconds) async {
+    final filename = path.replaceAll('\\', '/').split('/').last;
+    final bytes = await File(path).readAsBytes();
+    final url = await FileApi().uploadBytes(bytes, filename);
+    return VoiceContent.encode(url, seconds);
+  }
+
+  Future<String> _uploadVoiceIfNeeded(MessageModel message) async {
+    final parsed = VoiceContent.tryParse(message.content);
+    final raw = (parsed?.url ?? message.mediaUrl ?? '').trim();
+    final seconds = (parsed?.duration ?? message.voiceDuration).clamp(1, 60);
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return VoiceContent.encode(raw, seconds);
+    }
+    if (raw.isEmpty || !await File(raw).exists()) {
+      throw StateError('语音文件不存在，无法重发');
+    }
+    return _uploadVoice(raw, seconds);
+  }
+
   MessageModel _convertSdkMessageToModel(sdk.Message msg) {
     final currentUserId = _sdkManager.client.currentUserId;
     final isFromMe = currentUserId != null && msg.fromId == currentUserId;
@@ -1134,13 +1368,9 @@ class ChatProvider with ChangeNotifier {
       conversationId: '',
       senderId: msg.fromId.toString(),
       receiverId: msg.toId.toString(),
-      type: msg.msgType == sdk.MessageType.image
-          ? MessageType.image
-          : MessageType.text,
+      type: _uiTypeFromSdk(msg.msgType),
       content: msg.content,
-      mediaUrl: msg.msgType == sdk.MessageType.image
-          ? (msg.localPath ?? msg.content)
-          : null,
+      mediaUrl: _mediaUrlFromSdk(msg),
       timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
       isSent: isFromMe,
       status: _convertSdkStatus(msg.status),
@@ -1160,9 +1390,7 @@ class ChatProvider with ChangeNotifier {
       isSending: false,
       isSent: true,
       status: _convertSdkStatus(message.status),
-      mediaUrl: message.msgType == sdk.MessageType.image
-          ? message.content
-          : _messages[index].mediaUrl,
+      mediaUrl: _mediaUrlFromSdk(message) ?? _messages[index].mediaUrl,
     );
     notifyListeners();
   }
@@ -1268,13 +1496,9 @@ class _ChatMessageListener implements sdk.MessageListener {
       conversationId: '',
       senderId: message.fromId.toString(),
       receiverId: message.toId.toString(),
-      type: message.msgType == sdk.MessageType.image
-          ? MessageType.image
-          : MessageType.text,
+      type: _provider._uiTypeFromSdk(message.msgType),
       content: message.content,
-      mediaUrl: message.msgType == sdk.MessageType.image
-          ? (message.localPath ?? message.content)
-          : null,
+      mediaUrl: _provider._mediaUrlFromSdk(message),
       timestamp: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
       status: MessageStatus.delivered,
       senderInfo: senderInfo,

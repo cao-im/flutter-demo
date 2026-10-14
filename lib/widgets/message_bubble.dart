@@ -6,6 +6,7 @@ import '../models/message_model.dart';
 import '../pages/full_text_page.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
+import 'chat/voice_message_content.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -195,6 +196,8 @@ class MessageBubble extends StatelessWidget {
       case MessageType.image:
         // 图片气泡由外层单独渲染，避免套上文字消息的蓝色背景
         return _buildImageContent(context, maxWidth: 220);
+      case MessageType.audio:
+        return VoiceMessageContent(message: message, isMe: isMe);
       case MessageType.text:
       default:
         return _buildFoldableText(context, maxTextWidth);

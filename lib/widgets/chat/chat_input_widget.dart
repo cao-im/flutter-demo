@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/chat_keyboard_provider.dart';
+import '../../services/voice_recorder.dart';
 import 'emoji_picker_panel.dart';
 import 'chat_overlay_panel.dart';
 import 'windows_ime_caret.dart';
@@ -72,6 +76,9 @@ class ChatInputWidget extends StatefulWidget {
   /// 如果不传则内部自动创建
   final FocusNode? externalFocusNode;
 
+  /// 录音结束且达到最短时长后回调本地文件路径和秒数。
+  final Future<void> Function(String path, int durationSeconds)? onVoiceRecorded;
+
   const ChatInputWidget({
     super.key,
     this.mode = ChatInputMode.text,
@@ -83,6 +90,7 @@ class ChatInputWidget extends StatefulWidget {
     this.onEmoji,
     this.onScreenshot,
     this.externalFocusNode,
+    this.onVoiceRecorded,
   });
 
   @override
@@ -102,6 +110,23 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
 
   /// 桌面端：当前显示的 OverlayEntry
   OverlayEntry? _overlayEntry;
+
+  final VoiceRecorder _voiceRecorder = VoiceRecorder();
+  Timer? _recordTicker;
+  Timer? _waveTicker;
+  DateTime? _recordStartedAt;
+  bool _recording = false;
+  bool _recordStopInFlight = false;
+  bool _cancelArmed = false;
+  bool _fingerDown = false;
+  bool _voiceMode = false;
+  int _recordSeconds = 0;
+  Offset? _pointerDown;
+  final List<double> _waveLevels = [];
+  bool _samplingWave = false;
+
+  static const int _maxRecordSeconds = 60;
+  static const int _minRecordMillis = 800;
 
   @override
   void initState() {
@@ -123,7 +148,15 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_recording && event.logicalKey == LogicalKeyboardKey.escape) {
+      _finishRecord(send: false);
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
+    if (_recording) {
+      _finishRecord(send: true);
+      return KeyEventResult.handled;
+    }
 
     if (HardwareKeyboard.instance.isShiftPressed) {
       // Shift+Enter: 插入换行，让 TextField 处理
@@ -136,6 +169,9 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
 
   @override
   void dispose() {
+    _recordTicker?.cancel();
+    _waveTicker?.cancel();
+    _voiceRecorder.dispose();
     _removeDesktopOverlay();
     _windowsImeCaret?.dispose();
     _windowsImeCaret = null;
@@ -247,6 +283,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_recording && !isDesktop) _buildHoldBanner(),
             // 输入栏主体（始终在最上方）
             Container(
               padding: EdgeInsets.only(
@@ -313,7 +350,9 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
-            child: TextField(
+            child: _recording
+                ? _buildDesktopRecordingPanel()
+                : TextField(
               key: _desktopTextFieldKey,
               controller: widget.controller,
               focusNode: _focusNode,
@@ -357,18 +396,32 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 const SizedBox(width: 16),
                 _buildToolbarIcon(Icons.attach_file_outlined, '发送文件', widget.onMoreOptions),
                 const SizedBox(width: 16),
+                _buildToolbarIcon(
+                  _recording ? Icons.mic : Icons.mic_none_outlined,
+                  _recording ? '结束并发送' : '语音',
+                  _onDesktopMic,
+                  color: _recording ? const Color(0xFFFA5151) : null,
+                ),
+                const SizedBox(width: 16),
                 _buildToolbarIcon(Icons.crop_outlined, '截图', widget.onScreenshot),
                 const Spacer(),
-                TextButton(
-                  onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.primaryColor,
-                    minimumSize: const Size(50, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    textStyle: TextStyle(fontSize: widget.style.fontSize, fontWeight: FontWeight.w500),
+                if (_recording) ...[
+                  TextButton(
+                    onPressed: () => _finishRecord(send: false),
+                    style: _toolbarTextButtonStyle(AppTheme.textSecondaryColor),
+                    child: const Text('取消'),
                   ),
-                  child: const Text('发送'),
-                ),
+                  TextButton(
+                    onPressed: () => _finishRecord(send: true),
+                    style: _toolbarTextButtonStyle(AppTheme.primaryColor),
+                    child: const Text('发送'),
+                  ),
+                ] else
+                  TextButton(
+                    onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(),
+                    style: _toolbarTextButtonStyle(AppTheme.primaryColor),
+                    child: const Text('发送'),
+                  ),
               ],
             ),
           ),
@@ -388,17 +441,17 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
           height: ibs,
           child: IconButton(
             icon: Icon(
-              showEmojiPanel ? Icons.keyboard_outlined : Icons.sentiment_satisfied_alt_outlined,
+              _voiceMode ? Icons.keyboard_outlined : Icons.mic_none_outlined,
               size: 24,
             ),
             color: AppTheme.primaryColor,
-            onPressed: _toggleEmojiPanel,
-            tooltip: showEmojiPanel ? '键盘' : '表情',
+            onPressed: _toggleVoiceMode,
+            tooltip: _voiceMode ? '键盘' : '语音',
           ),
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: TextField(
+          child: _voiceMode ? _buildHoldToTalk() : TextField(
             controller: widget.controller,
             focusNode: _focusNode,
             autofocus: true,
@@ -421,28 +474,317 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
           ),
         ),
         const SizedBox(width: 8),
+        if (!_voiceMode)
+          SizedBox(
+            width: ibs,
+            height: ibs,
+            child: IconButton(
+              icon: Icon(
+                showEmojiPanel ? Icons.keyboard_outlined : Icons.sentiment_satisfied_alt_outlined,
+                size: 24,
+              ),
+              color: AppTheme.primaryColor,
+              onPressed: _toggleEmojiPanel,
+              tooltip: showEmojiPanel ? '键盘' : '表情',
+            ),
+          ),
         SizedBox(
           width: ibs,
           height: ibs,
           child: IconButton(icon: const Icon(Icons.add_circle_outline, size: 24), color: AppTheme.primaryColor, onPressed: widget.onMoreOptions, tooltip: '更多'),
         ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: ibs,
-          height: ibs,
-          child: IconButton(icon: const Icon(Icons.send, size: 22), color: AppTheme.primaryColor, onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(), tooltip: '发送'),
-        ),
+        if (!_voiceMode) ...[
+          const SizedBox(width: 4),
+          SizedBox(
+            width: ibs,
+            height: ibs,
+            child: IconButton(icon: const Icon(Icons.send, size: 22), color: AppTheme.primaryColor, onPressed: (widget.isSending || widget.onSend == null) ? null : () => widget.onSend!(), tooltip: '发送'),
+          ),
+        ],
       ],
     );
   }
 
+  Widget _buildHoldToTalk() {
+    final label = _recording
+        ? (_cancelArmed ? '松开 取消' : '松开 结束')
+        : '按住 说话';
+    final bg = _recording
+        ? (_cancelArmed ? const Color(0xFFFA5151) : const Color(0xFFD6D6D6))
+        : const Color(0xFFF2F2F2);
+    return Listener(
+      onPointerDown: (event) {
+        _pointerDown = event.position;
+        _fingerDown = true;
+        _beginRecord(hold: true);
+      },
+      onPointerMove: (event) {
+        final origin = _pointerDown;
+        if (origin == null) return;
+        final cancel = event.position.dy < origin.dy - 56;
+        if (cancel != _cancelArmed && mounted) {
+          setState(() => _cancelArmed = cancel);
+        }
+      },
+      onPointerUp: (_) {
+        _fingerDown = false;
+        _pointerDown = null;
+        _finishRecord(send: !_cancelArmed);
+      },
+      onPointerCancel: (_) {
+        _fingerDown = false;
+        _pointerDown = null;
+        _finishRecord(send: false);
+      },
+      child: Container(
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: widget.style.fontSize,
+            fontWeight: FontWeight.w600,
+            color: _cancelArmed ? Colors.white : const Color(0xFF4E5964),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHoldBanner() {
+    final cancel = _cancelArmed;
+    final ss = _recordSeconds.toString().padLeft(2, '0');
+    return Material(
+      color: cancel ? const Color(0xFFFA5151) : const Color(0xFF07C160),
+      child: SizedBox(
+        height: cancel ? 72 : 108,
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(cancel ? Icons.undo : Icons.mic, color: Colors.white, size: 22),
+            const SizedBox(height: 6),
+            if (!cancel)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: _RecordWaveform(
+                  levels: _waveLevels,
+                  color: Colors.white,
+                  height: 22,
+                  barCount: 28,
+                ),
+              ),
+            if (!cancel) const SizedBox(height: 4),
+            Text(
+              cancel ? '松开手指，取消发送' : '手指上滑，取消发送  0:$ss',
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopRecordingPanel() {
+    final ss = _recordSeconds.toString().padLeft(2, '0');
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          _finishRecord(send: false);
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.enter &&
+            !HardwareKeyboard.instance.isShiftPressed) {
+          _finishRecord(send: true);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ColoredBox(
+        color: const Color(0xFFFFF8F8),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.mic, color: Color(0xFFFA5151), size: 28),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: _RecordWaveform(
+                  levels: _waveLevels,
+                  color: const Color(0xFFFA5151),
+                  height: 36,
+                  barCount: 42,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '正在录音 0:$ss',
+                style: const TextStyle(fontSize: 16, color: Color(0xFF4E5964), fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Enter 发送，Esc 取消 · 最长 $_maxRecordSeconds 秒',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  ButtonStyle _toolbarTextButtonStyle(Color color) {
+    return TextButton.styleFrom(
+      foregroundColor: color,
+      minimumSize: const Size(50, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      textStyle: TextStyle(
+        inherit: false,
+        fontSize: widget.style.fontSize,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  void _onDesktopMic() {
+    if (widget.onVoiceRecorded == null) return;
+    if (_recording) {
+      _finishRecord(send: true);
+      return;
+    }
+    _removeDesktopOverlay();
+    _focusNode.unfocus();
+    _beginRecord(hold: false);
+  }
+
+  void _toggleVoiceMode() {
+    if (_recording) return;
+    setState(() => _voiceMode = !_voiceMode);
+    if (_voiceMode) {
+      _focusNode.unfocus();
+      Provider.of<ChatKeyboardProvider>(context, listen: false).toggleEmojiPanel(false);
+    } else {
+      _focusNode.requestFocus();
+    }
+  }
+
+  Future<void> _beginRecord({required bool hold}) async {
+    if (_recording || _recordStopInFlight || widget.onVoiceRecorded == null) return;
+    try {
+      await _voiceRecorder.start();
+    } catch (e) {
+      _showTip(e.toString().replaceFirst('Bad state: ', ''));
+      return;
+    }
+    if (!mounted) {
+      await _voiceRecorder.cancel();
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    _recordStartedAt = DateTime.now();
+    _waveLevels
+      ..clear()
+      ..addAll(List.filled(24, 0.06));
+    _recordTicker?.cancel();
+    _recordTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _recordStartedAt == null) return;
+      final elapsed = DateTime.now().difference(_recordStartedAt!).inSeconds;
+      setState(() => _recordSeconds = elapsed);
+      if (elapsed >= _maxRecordSeconds) {
+        _finishRecord(send: true);
+      }
+    });
+    _waveTicker?.cancel();
+    _waveTicker = Timer.periodic(const Duration(milliseconds: 80), (_) {
+      _sampleWave();
+    });
+    setState(() {
+      _recording = true;
+      _recordSeconds = 0;
+    });
+    if (hold && !_fingerDown) {
+      await _finishRecord(send: !_cancelArmed);
+    }
+  }
+
+  Future<void> _finishRecord({required bool send}) async {
+    if (!_recording || _recordStopInFlight) return;
+    _recordStopInFlight = true;
+    _recordTicker?.cancel();
+    _recordTicker = null;
+    _waveTicker?.cancel();
+    _waveTicker = null;
+    final started = _recordStartedAt;
+    final discard = !send || _cancelArmed;
+    setState(() {
+      _recording = false;
+      _cancelArmed = false;
+    });
+    try {
+      if (discard) {
+        await _voiceRecorder.cancel();
+        return;
+      }
+      final result = await _voiceRecorder.stop();
+      if (result == null || started == null) return;
+      if (result.durationMillis < _minRecordMillis) {
+        try {
+          await File(result.path).delete();
+        } catch (_) {}
+        _showTip('说话时间太短');
+        return;
+      }
+      final seconds = (result.durationMillis / 1000).ceil().clamp(1, _maxRecordSeconds);
+      await widget.onVoiceRecorded?.call(result.path, seconds);
+    } catch (e) {
+      _showTip(e.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      _recordStopInFlight = false;
+      _recordStartedAt = null;
+    }
+  }
+
+  Future<void> _sampleWave() async {
+    if (_samplingWave || !_recording || !mounted) return;
+    _samplingWave = true;
+    try {
+      final level = await _voiceRecorder.readLevel();
+      if (!_recording || !mounted) return;
+      setState(() {
+        _waveLevels.add(level);
+        if (_waveLevels.length > 64) {
+          _waveLevels.removeAt(0);
+        }
+      });
+    } finally {
+      _samplingWave = false;
+    }
+  }
+
+  void _showTip(String text) {
+    if (!mounted || text.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
   // ==================== 工具方法 ====================
 
-  Widget _buildToolbarIcon(IconData icon, String tooltip, VoidCallback? onPressed) {
+  Widget _buildToolbarIcon(IconData icon, String tooltip, VoidCallback? onPressed, {Color? color}) {
     return SizedBox(
       width: widget.style.iconButtonSize,
       height: widget.style.iconButtonSize,
-      child: IconButton(icon: Icon(icon, size: 22), color: AppTheme.textSecondaryColor, onPressed: onPressed, tooltip: tooltip),
+      child: IconButton(
+        icon: Icon(icon, size: 22),
+        color: color ?? AppTheme.textSecondaryColor,
+        onPressed: onPressed,
+        tooltip: tooltip,
+      ),
     );
   }
 
@@ -591,4 +933,81 @@ class _ArrowClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant _ArrowClipper oldClipper) => false;
+}
+
+class _RecordWaveform extends StatelessWidget {
+  final List<double> levels;
+  final Color color;
+  final double height;
+  final int barCount;
+
+  const _RecordWaveform({
+    required this.levels,
+    required this.color,
+    required this.height,
+    required this.barCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: CustomPaint(
+        painter: _RecordWavePainter(
+          levels: levels,
+          color: color,
+          barCount: barCount,
+        ),
+      ),
+    );
+  }
+}
+
+class _RecordWavePainter extends CustomPainter {
+  final List<double> levels;
+  final Color color;
+  final int barCount;
+
+  _RecordWavePainter({
+    required this.levels,
+    required this.color,
+    required this.barCount,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final samples = levels.length >= barCount
+        ? levels.sublist(levels.length - barCount)
+        : <double>[
+            ...List.filled(barCount - levels.length, 0.06),
+            ...levels,
+          ];
+    final paint = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round;
+    final gap = 3.0;
+    final barWidth = ((size.width - gap * (barCount - 1)) / barCount).clamp(2.0, 5.0);
+    final step = barWidth + gap;
+    final midY = size.height / 2;
+    for (var i = 0; i < samples.length; i++) {
+      final level = samples[i].clamp(0.06, 1.0);
+      final barHeight = (size.height * level).clamp(2.0, size.height);
+      final x = i * step;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(x + barWidth / 2, midY),
+            width: barWidth,
+            height: barHeight,
+          ),
+          const Radius.circular(2),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RecordWavePainter oldDelegate) => true;
 }

@@ -45,11 +45,21 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   path_provider: ^2.1.3
   emoji_picker_flutter: ^2.0.0
+  record: ^6.2.1
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+
+# sqlite3 原生 hook 默认要从 GitHub 下 DLL，国内网络经常失败。
+# 改用系统自带库；Windows 10+ 为 winsqlite3。
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
