@@ -22,6 +22,9 @@ class MessageModel {
   final SenderInfoModel? senderInfo;
   final GroupInfoModel? groupInfo;
   final int? mid; // SDK 生成的雪花算法消息ID
+  final int? replyMsgId;
+  final String? replyPreview;
+  final String? replySenderName;
 
   MessageModel({
     required this.id,
@@ -40,6 +43,9 @@ class MessageModel {
     this.senderInfo,
     this.groupInfo,
     this.mid,
+    this.replyMsgId,
+    this.replyPreview,
+    this.replySenderName,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -73,6 +79,10 @@ class MessageModel {
       groupInfo: json['groupInfo'] != null
           ? GroupInfoModel.fromJson(json['groupInfo'])
           : null,
+      mid: json['mid'],
+      replyMsgId: json['replyMsgId'],
+      replyPreview: json['replyPreview'],
+      replySenderName: json['replySenderName'],
     );
   }
 
@@ -92,6 +102,9 @@ class MessageModel {
       'can_recall': canRecall,
       if (senderInfo != null) 'senderInfo': senderInfo!.toJson(),
       if (groupInfo != null) 'groupInfo': groupInfo!.toJson(),
+      if (replyMsgId != null) 'replyMsgId': replyMsgId,
+      if (replyPreview != null) 'replyPreview': replyPreview,
+      if (replySenderName != null) 'replySenderName': replySenderName,
     };
   }
 
@@ -158,6 +171,24 @@ class MessageModel {
     return groupInfo?.groupName;
   }
 
+  /// 被引用时展示的摘要
+  String get quoteText {
+    switch (type) {
+      case MessageType.image:
+        return '[图片]';
+      case MessageType.audio:
+        return '[语音]';
+      case MessageType.video:
+        return '[视频]';
+      case MessageType.file:
+        return '[文件]';
+      case MessageType.text:
+        final text = content.replaceAll('\n', ' ').trim();
+        if (text.length <= 60) return text;
+        return '${text.substring(0, 60)}…';
+    }
+  }
+
   MessageModel copyWith({
     String? id,
     String? conversationId,
@@ -175,6 +206,9 @@ class MessageModel {
     SenderInfoModel? senderInfo,
     GroupInfoModel? groupInfo,
     int? mid,
+    int? replyMsgId,
+    String? replyPreview,
+    String? replySenderName,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -193,6 +227,9 @@ class MessageModel {
       senderInfo: senderInfo ?? this.senderInfo,
       groupInfo: groupInfo ?? this.groupInfo,
       mid: mid ?? this.mid,
+      replyMsgId: replyMsgId ?? this.replyMsgId,
+      replyPreview: replyPreview ?? this.replyPreview,
+      replySenderName: replySenderName ?? this.replySenderName,
     );
   }
 }

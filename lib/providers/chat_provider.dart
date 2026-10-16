@@ -27,6 +27,7 @@ class ChatProvider with ChangeNotifier {
 
   ConversationModel? _currentConversation;
   List<MessageModel> _messages = [];
+  MessageModel? _replyingTo;
   List<ConversationModel> _conversations = [];
   bool _isLoading = false;
   bool _isListening = false;
@@ -38,7 +39,20 @@ class ChatProvider with ChangeNotifier {
   ConversationModel? get currentConversation => _currentConversation;
   List<MessageModel> get messages => _messages;
   List<ConversationModel> get conversations => _conversations;
+  MessageModel? get replyingTo => _replyingTo;
   bool get isLoading => _isLoading;
+
+  void setReplyingTo(MessageModel? message) {
+    if (message != null && message.status == MessageStatus.recalled) return;
+    _replyingTo = message;
+    notifyListeners();
+  }
+
+  void clearReply() {
+    if (_replyingTo == null) return;
+    _replyingTo = null;
+    notifyListeners();
+  }
 
   int get totalUnreadCount {
     return _conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
@@ -159,6 +173,9 @@ class ChatProvider with ChangeNotifier {
   void setCurrentConversation(ConversationModel conversation) {
     debugPrint('🔧[ChatProvider] setCurrentConversation 被调用: id=${conversation.id}, name=${conversation.name}');
     debugPrint('🔧[ChatProvider] 设置前 _currentConversation: ${_currentConversation?.id ?? "null"}');
+    if (_currentConversation?.id != conversation.id) {
+      _replyingTo = null;
+    }
     _currentConversation = conversation;
     debugPrint('🔧[ChatProvider] 设置后 _currentConversation: ${_currentConversation?.id ?? "null"}');
 
@@ -661,6 +678,8 @@ class ChatProvider with ChangeNotifier {
 
     final currentUserId = _sdkManager.client.currentUserId;
     final currentUserInfo = await _getCurrentUserInfo();
+    final reply = _replyingTo;
+    _replyingTo = null;
 
     final tempMessage = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -680,6 +699,9 @@ class ChatProvider with ChangeNotifier {
       status: MessageStatus.sending,
       senderInfo: currentUserInfo,
       canRecall: true,
+      replyMsgId: reply?.mid,
+      replyPreview: reply?.quoteText,
+      replySenderName: reply?.senderDisplayName,
     );
 
     debugPrint('📤[ChatProvider] 发送消息(本地) senderInfo=${tempMessage.senderInfo?.toJson()}');
@@ -706,6 +728,9 @@ class ChatProvider with ChangeNotifier {
           msgType: _sdkTypeFromWire(type),
           senderNickname: currentUserInfo?.nickname,
           senderAvatar: currentUserInfo?.avatar,
+          replyMsgId: reply?.mid,
+          replyPreview: reply?.quoteText,
+          replySenderName: reply?.senderDisplayName,
         );
       } else {
         sentMessage = await _sdkManager.client.sendMessage(
@@ -714,6 +739,9 @@ class ChatProvider with ChangeNotifier {
           msgType: _sdkTypeFromWire(type),
           senderNickname: currentUserInfo?.nickname,
           senderAvatar: currentUserInfo?.avatar,
+          replyMsgId: reply?.mid,
+          replyPreview: reply?.quoteText,
+          replySenderName: reply?.senderDisplayName,
         );
       }
 
@@ -741,6 +769,51 @@ class ChatProvider with ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Future<void> forwardMessage(MessageModel source, ConversationModel target) async {
+    if (source.status == MessageStatus.recalled || source.content.isEmpty) {
+      throw StateError('这条消息不能转发');
+    }
+    if (target.targetId <= 0) {
+      throw StateError('会话无效');
+    }
+    final current = _currentConversation;
+    final toCurrent = current != null &&
+        current.isGroup == target.isGroup &&
+        current.targetId == target.targetId;
+    if (toCurrent) {
+      _replyingTo = null;
+      final wire = switch (source.type) {
+        MessageType.image => 'image',
+        MessageType.audio => 'voice',
+        MessageType.file => 'file',
+        MessageType.video => 'text',
+        MessageType.text => 'text',
+      };
+      await sendMessage(source.content, type: wire);
+      return;
+    }
+
+    final currentUserInfo = await _getCurrentUserInfo();
+    if (target.isGroup) {
+      await _sdkManager.client.sendGroupMessage(
+        groupId: target.targetId,
+        content: source.content,
+        msgType: _sdkTypeFromModel(source),
+        senderNickname: currentUserInfo?.nickname,
+        senderAvatar: currentUserInfo?.avatar,
+      );
+    } else {
+      await _sdkManager.client.sendMessage(
+        toId: target.targetId,
+        content: source.content,
+        msgType: _sdkTypeFromModel(source),
+        senderNickname: currentUserInfo?.nickname,
+        senderAvatar: currentUserInfo?.avatar,
+      );
+    }
+    loadConversations();
   }
 
   Future<SenderInfoModel?> _getCurrentUserInfo() async {
@@ -1344,6 +1417,8 @@ class ChatProvider with ChangeNotifier {
         return MessageType.image;
       case 'voice':
         return MessageType.audio;
+      case 'file':
+        return MessageType.file;
       default:
         return MessageType.text;
     }
@@ -1355,6 +1430,8 @@ class ChatProvider with ChangeNotifier {
         return sdk.MessageType.image.value;
       case 'voice':
         return sdk.MessageType.voice.value;
+      case 'file':
+        return sdk.MessageType.file.value;
       default:
         return sdk.MessageType.text.value;
     }
@@ -1482,6 +1559,9 @@ class ChatProvider with ChangeNotifier {
       groupInfo: groupInfo,
       canRecall: canRecall,
       mid: msg.mid,
+      replyMsgId: msg.replyMsgId,
+      replyPreview: msg.replyPreview,
+      replySenderName: msg.replySenderName,
     );
   }
 
@@ -1608,6 +1688,9 @@ class _ChatMessageListener implements sdk.MessageListener {
       senderInfo: senderInfo,
       groupInfo: groupInfo,
       mid: message.mid,
+      replyMsgId: message.replyMsgId,
+      replyPreview: message.replyPreview,
+      replySenderName: message.replySenderName,
     );
 
     debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');

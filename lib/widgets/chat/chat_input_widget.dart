@@ -79,6 +79,10 @@ class ChatInputWidget extends StatefulWidget {
   /// 录音结束且达到最短时长后回调本地文件路径和秒数。
   final Future<void> Function(String path, int durationSeconds)? onVoiceRecorded;
 
+  final String? quoteTitle;
+  final String? quotePreview;
+  final VoidCallback? onClearQuote;
+
   const ChatInputWidget({
     super.key,
     this.mode = ChatInputMode.text,
@@ -91,6 +95,9 @@ class ChatInputWidget extends StatefulWidget {
     this.onScreenshot,
     this.externalFocusNode,
     this.onVoiceRecorded,
+    this.quoteTitle,
+    this.quotePreview,
+    this.onClearQuote,
   });
 
   @override
@@ -283,6 +290,8 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.quotePreview != null && widget.quotePreview!.isNotEmpty)
+              _buildQuoteBar(),
             if (_recording && !isDesktop) _buildHoldBanner(),
             // 输入栏主体（始终在最上方）
             Container(
@@ -327,6 +336,54 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildQuoteBar() {
+    final title = widget.quoteTitle;
+    final preview = widget.quotePreview ?? '';
+    return Material(
+      color: const Color(0xFFF7F7F7),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+        child: Row(
+          children: [
+            Container(
+              width: 3,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title != null && title.isNotEmpty)
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: widget.onClearQuote,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

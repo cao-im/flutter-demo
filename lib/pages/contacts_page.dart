@@ -5,6 +5,8 @@ import '../models/user_model.dart';
 import '../providers/contact_provider.dart';
 import '../router/app_router.dart';
 import '../widgets/avatar_widget.dart';
+import '../providers/chat_provider.dart';
+import 'user_profile_page.dart';
 
 class ContactsPage extends StatefulWidget {
   const ContactsPage({super.key});
@@ -373,7 +375,12 @@ class _ContactsPageState extends State<ContactsPage>
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                AvatarWidget(imageUrl: contact.avatar, name: name, size: 44),
+                AvatarWidget(
+                  imageUrl: contact.avatar,
+                  name: name,
+                  size: 44,
+                  onTap: () => _openContactProfile(contact),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -396,6 +403,21 @@ class _ContactsPageState extends State<ContactsPage>
           ),
         ),
       ),
+    );
+  }
+
+  void _openContactProfile(UserModel contact) {
+    final userId = int.tryParse(contact.imUserId ?? '') ?? int.tryParse(contact.id) ?? 0;
+    final conversation = userId > 0
+        ? context.read<ChatProvider>().privateConversation(userId)
+        : null;
+    final profile = context.read<ContactProvider>().mergeRelationState(
+      contact,
+      isTop: conversation?.isTop,
+      isMute: conversation?.isMute,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfilePage(contact: profile)),
     );
   }
 

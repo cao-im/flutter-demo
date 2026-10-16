@@ -18,9 +18,11 @@ class AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
+    return MouseRegion(
+      cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
@@ -33,6 +35,7 @@ class AvatarWidget extends StatelessWidget {
         ),
         child: ClipOval(
           child: _buildAvatar(),
+        ),
         ),
       ),
     );

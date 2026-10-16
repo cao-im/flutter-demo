@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/chat_provider.dart';
@@ -17,6 +19,9 @@ class MessageListWidget extends StatefulWidget {
   final void Function(MessageModel) onRetry;
   final void Function(MessageModel)? onRecall;
   final void Function(MessageModel)? onDelete;
+  final void Function(MessageModel)? onQuote;
+  final void Function(MessageModel)? onForward;
+  final void Function(MessageModel message, bool isMe)? onAvatarTap;
 
   const MessageListWidget({
     super.key,
@@ -27,6 +32,9 @@ class MessageListWidget extends StatefulWidget {
     required this.onRetry,
     this.onRecall,
     this.onDelete,
+    this.onQuote,
+    this.onForward,
+    this.onAvatarTap,
   });
 
   @override
@@ -36,6 +44,75 @@ class MessageListWidget extends StatefulWidget {
 class _MessageListWidgetState extends State<MessageListWidget> {
   /// 上一次记录的消息数量，用于检测新消息并自动滚动
   int _lastMessageCount = 0;
+  final Map<int, GlobalKey> _messageKeys = {};
+  int? _highlightMid;
+  Timer? _highlightTimer;
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
+  }
+
+  GlobalKey _keyFor(int mid) {
+    return _messageKeys.putIfAbsent(mid, GlobalKey.new);
+  }
+
+  Future<void> _jumpToQuoted(MessageModel message) async {
+    final replyMid = message.replyMsgId;
+    if (replyMid == null || replyMid <= 0) {
+      _showMissingQuote();
+      return;
+    }
+    final messages = context.read<ChatProvider>().messages;
+    final dataIndex = messages.indexWhere((item) => item.mid == replyMid);
+    if (dataIndex < 0) {
+      _showMissingQuote();
+      return;
+    }
+
+    setState(() => _highlightMid = replyMid);
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (!mounted) return;
+      setState(() => _highlightMid = null);
+    });
+
+    final key = _keyFor(replyMid);
+    for (var attempt = 0; attempt < 12; attempt++) {
+      if (!mounted) return;
+      final targetContext = key.currentContext;
+      if (targetContext != null) {
+        await Scrollable.ensureVisible(
+          targetContext,
+          alignment: 0.35,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+        return;
+      }
+      if (!widget.scrollController.hasClients) return;
+      final position = widget.scrollController.position;
+      final visualIndex = messages.length - 1 - dataIndex;
+      final average = messages.length <= 1 || position.maxScrollExtent <= 0
+          ? 80.0
+          : (position.maxScrollExtent + position.viewportDimension) / messages.length;
+      final target = (visualIndex * average - position.viewportDimension * 0.35)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if ((position.pixels - target).abs() < 2 && attempt > 0) break;
+      position.jumpTo(target);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted || key.currentContext != null) return;
+    _showMissingQuote();
+  }
+
+  void _showMissingQuote() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('原消息不在当前记录中')),
+    );
+  }
 
   /// 获取联系人信息
   Future<ContactInfo?> _getContactInfo(ChatProvider chatProvider) async {
@@ -145,14 +222,26 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                     if (showTimeSeparator)
                       TimeSeparator(time: message.timestamp),
                     MessageBubble(
+                      key: message.mid != null && message.mid! > 0
+                          ? _keyFor(message.mid!)
+                          : null,
                       message: message,
                       isMe: isMe,
                       senderAvatar: senderAvatar,
                       senderName: senderName,
                       showName: widget.isGroup && !isMe,
+                      highlighted: message.mid != null && message.mid == _highlightMid,
                       onRetry: () => widget.onRetry(message),
                       onRecall: widget.onRecall,
                       onDelete: widget.onDelete,
+                      onQuote: widget.onQuote,
+                      onForward: widget.onForward,
+                      onAvatarTap: widget.onAvatarTap == null
+                          ? null
+                          : () => widget.onAvatarTap!(message, isMe),
+                      onQuoteTap: message.replyMsgId == null
+                          ? null
+                          : () => _jumpToQuoted(message),
                     ),
                   ],
                 );

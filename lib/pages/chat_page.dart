@@ -16,6 +16,7 @@ import '../widgets/chat/chat_header_widget.dart';
 import '../widgets/chat/message_list_widget.dart';
 import '../widgets/chat/chat_input_widget.dart';
 import 'user_profile_page.dart';
+import 'profile_page.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -353,6 +354,58 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     await Provider.of<ChatProvider>(context, listen: false).deleteMessage(message);
   }
 
+  void _quoteMessage(MessageModel message) {
+    context.read<ChatProvider>().setReplyingTo(message);
+    _inputFocusNode.requestFocus();
+  }
+
+  Future<void> _forwardMessage(MessageModel message) async {
+    final chat = context.read<ChatProvider>();
+    final targets = chat.conversations.where((item) => item.targetId > 0).toList();
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有可转发的会话')),
+      );
+      return;
+    }
+    final picked = await showDialog<ConversationModel>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('转发给'),
+          content: SizedBox(
+            width: 320,
+            height: 360,
+            child: ListView.builder(
+              itemCount: targets.length,
+              itemBuilder: (_, index) {
+                final item = targets[index];
+                return ListTile(
+                  title: Text(item.name.isEmpty ? '未命名会话' : item.name),
+                  subtitle: Text(item.isGroup ? '群聊' : '私聊'),
+                  onTap: () => Navigator.pop(dialogContext, item),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await context.read<ChatProvider>().forwardMessage(message, picked);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已转发给 ${picked.name}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('转发失败：$e')),
+      );
+    }
+  }
+
   Future<void> _recallMessage(MessageModel message) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
 
@@ -549,18 +602,29 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onRetry: (message) => _retryMessage(message),
               onRecall: (message) => _recallMessage(message),
               onDelete: (message) => _deleteMessage(message),
+              onQuote: _quoteMessage,
+              onForward: _forwardMessage,
+              onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
             ),
 
             // 输入栏：使用提取的组件，传入动态面板高度
-            bottomBar: ChatInputWidget(
-              mode: ChatInputMode.text,
-              controller: _messageController,
-              onSend: _sendMessage,
-              isSending: _isSending,
-              onMoreOptions: _showMoreOptions,
-              onVoiceRecorded: _sendVoice,
-              style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
-              externalFocusNode: _inputFocusNode,
+            bottomBar: Builder(
+              builder: (context) {
+                final reply = context.watch<ChatProvider>().replyingTo;
+                return ChatInputWidget(
+                  mode: ChatInputMode.text,
+                  controller: _messageController,
+                  onSend: _sendMessage,
+                  isSending: _isSending,
+                  onMoreOptions: _showMoreOptions,
+                  onVoiceRecorded: _sendVoice,
+                  style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
+                  externalFocusNode: _inputFocusNode,
+                  quoteTitle: reply?.senderDisplayName,
+                  quotePreview: reply?.quoteText,
+                  onClearQuote: () => context.read<ChatProvider>().clearReply(),
+                );
+              },
             ),
           );
         },
@@ -582,13 +646,56 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _openPeerProfile(BuildContext context) {
     final userId = effectiveTargetId;
     if (userId <= 0) return;
+    _openUserProfile(
+      context,
+      userId: userId,
+      nickname: widget.conversationName,
+    );
+  }
+
+  void _openSenderProfile(BuildContext context, MessageModel message, bool isMe) {
+    if (isMe) {
+      if (widget.isPanelMode) {
+        context.read<LayoutProvider>().selectNavigation(4);
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfilePage()),
+        );
+      }
+      return;
+    }
+    final userId = int.tryParse(message.senderId) ?? message.senderInfo?.userId ?? 0;
+    if (!widget.isGroup && userId <= 0) {
+      _openPeerProfile(context);
+      return;
+    }
+    final nickname = !widget.isGroup &&
+            (message.senderInfo == null || message.senderInfo!.nickname.isEmpty)
+        ? widget.conversationName
+        : message.senderDisplayName;
+    _openUserProfile(
+      context,
+      userId: userId,
+      nickname: nickname,
+      avatar: message.senderDisplayAvatar,
+    );
+  }
+
+  void _openUserProfile(
+    BuildContext context, {
+    required int userId,
+    required String nickname,
+    String? avatar,
+  }) {
+    if (userId <= 0) return;
     final contacts = context.read<ContactProvider>();
     final conversation = context.read<ChatProvider>().privateConversation(userId);
     final contact = contacts.mergeRelationState(
       UserModel(
         id: '$userId',
         username: '',
-        nickname: widget.conversationName,
+        nickname: nickname,
+        avatar: avatar,
         imUserId: '$userId',
       ),
       isTop: conversation?.isTop,

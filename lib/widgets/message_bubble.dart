@@ -18,6 +18,11 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onImageTap;
   final Function(MessageModel)? onRecall;
   final void Function(MessageModel)? onDelete;
+  final void Function(MessageModel)? onQuote;
+  final void Function(MessageModel)? onForward;
+  final VoidCallback? onQuoteTap;
+  final VoidCallback? onAvatarTap;
+  final bool highlighted;
 
   const MessageBubble({
     super.key,
@@ -30,6 +35,11 @@ class MessageBubble extends StatelessWidget {
     this.onImageTap,
     this.onRecall,
     this.onDelete,
+    this.onQuote,
+    this.onForward,
+    this.onQuoteTap,
+    this.onAvatarTap,
+    this.highlighted = false,
   });
 
   @override
@@ -37,7 +47,12 @@ class MessageBubble extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bubbleMaxWidth = constraints.maxWidth * 0.6;
-        return Padding(
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          color: highlighted
+              ? AppTheme.primaryColor.withValues(alpha: 0.12)
+              : Colors.transparent,
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             mainAxisAlignment:
@@ -49,6 +64,7 @@ class MessageBubble extends StatelessWidget {
                   imageUrl: senderAvatar,
                   name: senderName,
                   size: 40,
+                  onTap: onAvatarTap,
                 ),
                 const SizedBox(width: 8),
               ],
@@ -72,6 +88,9 @@ class MessageBubble extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                    if (message.replyPreview != null &&
+                        message.replyPreview!.isNotEmpty)
+                      _buildQuoteStrip(bubbleMaxWidth),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -138,10 +157,12 @@ class MessageBubble extends StatelessWidget {
                   imageUrl: senderAvatar,
                   name: senderName,
                   size: 40,
+                  onTap: onAvatarTap,
                 ),
               ],
             ],
           ),
+        ),
         );
       },
     );
@@ -179,6 +200,38 @@ class MessageBubble extends StatelessWidget {
   }
 
   static const int _foldMaxLines = 6;
+
+  Widget _buildQuoteStrip(double maxWidth) {
+    final name = message.replySenderName;
+    final preview = message.replyPreview ?? '';
+    final strip = Container(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(color: AppTheme.primaryColor, width: 3),
+        ),
+      ),
+      child: Text(
+        name == null || name.isEmpty ? preview : '$name：$preview',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12, color: Colors.grey[700], height: 1.3),
+      ),
+    );
+    if (onQuoteTap == null) return strip;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onQuoteTap,
+        child: strip,
+      ),
+    );
+  }
 
   Widget _buildContent(BuildContext context, {required double maxTextWidth}) {
     if (message.status == MessageStatus.recalled) {
@@ -400,6 +453,17 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
+        if (onQuote != null && message.status != MessageStatus.recalled)
+          PopupMenuItem(
+            value: 'quote',
+            child: Row(
+              children: [
+                const Icon(Icons.format_quote, size: 20),
+                const SizedBox(width: 8),
+                const Text('引用'),
+              ],
+            ),
+          ),
         if (message.canRecall)
           PopupMenuItem(
             value: 'recall',
@@ -470,15 +534,22 @@ class MessageBubble extends StatelessWidget {
       case 'delete':
         onDelete?.call(message);
         break;
+      case 'quote':
+        onQuote?.call(message);
+        break;
       case 'forward':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('转发功能开发中...'),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
+        if (onForward != null) {
+          onForward!(message);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('转发功能开发中...'),
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
         break;
     }
   }
