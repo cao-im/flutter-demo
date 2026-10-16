@@ -76,6 +76,82 @@ class ContactApi extends BaseApi {
     );
   }
 
+  /// 更新好友备注
+  Future<void> updateRemark(int userId, int contactId, String remark) async {
+    await putIm(
+      '/contact/remark',
+      queryParameters: {
+        'userId': userId,
+        'contactId': contactId,
+        'remark': remark,
+      },
+    );
+  }
+
+  /// 设置联系人置顶
+  Future<void> setTop(int userId, int contactId, bool isTop) async {
+    await putIm(
+      '/contact/top',
+      queryParameters: {
+        'userId': userId,
+        'contactId': contactId,
+        'isTop': isTop,
+      },
+    );
+  }
+
+  /// 设置联系人免打扰
+  Future<void> setMute(int userId, int contactId, bool isMute) async {
+    await putIm(
+      '/contact/mute',
+      queryParameters: {
+        'userId': userId,
+        'contactId': contactId,
+        'isMute': isMute,
+      },
+    );
+  }
+
+  /// 拉黑用户
+  Future<void> blockUser(int userId, int targetUserId) async {
+    await postIm(
+      '/contact/blacklist/$targetUserId',
+      queryParameters: {'userId': userId},
+    );
+  }
+
+  /// 解除拉黑
+  Future<void> unblockUser(int userId, int targetUserId) async {
+    await deleteIm(
+      '/contact/blacklist/$targetUserId',
+      queryParameters: {'userId': userId},
+    );
+  }
+
+  /// 是否已拉黑
+  Future<bool> isBlocked(int userId, int targetUserId) async {
+    try {
+      final response = await getIm(
+        '/contact/blacklist/check',
+        queryParameters: {'userId': userId, 'targetUserId': targetUserId},
+      );
+      final data = extractData(response);
+      return data == true;
+    } catch (e) {
+      debugPrint('检查黑名单失败: $e');
+      return false;
+    }
+  }
+
+  /// 黑名单列表
+  Future<List<dynamic>> getBlacklist(int userId) async {
+    final response = await getIm(
+      '/contact/blacklist',
+      queryParameters: {'userId': userId},
+    );
+    return extractList(response);
+  }
+
   // ==================== 好友请求相关 ====================
 
   /// 发送好友请求

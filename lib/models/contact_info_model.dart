@@ -5,6 +5,8 @@ class ContactInfo {
   final String nickname;
   final String avatar;
   final String remark;
+  final bool isTop;
+  final bool isMute;
 
   ContactInfo({
     required this.id,
@@ -13,6 +15,8 @@ class ContactInfo {
     required this.nickname,
     required this.avatar,
     this.remark = '',
+    this.isTop = false,
+    this.isMute = false,
   });
 
   factory ContactInfo.fromJson(Map<String, dynamic> json) {
@@ -23,6 +27,8 @@ class ContactInfo {
       nickname: json['nickname']?.toString() ?? '',
       avatar: json['avatar']?.toString() ?? '',
       remark: json['remark']?.toString() ?? '',
+      isTop: json['isTop'] == true || json['isTop'] == 1,
+      isMute: json['isMute'] == true || json['isMute'] == 1,
     );
   }
 
@@ -34,6 +40,8 @@ class ContactInfo {
       'nickname': nickname,
       'avatar': avatar,
       'remark': remark,
+      'isTop': isTop,
+      'isMute': isMute,
     };
   }
 
@@ -44,6 +52,8 @@ class ContactInfo {
     String? nickname,
     String? avatar,
     String? remark,
+    bool? isTop,
+    bool? isMute,
   }) {
     return ContactInfo(
       id: id ?? this.id,
@@ -52,6 +62,8 @@ class ContactInfo {
       nickname: nickname ?? this.nickname,
       avatar: avatar ?? this.avatar,
       remark: remark ?? this.remark,
+      isTop: isTop ?? this.isTop,
+      isMute: isMute ?? this.isMute,
     );
   }
 

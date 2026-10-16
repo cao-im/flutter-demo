@@ -51,7 +51,7 @@ class ContactProvider with ChangeNotifier {
       grouped[letter] = [];
     }
     for (final contact in _contacts) {
-      final initial = _getPinyinInitial(contact.nickname.isNotEmpty ? contact.nickname : contact.username);
+      final initial = _getPinyinInitial(contact.displayName);
       grouped[initial]!.add(contact);
     }
     // 移除空的索引项（保留 # 即使为空也显示）
@@ -143,7 +143,24 @@ class ContactProvider with ChangeNotifier {
         await _dbService.upsertContacts(serverContacts);
         debugPrint('🔄 已从服务器同步 ${serverContacts.length} 个联系人到本地数据库');
 
-        _contacts = await loadContactsFromLocal();
+        // 本地库暂无 isTop/isMute 列，内存列表保留服务端标记，并写回私聊会话
+        final localContacts = await loadContactsFromLocal();
+        final flagById = {
+          for (final c in serverContacts)
+            (int.tryParse(c.imUserId ?? c.id) ?? 0): c,
+        };
+        _contacts = localContacts.map((local) {
+          final id = int.tryParse(local.imUserId ?? local.id) ?? 0;
+          final server = flagById[id];
+          if (server == null) return local;
+          return local.copyWith(
+            remark: server.remark,
+            isTop: server.isTop,
+            isMute: server.isMute,
+          );
+        }).toList();
+
+        await _syncPrivateConversationFlags(serverContacts);
 
         clearCache();
         final allContactIds = _contacts.map((c) => int.tryParse(c.id) ?? 0).where((id) => id > 0).toList();
@@ -202,6 +219,9 @@ class ContactProvider with ChangeNotifier {
           id: previous.id,
           phone: user.phone ?? previous.phone,
           email: user.email ?? previous.email,
+          remark: previous.remark,
+          isTop: previous.isTop,
+          isMute: previous.isMute,
         );
       }
       updateCache(ContactInfo(
@@ -210,6 +230,9 @@ class ContactProvider with ChangeNotifier {
         username: user.username,
         nickname: user.nickname,
         avatar: user.avatar ?? '',
+        remark: index != -1 ? _contacts[index].remark : '',
+        isTop: index != -1 ? _contacts[index].isTop : false,
+        isMute: index != -1 ? _contacts[index].isMute : false,
       ));
       _eventBus.fire(ContactDataChangedEvent(
         contactId: imUserId,
@@ -397,7 +420,144 @@ class ContactProvider with ChangeNotifier {
       email: json['email'],
       phone: json['phone'],
       imUserId: imUserId,
+      remark: json['remark']?.toString() ?? '',
+      isTop: json['isTop'] == true || json['isTop'] == 1,
+      isMute: json['isMute'] == true || json['isMute'] == 1,
     );
+  }
+
+  /// 更新好友备注，并写回本地缓存
+  Future<UserModel?> updateRemark(int contactUserId, String remark) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || contactUserId <= 0) return null;
+
+    await _apiService.updateContactRemark(userId, contactUserId, remark);
+    await _initDatabaseIfNeeded();
+    await _dbService.updateContactRemark(contactUserId, remark);
+
+    final updated = _patchContact(contactUserId, (c) => c.copyWith(remark: remark));
+    if (updated != null) {
+      _contactCache[contactUserId] = ContactInfo(
+        id: _contactCache[contactUserId]?.id ?? 0,
+        userId: contactUserId,
+        username: updated.username,
+        nickname: updated.nickname,
+        avatar: updated.avatar ?? '',
+        remark: remark,
+        isTop: updated.isTop,
+        isMute: updated.isMute,
+      );
+      _eventBus.fire(ContactDataChangedEvent(changeType: 'remark'));
+      notifyListeners();
+    }
+    return updated;
+  }
+
+  /// 设置联系人置顶（同步服务端）
+  Future<UserModel?> setContactTop(int contactUserId, bool isTop) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || contactUserId <= 0) return null;
+
+    await _apiService.setContactTop(userId, contactUserId, isTop);
+    final updated = _patchContact(contactUserId, (c) => c.copyWith(isTop: isTop));
+    notifyListeners();
+    return updated;
+  }
+
+  /// 设置联系人免打扰（同步服务端）
+  Future<UserModel?> setContactMute(int contactUserId, bool isMute) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || contactUserId <= 0) return null;
+
+    await _apiService.setContactMute(userId, contactUserId, isMute);
+    final updated = _patchContact(contactUserId, (c) => c.copyWith(isMute: isMute));
+    notifyListeners();
+    return updated;
+  }
+
+  /// 把会话或内存联系人里的置顶、免打扰、备注补到资料对象上。
+  /// 传入的会话标记优先，避免资料页用空的 UserModel 把开关显示成关闭。
+  UserModel mergeRelationState(
+    UserModel user, {
+    bool? isTop,
+    bool? isMute,
+  }) {
+    final id = int.tryParse(user.imUserId ?? user.id) ?? 0;
+    UserModel? known;
+    for (final contact in _contacts) {
+      final contactId = int.tryParse(contact.imUserId ?? contact.id) ?? 0;
+      if (contactId == id && id > 0) {
+        known = contact;
+        break;
+      }
+    }
+    return user.copyWith(
+      remark: user.remark.isNotEmpty ? user.remark : (known?.remark ?? ''),
+      isTop: isTop ?? known?.isTop ?? user.isTop,
+      isMute: isMute ?? known?.isMute ?? user.isMute,
+    );
+  }
+
+  UserModel? _patchContact(int contactUserId, UserModel Function(UserModel) patch) {
+    final index = _contacts.indexWhere(
+      (c) => c.imUserId == contactUserId.toString() || c.id == contactUserId.toString(),
+    );
+    if (index == -1) return null;
+    final updated = patch(_contacts[index]);
+    _contacts[index] = updated;
+    return updated;
+  }
+
+  /// 拉黑用户
+  Future<void> blockUser(int targetUserId) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || targetUserId <= 0) return;
+    await _apiService.blockUser(userId, targetUserId);
+    notifyListeners();
+  }
+
+  /// 解除拉黑
+  Future<void> unblockUser(int targetUserId) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || targetUserId <= 0) return;
+    await _apiService.unblockUser(userId, targetUserId);
+    notifyListeners();
+  }
+
+  /// 是否已拉黑
+  Future<bool> isBlocked(int targetUserId) async {
+    final imUserIdStr = await StorageService.getImUserId();
+    final userId = int.tryParse(imUserIdStr ?? '');
+    if (userId == null || targetUserId <= 0) return false;
+    return _apiService.isBlocked(userId, targetUserId);
+  }
+
+  /// 将联系人置顶/免打扰同步到对应私聊会话
+  Future<void> _syncPrivateConversationFlags(List<UserModel> contacts) async {
+    try {
+      for (final contact in contacts) {
+        final targetId = int.tryParse(contact.imUserId ?? contact.id) ?? 0;
+        if (targetId <= 0) continue;
+        final conv = await _imClient.getOrCreateConversation(
+          targetType: sdk.TargetType.private.value,
+          targetId: targetId,
+        );
+        if (conv.id == null || conv.id! <= 0) continue;
+        if (conv.isTop != contact.isTop) {
+          await _imClient.setConversationTop(conv.id!, contact.isTop);
+        }
+        if (conv.isMute != contact.isMute) {
+          await _imClient.setConversationMute(conv.id!, contact.isMute);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ 同步私聊会话置顶/免打扰失败: $e');
+    }
   }
 
   void clearSearchResults() {

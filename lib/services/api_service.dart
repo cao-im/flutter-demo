@@ -111,6 +111,34 @@ class ApiService {
     return contactApi.deleteFriend(userId, contactId);
   }
 
+  Future<void> updateContactRemark(int userId, int contactId, String remark) {
+    return contactApi.updateRemark(userId, contactId, remark);
+  }
+
+  Future<void> setContactTop(int userId, int contactId, bool isTop) {
+    return contactApi.setTop(userId, contactId, isTop);
+  }
+
+  Future<void> setContactMute(int userId, int contactId, bool isMute) {
+    return contactApi.setMute(userId, contactId, isMute);
+  }
+
+  Future<void> blockUser(int userId, int targetUserId) {
+    return contactApi.blockUser(userId, targetUserId);
+  }
+
+  Future<void> unblockUser(int userId, int targetUserId) {
+    return contactApi.unblockUser(userId, targetUserId);
+  }
+
+  Future<bool> isBlocked(int userId, int targetUserId) {
+    return contactApi.isBlocked(userId, targetUserId);
+  }
+
+  Future<List<dynamic>> getBlacklist(int userId) {
+    return contactApi.getBlacklist(userId);
+  }
+
   /// 搜索用户（委托给 [ContactApi.searchUsers]）
   Future<List<dynamic>> searchUsers(String keyword) async {
     return contactApi.searchUsers(keyword);

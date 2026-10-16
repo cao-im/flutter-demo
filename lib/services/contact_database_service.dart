@@ -72,7 +72,8 @@ class ContactDatabaseService {
         nickname: Value(user.nickname),
         avatar: Value(user.avatar ?? ''),
         location: const Value(''),
-        remark: const Value(''),
+        // 以服务端备注为准（空字符串表示无备注）
+        remark: Value(user.remark),
         phone: Value(user.phone ?? ''),
         email: Value(user.email ?? ''),
         onlineStatus: Value(user.isOnline ? 1 : 0),
@@ -257,6 +258,14 @@ class ContactDatabaseService {
         ));
   }
 
+  /// 更新备注名
+  Future<void> updateContactRemark(int userId, String remark) async {
+    final db = database;
+    if (userId <= 0) return;
+    await (db.update(db.contacts)..where((tbl) => tbl.userId.equals(userId)))
+        .write(ContactsCompanion(remark: Value(remark)));
+  }
+
   /// 兼容旧接口：字符串形式的昵称更新
   Future<void> updateContactNicknameString(String id, String nickname) async {
     final userId = int.tryParse(id) ?? 0;
@@ -279,6 +288,7 @@ class ContactDatabaseService {
       isOnline: row.onlineStatus == 1,
       imUserId: realUserId.toString(), // imUserId 同样使用真正的用户ID
       friendStatus: row.status,
+      remark: row.remark,
     );
   }
 

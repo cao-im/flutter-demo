@@ -348,9 +348,7 @@ class _ContactsPageState extends State<ContactsPage>
   }
 
   Widget _buildContactItem(UserModel contact) {
-    final name = contact.nickname.isNotEmpty
-        ? contact.nickname
-        : (contact.username.isNotEmpty ? contact.username : '未知用户');
+    final name = contact.displayName.isNotEmpty ? contact.displayName : '未知用户';
 
     return Material(
       color: Colors.transparent,
@@ -402,9 +400,7 @@ class _ContactsPageState extends State<ContactsPage>
   }
 
   void _showContactMenu(UserModel contact) {
-    final name = contact.nickname.isNotEmpty
-        ? contact.nickname
-        : contact.username;
+    final name = contact.displayName;
 
     showModalBottomSheet(
       context: context,

@@ -247,8 +247,17 @@ class ChatProvider with ChangeNotifier {
           unreadCount: conv.unreadCount,
           isGroup: conv.isGroup,
           lastActiveTime: lastActiveTime,
+          isTop: conv.isTop,
+          isMute: conv.isMute,
         ));
       }
+
+      conversationModels.sort((a, b) {
+        if (a.isTop != b.isTop) return a.isTop ? -1 : 1;
+        final at = a.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        final bt = b.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        return bt.compareTo(at);
+      });
 
       _conversations = conversationModels;
 
@@ -438,8 +447,17 @@ class ChatProvider with ChangeNotifier {
           unreadCount: unreadCount,
           isGroup: conv.isGroup,
           lastActiveTime: lastActiveTime,
+          isTop: conv.isTop,
+          isMute: conv.isMute,
         ));
       }
+
+      conversationModels.sort((a, b) {
+        if (a.isTop != b.isTop) return a.isTop ? -1 : 1;
+        final at = a.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        final bt = b.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        return bt.compareTo(at);
+      });
 
       _conversations = conversationModels;
       notifyListeners();
@@ -937,6 +955,14 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  /// 已加载的私聊会话。置顶、免打扰以这里的状态为准。
+  ConversationModel? privateConversation(int targetId) {
+    if (targetId <= 0) return null;
+    return _conversations
+        .where((c) => !c.isGroup && c.targetId == targetId)
+        .firstOrNull;
+  }
+
   /// 根据 targetId 从已加载的会话列表中查找数据库主键 dbId
   int? _findDbIdByTargetId(int targetId) {
     final match = _conversations.where(
@@ -969,6 +995,58 @@ class ChatProvider with ChangeNotifier {
       debugPrint('❌[ChatProvider] 删除会话失败: $e');
       debugPrint('❌[ChatProvider] 堆栈: $stackTrace');
       rethrow;
+    }
+  }
+
+  /// 会话置顶；私聊时同步联系人服务端标记
+  Future<void> setConversationTop(
+    ConversationModel conversation,
+    bool isTop, {
+    Future<void> Function(int contactUserId, bool isTop)? syncContact,
+  }) async {
+    final dbId = conversation.dbId ?? _findDbIdByTargetId(conversation.targetId);
+    if (dbId == null || dbId <= 0) {
+      throw StateError('会话尚未落库，无法置顶');
+    }
+    await _sdkManager.client.setConversationTop(dbId, isTop);
+    if (!conversation.isGroup && syncContact != null) {
+      await syncContact(conversation.targetId, isTop);
+    }
+    final index = _conversations.indexWhere((c) => c.id == conversation.id);
+    if (index != -1) {
+      _conversations[index] = _conversations[index].copyWith(isTop: isTop);
+      _conversations.sort((a, b) {
+        if (a.isTop != b.isTop) return a.isTop ? -1 : 1;
+        final at = a.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        final bt = b.lastActiveTime?.millisecondsSinceEpoch ?? 0;
+        return bt.compareTo(at);
+      });
+      notifyListeners();
+    } else {
+      await loadConversations();
+    }
+  }
+
+  /// 会话免打扰；私聊时同步联系人服务端标记
+  Future<void> setConversationMute(
+    ConversationModel conversation,
+    bool isMute, {
+    Future<void> Function(int contactUserId, bool isMute)? syncContact,
+  }) async {
+    final dbId = conversation.dbId ?? _findDbIdByTargetId(conversation.targetId);
+    if (dbId == null || dbId <= 0) {
+      throw StateError('会话尚未落库，无法设置免打扰');
+    }
+    await _sdkManager.client.setConversationMute(dbId, isMute);
+    if (!conversation.isGroup && syncContact != null) {
+      await syncContact(conversation.targetId, isMute);
+    }
+    final index = _conversations.indexWhere((c) => c.id == conversation.id);
+    if (index != -1) {
+      _conversations[index] = _conversations[index].copyWith(isMute: isMute);
+      notifyListeners();
+    } else {
+      await loadConversations();
     }
   }
 
@@ -1127,8 +1205,17 @@ class ChatProvider with ChangeNotifier {
       }
 
       // 确定目标ID和是否为群聊
-      final targetId = message.groupId ?? message.toId;
+      final targetId = message.groupId ?? (message.fromId);
       final isGroup = message.groupId != null && message.groupId! > 0;
+
+      // 免打扰会话不弹通知
+      final muted = _conversations.any(
+        (c) => c.isMute && c.targetId == (isGroup ? message.groupId : message.fromId),
+      );
+      if (muted) {
+        debugPrint('🔕[ChatProvider] 免打扰会话，跳过通知: targetId=$targetId');
+        return;
+      }
 
       final notificationData = NotificationData(
         senderId: message.fromId,

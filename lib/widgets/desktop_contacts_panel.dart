@@ -544,7 +544,24 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
         debugPrint('👆[DesktopContactsPanel] 点击联系人: id=${contact.id}, userId=$realUserId, name=$name');
         final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
-        layoutProvider.selectContact(UserModel(id: contact.id, username: contact.username ?? '', nickname: contact.nickname ?? '', avatar: contact.avatar, imUserId: (realUserId > 0) ? realUserId.toString() : contact.imUserId));
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        final conversation = chatProvider.privateConversation(realUserId);
+        final selected = contact is UserModel
+            ? contact
+            : UserModel(
+                id: contact.id?.toString() ?? '$realUserId',
+                username: contact.username?.toString() ?? '',
+                nickname: contact.nickname?.toString() ?? '',
+                avatar: contact.avatar?.toString(),
+                imUserId: realUserId > 0 ? '$realUserId' : contact.imUserId?.toString(),
+              );
+        layoutProvider.selectContact(
+          Provider.of<ContactProvider>(context, listen: false).mergeRelationState(
+            selected,
+            isTop: conversation?.isTop ?? (contact is UserModel ? contact.isTop : null),
+            isMute: conversation?.isMute ?? (contact is UserModel ? contact.isMute : null),
+          ),
+        );
       },
       onLongPress: () => _showContactContextMenu(contact, context),
       hoverColor: AppTheme.primaryColor.withOpacity(0.04),
@@ -591,13 +608,24 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       } else if (value == 'profile') {
         final realUserId = int.tryParse(contact.imUserId ?? contact.id) ?? int.tryParse(contact.id) ?? 0;
         final layoutProvider = Provider.of<LayoutProvider>(context, listen: false);
-        layoutProvider.selectContact(UserModel(
-          id: contact.id?.toString() ?? '$realUserId',
-          username: contact.username?.toString() ?? '',
-          nickname: contact.nickname?.toString() ?? '',
-          avatar: contact.avatar?.toString(),
-          imUserId: realUserId > 0 ? '$realUserId' : contact.imUserId?.toString(),
-        ));
+        final conversation = Provider.of<ChatProvider>(context, listen: false)
+            .privateConversation(realUserId);
+        final selected = contact is UserModel
+            ? contact
+            : UserModel(
+                id: contact.id?.toString() ?? '$realUserId',
+                username: contact.username?.toString() ?? '',
+                nickname: contact.nickname?.toString() ?? '',
+                avatar: contact.avatar?.toString(),
+                imUserId: realUserId > 0 ? '$realUserId' : contact.imUserId?.toString(),
+              );
+        layoutProvider.selectContact(
+          Provider.of<ContactProvider>(context, listen: false).mergeRelationState(
+            selected,
+            isTop: conversation?.isTop ?? (contact is UserModel ? contact.isTop : null),
+            isMute: conversation?.isMute ?? (contact is UserModel ? contact.isMute : null),
+          ),
+        );
       } else if (value == 'delete') {
         _confirmDeleteContact(contact, name);
       }

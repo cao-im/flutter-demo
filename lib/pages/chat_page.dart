@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../providers/chat_provider.dart';
+import '../providers/contact_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_keyboard_provider.dart';
 import '../providers/layout_provider.dart';
@@ -581,11 +582,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _openPeerProfile(BuildContext context) {
     final userId = effectiveTargetId;
     if (userId <= 0) return;
-    final contact = UserModel(
-      id: '$userId',
-      username: '',
-      nickname: widget.conversationName,
-      imUserId: '$userId',
+    final contacts = context.read<ContactProvider>();
+    final conversation = context.read<ChatProvider>().privateConversation(userId);
+    final contact = contacts.mergeRelationState(
+      UserModel(
+        id: '$userId',
+        username: '',
+        nickname: widget.conversationName,
+        imUserId: '$userId',
+      ),
+      isTop: conversation?.isTop,
+      isMute: conversation?.isMute,
     );
     if (widget.isPanelMode) {
       final layout = context.read<LayoutProvider>();

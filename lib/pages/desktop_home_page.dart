@@ -541,6 +541,8 @@ class _ContactDetailPanel extends StatefulWidget {
 
 class _ContactDetailPanelState extends State<_ContactDetailPanel> {
   late UserModel _contact;
+  bool _busy = false;
+  bool _blocked = false;
 
   @override
   void initState() {
@@ -557,37 +559,209 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
       _contact = widget.contact;
       _refreshProfile();
     } else if (widget.contact.nickname != _contact.nickname ||
-        widget.contact.avatar != _contact.avatar) {
+        widget.contact.avatar != _contact.avatar ||
+        widget.contact.remark != _contact.remark ||
+        widget.contact.isTop != _contact.isTop ||
+        widget.contact.isMute != _contact.isMute) {
       _contact = widget.contact;
     }
   }
 
+  int get _imUserId =>
+      int.tryParse(_contact.imUserId ?? '') ?? int.tryParse(_contact.id) ?? 0;
+
   Future<void> _refreshProfile() async {
-    final imUserId = int.tryParse(_contact.imUserId ?? '') ??
-        int.tryParse(_contact.id) ??
-        0;
+    final imUserId = _imUserId;
     if (imUserId <= 0 || !mounted) return;
-    final updated = await context.read<ContactProvider>().refreshContactFromServer(imUserId);
-    if (!mounted || updated == null) return;
-    final name = updated.nickname.isNotEmpty ? updated.nickname : updated.username;
-    setState(() => _contact = updated);
-    final layout = context.read<LayoutProvider>();
-    layout.replaceSelectedContact(updated);
-    layout.renameConversationIfOpen(updated.id, name);
-    layout.renameConversationIfOpen('$imUserId', name);
+    final contactProvider = context.read<ContactProvider>();
+    final chatProvider = context.read<ChatProvider>();
+    final conversation = chatProvider.privateConversation(imUserId);
+    if (conversation != null && mounted) {
+      setState(() {
+        _contact = _contact.copyWith(
+          isTop: conversation.isTop,
+          isMute: conversation.isMute,
+        );
+      });
+    }
+    final updated = await contactProvider.refreshContactFromServer(imUserId);
+    final blocked = await contactProvider.isBlocked(imUserId);
+    if (!mounted) return;
+    final live = chatProvider.privateConversation(imUserId);
+    if (updated != null) {
+      final merged = contactProvider.mergeRelationState(
+        updated.copyWith(
+          remark: _contact.remark.isNotEmpty ? _contact.remark : updated.remark,
+        ),
+        isTop: live?.isTop,
+        isMute: live?.isMute,
+      );
+      setState(() {
+        _contact = merged;
+        _blocked = blocked;
+      });
+      final layout = context.read<LayoutProvider>();
+      layout.replaceSelectedContact(merged);
+      layout.renameConversationIfOpen(merged.id, merged.displayName);
+      layout.renameConversationIfOpen('$imUserId', merged.displayName);
+    } else {
+      setState(() => _blocked = blocked);
+    }
+  }
+
+  Future<void> _toggleBlock() async {
+    final next = !_blocked;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(next ? '加入黑名单' : '解除拉黑'),
+        content: Text(next
+            ? '拉黑后对方将无法给你发消息或加好友。'
+            : '解除后对方可以再次给你发消息。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(next ? '拉黑' : '解除', style: TextStyle(color: next ? AppTheme.errorColor : null)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final contactProvider = context.read<ContactProvider>();
+      if (next) {
+        await contactProvider.blockUser(_imUserId);
+      } else {
+        await contactProvider.unblockUser(_imUserId);
+      }
+      if (mounted) setState(() => _blocked = next);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  ConversationModel? _findPrivateConversation() {
+    return context
+        .read<ChatProvider>()
+        .conversations
+        .where((c) => !c.isGroup && c.targetId == _imUserId)
+        .firstOrNull;
+  }
+
+  Future<void> _editRemark() async {
+    final controller = TextEditingController(text: _contact.remark);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('设置备注'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 50,
+          decoration: const InputDecoration(hintText: '备注名', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await context.read<ContactProvider>().updateRemark(_imUserId, result);
+      if (!mounted || updated == null) return;
+      setState(() => _contact = updated);
+      final layout = context.read<LayoutProvider>();
+      layout.replaceSelectedContact(updated);
+      layout.renameConversationIfOpen(updated.id, updated.displayName);
+      layout.renameConversationIfOpen('$_imUserId', updated.displayName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('备注保存失败: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleTop(bool next) async {
+    setState(() => _busy = true);
+    try {
+      final chat = context.read<ChatProvider>();
+      final contact = context.read<ContactProvider>();
+      final conv = _findPrivateConversation();
+      if (conv != null) {
+        await chat.setConversationTop(
+          conv,
+          next,
+          syncContact: (id, isTop) => contact.setContactTop(id, isTop).then((_) {}),
+        );
+      } else {
+        await contact.setContactTop(_imUserId, next);
+      }
+      if (mounted) setState(() => _contact = _contact.copyWith(isTop: next));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('置顶失败: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleMute(bool next) async {
+    setState(() => _busy = true);
+    try {
+      final chat = context.read<ChatProvider>();
+      final contact = context.read<ContactProvider>();
+      final conv = _findPrivateConversation();
+      if (conv != null) {
+        await chat.setConversationMute(
+          conv,
+          next,
+          syncContact: (id, isMute) => contact.setContactMute(id, isMute).then((_) {}),
+        );
+      } else {
+        await contact.setContactMute(_imUserId, next);
+      }
+      if (mounted) setState(() => _contact = _contact.copyWith(isMute: next));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('免打扰设置失败: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final contact = _contact;
-    final displayName = contact.nickname.isNotEmpty ? contact.nickname : contact.username;
+    final displayName = contact.displayName;
     final avatarUrl = contact.avatar;
 
     return Material(
       color: AppTheme.backgroundColor,
       child: Column(
         children: [
-          // 头部：头像 + 昵称 + 操作按钮
           Container(
             padding: EdgeInsets.symmetric(horizontal: 32, vertical: 24),
             decoration: BoxDecoration(
@@ -615,41 +789,60 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        '微信号: ${contact.username}',
+                        '用户名: ${contact.username}',
                         style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.more_horiz, color: AppTheme.textSecondaryColor),
-                  tooltip: '更多',
-                  onPressed: () {},
-                ),
               ],
             ),
           ),
 
-          // 详情区域
           Expanded(
             child: ListView(
               padding: EdgeInsets.symmetric(vertical: 20),
               children: [
                 _buildDetailSection(title: '好友资料', children: [
-                  _buildDetailItem(label: '备注', value: '添加备注名'),
+                  _buildDetailItem(
+                    label: '备注',
+                    value: contact.remark.isEmpty ? '添加备注名' : contact.remark,
+                    onTap: _busy ? null : _editRemark,
+                  ),
                   if (contact.phone != null && contact.phone!.isNotEmpty)
                     _buildDetailItem(label: '手机号', value: contact.phone!),
                   if (contact.email != null && contact.email!.isNotEmpty)
                     _buildDetailItem(label: '邮箱', value: contact.email!),
                 ]),
-                _buildDetailSection(title: '更多信息', children: [
-                  _buildDetailItem(label: '来源', value: '通过搜索添加'),
+                _buildDetailSection(title: '聊天设置', children: [
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                    title: const Text('置顶聊天', style: TextStyle(fontSize: 14)),
+                    value: contact.isTop,
+                    onChanged: _busy ? null : _toggleTop,
+                  ),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                    title: const Text('消息免打扰', style: TextStyle(fontSize: 14)),
+                    value: contact.isMute,
+                    onChanged: _busy ? null : _toggleMute,
+                  ),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 32),
+                    title: Text(
+                      _blocked ? '解除拉黑' : '加入黑名单',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _blocked ? AppTheme.primaryColor : AppTheme.errorColor,
+                      ),
+                    ),
+                    onTap: _busy ? null : _toggleBlock,
+                  ),
                 ]),
               ],
             ),
           ),
 
-          // 底部操作按钮
           Container(
             padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
@@ -659,10 +852,8 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildActionButton(icon: Icons.chat_bubble_outline, label: '发消息', onTap: () {
-                  // 切换到会话标签并打开与该联系人的聊天
                   final layoutProvider = context.read<LayoutProvider>();
                   layoutProvider.selectNavigation(0);
-                  // 延迟一帧确保导航切换完成
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     layoutProvider.selectConversation(contact.id, displayName, false);
                   });
@@ -694,15 +885,20 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
     );
   }
 
-  Widget _buildDetailItem({required String label, required String value}) {
+  Widget _buildDetailItem({
+    required String label,
+    required String value,
+    VoidCallback? onTap,
+  }) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         child: Row(
           children: [
             SizedBox(width: 80, child: Text(label, style: TextStyle(fontSize: 14, color: AppTheme.textSecondaryColor))),
             Expanded(child: Text(value, style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor))),
+            if (onTap != null) Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondaryColor),
           ],
         ),
       ),

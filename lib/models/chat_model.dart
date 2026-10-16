@@ -13,6 +13,8 @@ class ConversationModel {
   final DateTime? lastActiveTime;
   final bool isGroup;
   final String? groupOwner;
+  final bool isTop;
+  final bool isMute;
 
   ConversationModel({
     required this.id,
@@ -26,6 +28,8 @@ class ConversationModel {
     this.lastActiveTime,
     this.isGroup = false,
     this.groupOwner,
+    this.isTop = false,
+    this.isMute = false,
   });
 
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,8 @@ class ConversationModel {
           : null,
       isGroup: json['is_group'] ?? false,
       groupOwner: json['group_owner'],
+      isTop: json['is_top'] ?? false,
+      isMute: json['is_mute'] ?? false,
     );
   }
 
@@ -59,6 +65,8 @@ class ConversationModel {
       'last_active_time': lastActiveTime?.toIso8601String(),
       'is_group': isGroup,
       'group_owner': groupOwner,
+      'is_top': isTop,
+      'is_mute': isMute,
     };
   }
 
@@ -74,6 +82,8 @@ class ConversationModel {
     DateTime? lastActiveTime,
     bool? isGroup,
     String? groupOwner,
+    bool? isTop,
+    bool? isMute,
   }) {
     return ConversationModel(
       id: id ?? this.id,
@@ -87,6 +97,8 @@ class ConversationModel {
       lastActiveTime: lastActiveTime ?? this.lastActiveTime,
       isGroup: isGroup ?? this.isGroup,
       groupOwner: groupOwner ?? this.groupOwner,
+      isTop: isTop ?? this.isTop,
+      isMute: isMute ?? this.isMute,
     );
   }
 }

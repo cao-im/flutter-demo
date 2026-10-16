@@ -125,6 +125,38 @@ class _ConversationListPageState extends State<ConversationListPage>
       ),
       items: [
         PopupMenuItem<String>(
+          value: 'top',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                conversation.isTop ? Icons.push_pin_outlined : Icons.push_pin,
+                size: 20,
+                color: AppTheme.textSecondaryColor,
+              ),
+              const SizedBox(width: 8),
+              Text(conversation.isTop ? '取消置顶' : '置顶聊天'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'mute',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                conversation.isMute
+                    ? Icons.notifications_active_outlined
+                    : Icons.notifications_off_outlined,
+                size: 20,
+                color: AppTheme.textSecondaryColor,
+              ),
+              const SizedBox(width: 8),
+              Text(conversation.isMute ? '关闭免打扰' : '消息免打扰'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
           value: 'delete',
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -140,6 +172,52 @@ class _ConversationListPageState extends State<ConversationListPage>
 
     if (result == 'delete') {
       _confirmAndDelete(conversation);
+    } else if (result == 'top') {
+      await _toggleTop(conversation);
+    } else if (result == 'mute') {
+      await _toggleMute(conversation);
+    }
+  }
+
+  Future<void> _toggleTop(ConversationModel conversation) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final contactProvider = Provider.of<ContactProvider>(context, listen: false);
+    try {
+      await chatProvider.setConversationTop(
+        conversation,
+        !conversation.isTop,
+        syncContact: conversation.isGroup
+            ? null
+            : (contactUserId, isTop) async {
+                await contactProvider.setContactTop(contactUserId, isTop);
+              },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('置顶失败: $e'), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
+
+  Future<void> _toggleMute(ConversationModel conversation) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final contactProvider = Provider.of<ContactProvider>(context, listen: false);
+    try {
+      await chatProvider.setConversationMute(
+        conversation,
+        !conversation.isMute,
+        syncContact: conversation.isGroup
+            ? null
+            : (contactUserId, isMute) async {
+                await contactProvider.setContactMute(contactUserId, isMute);
+              },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('免打扰设置失败: $e'), behavior: SnackBarBehavior.floating),
+      );
     }
   }
 

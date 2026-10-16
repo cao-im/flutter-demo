@@ -32,7 +32,11 @@ class ConversationItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+          color: isSelected
+              ? Colors.blue.withOpacity(0.1)
+              : (conversation.isTop
+                  ? AppTheme.dividerColor.withOpacity(0.35)
+                  : Colors.transparent),
           border: Border(
             bottom: BorderSide(color: AppTheme.dividerColor, width: 0.5),
           ),
@@ -51,28 +55,37 @@ class ConversationItem extends StatelessWidget {
                   Positioned(
                     right: -6,
                     top: -6,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      child: Text(
-                        conversation.unreadCount > 99
-                            ? '99+'
-                            : '${conversation.unreadCount}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                    child: conversation.isMute
+                        ? Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            child: Text(
+                              conversation.unreadCount > 99
+                                  ? '99+'
+                                  : '${conversation.unreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                   ),
               ],
             ),
@@ -85,14 +98,25 @@ class ConversationItem extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                        child: Text(
-                          conversation.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimaryColor,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            if (conversation.isTop)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.push_pin, size: 14, color: AppTheme.textSecondaryColor),
+                              ),
+                            Flexible(
+                              child: Text(
+                                conversation.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimaryColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Text(
@@ -114,15 +138,20 @@ class ConversationItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 13,
-                            color: conversation.unreadCount > 0
+                            color: conversation.unreadCount > 0 && !conversation.isMute
                                 ? AppTheme.textPrimaryColor
                                 : AppTheme.textSecondaryColor,
-                            fontWeight: conversation.unreadCount > 0
+                            fontWeight: conversation.unreadCount > 0 && !conversation.isMute
                                 ? FontWeight.w500
                                 : FontWeight.normal,
                           ),
                         ),
                       ),
+                      if (conversation.isMute)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 6),
+                          child: Icon(Icons.notifications_off_outlined, size: 16, color: AppTheme.textSecondaryColor),
+                        ),
                     ],
                   ),
                 ],
