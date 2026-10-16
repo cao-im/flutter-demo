@@ -10,6 +10,8 @@ import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/voice_content.dart';
 import '../models/file_content.dart';
+import '../models/video_content.dart';
+import '../services/video_inspect.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../router/app_router.dart';
@@ -709,6 +711,136 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  /// 先展示本地封面和时长，上传成功后再按视频类型发出。
+  Future<void> sendVideo({
+    required String name,
+    required int size,
+    String? path,
+    Uint8List? bytes,
+  }) async {
+    if (_currentConversation == null) {
+      throw StateError('请先选择会话');
+    }
+    final localRef = _localMediaPath(path);
+    var filename = name.trim();
+    if (filename.isEmpty) filename = 'video.mp4';
+    if (!VideoContent.isAllowed(filename) && VideoContent.isAllowed(localRef)) {
+      filename = localRef.replaceAll('\\', '/').split('/').last;
+    }
+    if (!VideoContent.isAllowed(filename)) {
+      throw StateError('只支持 mp4、mov、avi');
+    }
+    final declared = size > 0 ? size : (bytes?.length ?? 0);
+    if (declared > VideoContent.maxBytes) {
+      throw StateError('视频不能超过 50MB');
+    }
+
+    var duration = 0;
+    var coverPath = '';
+    if (localRef.isNotEmpty) {
+      final inspected = await VideoInspect.inspect(localRef);
+      duration = inspected.durationSeconds;
+      coverPath = inspected.coverPath;
+      if (duration > VideoContent.maxSeconds) {
+        throw StateError('视频不能超过 5 分钟');
+      }
+    }
+
+    final currentUserId = _sdkManager.client.currentUserId;
+    final currentUserInfo = await _getCurrentUserInfo();
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    final pending = VideoContent.encode(
+      url: localRef,
+      name: filename,
+      size: declared,
+      duration: duration,
+      cover: coverPath,
+    );
+    _messages.add(MessageModel(
+      id: tempId,
+      conversationId: _currentConversation!.id,
+      senderId: currentUserId?.toString() ?? '',
+      receiverId: '',
+      type: MessageType.video,
+      content: pending,
+      mediaUrl: localRef.isEmpty ? null : localRef,
+      timestamp: DateTime.now(),
+      isSending: true,
+      isSent: true,
+      status: MessageStatus.sending,
+      senderInfo: currentUserInfo,
+      canRecall: true,
+    ));
+    notifyListeners();
+
+    try {
+      final data = bytes ?? await _readLocalFile(localRef);
+      if (data.length > VideoContent.maxBytes) {
+        throw StateError('视频不能超过 50MB');
+      }
+      final url = await FileApi().uploadBytes(data, filename);
+      var coverUrl = '';
+      if (coverPath.isNotEmpty) {
+        try {
+          final coverBytes = await _readLocalFile(coverPath);
+          coverUrl = await FileApi().uploadBytes(coverBytes, 'cover.jpg');
+        } catch (e) {
+          debugPrint('封面上传失败: $e');
+        }
+      }
+      final content = VideoContent.encode(
+        url: url,
+        name: filename,
+        size: data.length,
+        duration: duration,
+        cover: coverUrl,
+      );
+      _replaceMessage(tempId, (m) => m.copyWith(content: content, mediaUrl: url));
+
+      final targetId = _currentConversation!.targetId;
+      if (targetId <= 0) {
+        throw StateError('会话无效，无法发送');
+      }
+      final sentMessage = _currentConversation!.isGroup
+          ? await _sdkManager.client.sendGroupMessage(
+              groupId: targetId,
+              content: content,
+              msgType: sdk.MessageType.video.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            )
+          : await _sdkManager.client.sendMessage(
+              toId: targetId,
+              content: content,
+              msgType: sdk.MessageType.video.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            );
+      _replaceMessage(tempId, (m) => m.copyWith(mid: sentMessage.mid));
+      loadConversations();
+    } catch (e) {
+      debugPrint('发送视频失败: $e');
+      await _keepFailedOutgoing(
+        tempId: tempId,
+        content: pending,
+        msgType: sdk.MessageType.video.value,
+        localPath: localRef.isEmpty ? null : localRef,
+        nickname: currentUserInfo?.nickname,
+        avatar: currentUserInfo?.avatar,
+      );
+      rethrow;
+    }
+  }
+
+  String _localMediaPath(String? path) {
+    final value = (path ?? '').trim();
+    if (kIsWeb || value.isEmpty) return '';
+    if (value.startsWith('blob:') || value.startsWith('http://') || value.startsWith('https://')) {
+      return '';
+    }
+    return value;
+  }
+
   Future<Uint8List> _readLocalFile(String path) async {
     if (kIsWeb || path.isEmpty) {
       throw StateError('文件不存在，无法发送');
@@ -824,7 +956,9 @@ class ChatProvider with ChangeNotifier {
               ? VoiceContent.tryParse(content)?.url
               : type == 'file'
                   ? FileContent.tryParse(content)?.url
-                  : null,
+                  : type == 'video'
+                      ? VideoContent.tryParse(content)?.url
+                      : null,
       timestamp: DateTime.now(),
       isSending: true,
       isSent: true,
@@ -923,7 +1057,7 @@ class ChatProvider with ChangeNotifier {
         MessageType.image => 'image',
         MessageType.audio => 'voice',
         MessageType.file => 'file',
-        MessageType.video => 'text',
+        MessageType.video => 'video',
         MessageType.text => 'text',
         MessageType.notice => 'text',
       };
@@ -1036,6 +1170,13 @@ class ChatProvider with ChangeNotifier {
         _replaceMessage(message.id, (m) => m.copyWith(
           content: content,
           mediaUrl: file?.url ?? m.mediaUrl,
+        ));
+      } else if (message.type == MessageType.video) {
+        content = await _uploadVideoIfNeeded(message);
+        final video = VideoContent.tryParse(content);
+        _replaceMessage(message.id, (m) => m.copyWith(
+          content: content,
+          mediaUrl: video?.url ?? m.mediaUrl,
         ));
       }
 
@@ -1437,7 +1578,7 @@ class ChatProvider with ChangeNotifier {
         senderId: message.fromId,
         nickname: isGroup ? '$nickname(群)' : nickname,
         avatarUrl: avatarUrl,
-        content: message.content,
+        content: message.msgType == sdk.MessageType.video ? '[视频]' : message.content,
         time: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
         targetId: targetId,
         isGroup: isGroup,
@@ -1562,6 +1703,8 @@ class ChatProvider with ChangeNotifier {
         return MessageType.audio;
       case 'file':
         return MessageType.file;
+      case 'video':
+        return MessageType.video;
       default:
         return MessageType.text;
     }
@@ -1575,6 +1718,8 @@ class ChatProvider with ChangeNotifier {
         return sdk.MessageType.voice.value;
       case 'file':
         return sdk.MessageType.file.value;
+      case 'video':
+        return sdk.MessageType.video.value;
       default:
         return sdk.MessageType.text.value;
     }
@@ -1589,7 +1734,7 @@ class ChatProvider with ChangeNotifier {
       case MessageType.file:
         return sdk.MessageType.file.value;
       case MessageType.video:
-        return 4;
+        return sdk.MessageType.video.value;
       case MessageType.text:
       case MessageType.notice:
         return sdk.MessageType.text.value;
@@ -1604,6 +1749,8 @@ class ChatProvider with ChangeNotifier {
         return MessageType.audio;
       case sdk.MessageType.file:
         return MessageType.file;
+      case sdk.MessageType.video:
+        return MessageType.video;
       case sdk.MessageType.text:
         return MessageType.text;
       case sdk.MessageType.system:
@@ -1629,6 +1776,13 @@ class ChatProvider with ChangeNotifier {
           return remote;
         }
         return msg.localPath ?? (remote.isEmpty ? null : remote);
+      case sdk.MessageType.video:
+        final video = VideoContent.tryParse(msg.content);
+        final videoUrl = video?.url ?? '';
+        if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+          return videoUrl;
+        }
+        return msg.localPath ?? (videoUrl.isEmpty ? null : videoUrl);
       case sdk.MessageType.text:
       case sdk.MessageType.system:
         return null;
@@ -1669,6 +1823,37 @@ class ChatProvider with ChangeNotifier {
     }
     final url = await FileApi().uploadBytes(bytes, name);
     return FileContent.encode(url, name, bytes.length);
+  }
+
+  Future<String> _uploadVideoIfNeeded(MessageModel message) async {
+    final parsed = VideoContent.tryParse(message.content);
+    var raw = (parsed?.url ?? message.mediaUrl ?? '').trim();
+    var cover = parsed?.cover ?? '';
+    final name = parsed?.name.isNotEmpty == true ? parsed!.name : 'video.mp4';
+    final duration = parsed?.duration ?? 0;
+    if (!VideoContent.isRemote(raw)) {
+      final bytes = await _readLocalFile(raw);
+      if (bytes.length > VideoContent.maxBytes) {
+        throw StateError('视频不能超过 50MB');
+      }
+      raw = await FileApi().uploadBytes(bytes, name);
+    }
+    if (cover.isNotEmpty && !VideoContent.isRemote(cover)) {
+      try {
+        final coverBytes = await _readLocalFile(cover);
+        cover = await FileApi().uploadBytes(coverBytes, 'cover.jpg');
+      } catch (e) {
+        debugPrint('重发时封面上传失败: $e');
+        cover = '';
+      }
+    }
+    return VideoContent.encode(
+      url: raw,
+      name: name,
+      size: parsed?.size ?? 0,
+      duration: duration,
+      cover: cover,
+    );
   }
 
   MessageModel _convertSdkMessageToModel(sdk.Message msg) {

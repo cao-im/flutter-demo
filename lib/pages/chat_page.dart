@@ -11,6 +11,7 @@ import '../providers/chat_keyboard_provider.dart';
 import '../providers/layout_provider.dart';
 import '../models/message_model.dart';
 import '../models/file_content.dart';
+import '../models/video_content.dart';
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
@@ -511,6 +512,30 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _pickVideo() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: VideoContent.allowedExtensions,
+        withData: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty || !mounted) return;
+      final file = result.files.single;
+      await context.read<ChatProvider>().sendVideo(
+        name: file.name,
+        size: file.size,
+        path: file.path,
+        bytes: file.bytes,
+      );
+      if (!mounted) return;
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Bad state: ', '').replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -545,10 +570,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                Wrap(
+                  alignment: WrapAlignment.spaceEvenly,
+                  spacing: 12,
+                  runSpacing: 16,
                   children: [
                     _buildOptionItem(Icons.photo_library, '图片', _pickImage),
+                    _buildOptionItem(Icons.videocam_outlined, '视频', _pickVideo),
                     _buildOptionItem(Icons.insert_drive_file_outlined, '文件', _pickFile),
                     if (widget.isGroup)
                       _buildOptionItem(Icons.alternate_email, '提及', () {
@@ -720,6 +748,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   isSending: _isSending,
                   onMoreOptions: _showMoreOptions,
                   onAttachFile: _pickFile,
+                  onAttachVideo: _pickVideo,
                   onVoiceRecorded: _sendVoice,
                   style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
                   externalFocusNode: _inputFocusNode,

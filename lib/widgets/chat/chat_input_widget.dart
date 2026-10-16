@@ -69,6 +69,7 @@ class ChatInputWidget extends StatefulWidget {
   final bool isSending;
   final VoidCallback? onMoreOptions;
   final VoidCallback? onAttachFile;
+  final VoidCallback? onAttachVideo;
   final ChatInputStyle style;
   final VoidCallback? onEmoji;
   final VoidCallback? onScreenshot;
@@ -92,6 +93,7 @@ class ChatInputWidget extends StatefulWidget {
     this.isSending = false,
     this.onMoreOptions,
     this.onAttachFile,
+    this.onAttachVideo,
     this.style = ChatInputStyle.mobile,
     this.onEmoji,
     this.onScreenshot,
@@ -454,6 +456,8 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 ),
                 const SizedBox(width: 16),
                 _buildToolbarIcon(Icons.attach_file_outlined, '发送文件', widget.onAttachFile ?? widget.onMoreOptions),
+                const SizedBox(width: 16),
+                _buildToolbarIcon(Icons.videocam_outlined, '发送视频', widget.onAttachVideo ?? widget.onMoreOptions),
                 const SizedBox(width: 16),
                 _buildToolbarIcon(
                   _recording ? Icons.mic : Icons.mic_none_outlined,
