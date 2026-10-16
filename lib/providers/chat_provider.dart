@@ -9,6 +9,7 @@ import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/voice_content.dart';
+import '../models/file_content.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../router/app_router.dart';
@@ -622,6 +623,103 @@ class ChatProvider with ChangeNotifier {
     await sendMessage(url, type: 'image');
   }
 
+  /// 先在列表里放一条本地文件，上传成功后再按文件类型发出。
+  Future<void> sendFile({
+    required String name,
+    required int size,
+    String? path,
+    Uint8List? bytes,
+  }) async {
+    if (_currentConversation == null) {
+      throw StateError('请先选择会话');
+    }
+    final filename = name.trim();
+    if (filename.isEmpty) {
+      throw StateError('文件名为空');
+    }
+    if (!FileContent.isAllowed(filename)) {
+      throw StateError('不支持的文件类型');
+    }
+    if (size > FileContent.maxBytes || (bytes != null && bytes.length > FileContent.maxBytes)) {
+      throw StateError('文件不能超过 10MB');
+    }
+    final localRef = (path ?? '').trim();
+    final currentUserId = _sdkManager.client.currentUserId;
+    final currentUserInfo = await _getCurrentUserInfo();
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    final pending = FileContent.encode(localRef, filename, size);
+    _messages.add(MessageModel(
+      id: tempId,
+      conversationId: _currentConversation!.id,
+      senderId: currentUserId?.toString() ?? '',
+      receiverId: '',
+      type: MessageType.file,
+      content: pending,
+      mediaUrl: localRef.isEmpty ? null : localRef,
+      timestamp: DateTime.now(),
+      isSending: true,
+      isSent: true,
+      status: MessageStatus.sending,
+      senderInfo: currentUserInfo,
+      canRecall: true,
+    ));
+    notifyListeners();
+
+    try {
+      final data = bytes ?? await _readLocalFile(localRef);
+      if (data.length > FileContent.maxBytes) {
+        throw StateError('文件不能超过 10MB');
+      }
+      final url = await FileApi().uploadBytes(data, filename);
+      final content = FileContent.encode(url, filename, data.length);
+      _replaceMessage(tempId, (m) => m.copyWith(content: content, mediaUrl: url));
+
+      final targetId = _currentConversation!.targetId;
+      if (targetId <= 0) {
+        throw StateError('会话无效，无法发送');
+      }
+      final sentMessage = _currentConversation!.isGroup
+          ? await _sdkManager.client.sendGroupMessage(
+              groupId: targetId,
+              content: content,
+              msgType: sdk.MessageType.file.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            )
+          : await _sdkManager.client.sendMessage(
+              toId: targetId,
+              content: content,
+              msgType: sdk.MessageType.file.value,
+              senderNickname: currentUserInfo?.nickname,
+              senderAvatar: currentUserInfo?.avatar,
+            );
+      _replaceMessage(tempId, (m) => m.copyWith(mid: sentMessage.mid));
+      loadConversations();
+    } catch (e) {
+      debugPrint('发送文件失败: $e');
+      await _keepFailedOutgoing(
+        tempId: tempId,
+        content: pending,
+        msgType: sdk.MessageType.file.value,
+        localPath: localRef.isEmpty ? null : localRef,
+        nickname: currentUserInfo?.nickname,
+        avatar: currentUserInfo?.avatar,
+      );
+      rethrow;
+    }
+  }
+
+  Future<Uint8List> _readLocalFile(String path) async {
+    if (kIsWeb || path.isEmpty) {
+      throw StateError('文件不存在，无法发送');
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      throw StateError('文件不存在，无法发送');
+    }
+    return file.readAsBytes();
+  }
+
   /// 先在列表里放一条本地语音，上传成功后再按语音类型发出。
   Future<void> sendVoiceFile(String path, int durationSeconds) async {
     if (_currentConversation == null) {
@@ -724,7 +822,9 @@ class ChatProvider with ChangeNotifier {
           ? content
           : type == 'voice'
               ? VoiceContent.tryParse(content)?.url
-              : null,
+              : type == 'file'
+                  ? FileContent.tryParse(content)?.url
+                  : null,
       timestamp: DateTime.now(),
       isSending: true,
       isSent: true,
@@ -929,6 +1029,13 @@ class ChatProvider with ChangeNotifier {
         _replaceMessage(message.id, (m) => m.copyWith(
           content: content,
           mediaUrl: voice?.url ?? m.mediaUrl,
+        ));
+      } else if (message.type == MessageType.file) {
+        content = await _uploadFileIfNeeded(message);
+        final file = FileContent.tryParse(content);
+        _replaceMessage(message.id, (m) => m.copyWith(
+          content: content,
+          mediaUrl: file?.url ?? m.mediaUrl,
         ));
       }
 
@@ -1515,8 +1622,14 @@ class ChatProvider with ChangeNotifier {
           return remote;
         }
         return msg.localPath ?? remote;
-      case sdk.MessageType.text:
       case sdk.MessageType.file:
+        final file = FileContent.tryParse(msg.content);
+        final remote = file?.url ?? '';
+        if (remote.startsWith('http://') || remote.startsWith('https://')) {
+          return remote;
+        }
+        return msg.localPath ?? (remote.isEmpty ? null : remote);
+      case sdk.MessageType.text:
       case sdk.MessageType.system:
         return null;
     }
@@ -1540,6 +1653,22 @@ class ChatProvider with ChangeNotifier {
       throw StateError('语音文件不存在，无法重发');
     }
     return _uploadVoice(raw, seconds);
+  }
+
+  Future<String> _uploadFileIfNeeded(MessageModel message) async {
+    final parsed = FileContent.tryParse(message.content);
+    final raw = (parsed?.url ?? message.mediaUrl ?? '').trim();
+    final name = parsed?.name.isNotEmpty == true ? parsed!.name : '文件';
+    final size = parsed?.size ?? 0;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return FileContent.encode(raw, name, size);
+    }
+    final bytes = await _readLocalFile(raw);
+    if (bytes.length > FileContent.maxBytes) {
+      throw StateError('文件不能超过 10MB');
+    }
+    final url = await FileApi().uploadBytes(bytes, name);
+    return FileContent.encode(url, name, bytes.length);
   }
 
   MessageModel _convertSdkMessageToModel(sdk.Message msg) {

@@ -7,6 +7,7 @@ import '../pages/full_text_page.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
 import 'chat/voice_message_content.dart';
+import 'chat/file_message_content.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -106,7 +107,9 @@ class MessageBubble extends StatelessWidget {
                               _showMessageContextMenu(bubbleContext),
                           child: _isImageMessage
                               ? _buildImageBubble(context, bubbleMaxWidth / 4)
-                              : Container(
+                              : _isFileMessage
+                                  ? FileMessageContent(message: message)
+                                  : Container(
                                   constraints: BoxConstraints(
                                     maxWidth: bubbleMaxWidth,
                                   ),
@@ -170,6 +173,10 @@ class MessageBubble extends StatelessWidget {
 
   bool get _isImageMessage =>
       message.type == MessageType.image &&
+      message.status != MessageStatus.recalled;
+
+  bool get _isFileMessage =>
+      message.type == MessageType.file &&
       message.status != MessageStatus.recalled;
 
   Widget _buildStatusIcon() {
@@ -251,6 +258,8 @@ class MessageBubble extends StatelessWidget {
         return _buildImageContent(context, maxWidth: 220);
       case MessageType.audio:
         return VoiceMessageContent(message: message, isMe: isMe);
+      case MessageType.file:
+        return FileMessageContent(message: message);
       case MessageType.text:
       default:
         return _buildFoldableText(context, maxTextWidth);

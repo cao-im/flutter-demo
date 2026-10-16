@@ -3,12 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_keyboard_provider.dart';
 import '../providers/layout_provider.dart';
 import '../models/message_model.dart';
+import '../models/file_content.dart';
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
@@ -485,6 +487,30 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: FileContent.allowedExtensions,
+        withData: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty || !mounted) return;
+      final file = result.files.single;
+      await context.read<ChatProvider>().sendFile(
+        name: file.name,
+        size: file.size,
+        path: file.path,
+        bytes: file.bytes,
+      );
+      if (!mounted) return;
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Bad state: ', '').replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -523,6 +549,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildOptionItem(Icons.photo_library, '图片', _pickImage),
+                    _buildOptionItem(Icons.insert_drive_file_outlined, '文件', _pickFile),
                     if (widget.isGroup)
                       _buildOptionItem(Icons.alternate_email, '提及', () {
                         Navigator.pop(context);
@@ -692,6 +719,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   onSend: _sendMessage,
                   isSending: _isSending,
                   onMoreOptions: _showMoreOptions,
+                  onAttachFile: _pickFile,
                   onVoiceRecorded: _sendVoice,
                   style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
                   externalFocusNode: _inputFocusNode,

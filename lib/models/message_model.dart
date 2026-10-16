@@ -1,5 +1,6 @@
 import 'sender_info_model.dart';
 import 'voice_content.dart';
+import 'file_content.dart';
 
 enum MessageType { text, image, video, audio, file, notice }
 
@@ -144,7 +145,9 @@ class MessageModel {
       case MessageType.audio:
         return '[语音]';
       case MessageType.file:
-        return '[文件]';
+        final file = FileContent.tryParse(content);
+        if (file == null || file.name.isEmpty) return '[文件]';
+        return '[文件] ${file.name}';
       case MessageType.text:
       default:
         return content.length > 50 ? '${content.substring(0, 50)}...' : content;
@@ -191,7 +194,9 @@ class MessageModel {
       case MessageType.video:
         return '[视频]';
       case MessageType.file:
-        return '[文件]';
+        final file = FileContent.tryParse(content);
+        if (file == null || file.name.isEmpty) return '[文件]';
+        return '[文件] ${file.name}';
       case MessageType.notice:
         return content;
       case MessageType.text:
