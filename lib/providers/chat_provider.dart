@@ -7,6 +7,7 @@ import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
 import '../models/chat_model.dart';
+import '../models/chat_search_hit.dart';
 import '../models/message_model.dart';
 import '../models/voice_content.dart';
 import '../models/file_content.dart';
@@ -618,6 +619,39 @@ class ChatProvider with ChangeNotifier {
       debugPrint('加载更多消息失败: $e');
       return null;
     }
+  }
+
+  Future<List<ChatSearchHit>> searchMessages(String keyword) async {
+    final text = keyword.trim();
+    if (text.isEmpty) return [];
+    final local = await _sdkManager.client.searchLocalMessages(text);
+    List<sdk.Message> remote = const [];
+    try {
+      remote = await _sdkManager.client.searchServerMessages(text);
+    } catch (e) {
+      debugPrint('服务端消息搜索失败: $e');
+    }
+    final merged = <String, sdk.Message>{};
+    for (final message in [...local, ...remote]) {
+      final mid = message.mid;
+      final key = mid != null && mid > 0
+          ? 'm$mid'
+          : 't${message.timestamp}-${message.fromId}-${message.groupId ?? message.toId}';
+      merged.putIfAbsent(key, () => message);
+    }
+    final me = _sdkManager.client.currentUserId ?? 0;
+    final hits = merged.values.map((message) {
+      final groupId = message.groupId ?? 0;
+      final isGroup = groupId > 0;
+      final peer = message.fromId == me ? message.toId : message.fromId;
+      return ChatSearchHit(
+        message: _convertSdkMessageToModel(message),
+        isGroup: isGroup,
+        targetId: isGroup ? groupId : peer,
+      );
+    }).where((hit) => hit.targetId > 0).toList();
+    hits.sort((a, b) => b.message.timestamp.compareTo(a.message.timestamp));
+    return hits;
   }
 
   Future<void> sendImage(Uint8List bytes, String filename) async {

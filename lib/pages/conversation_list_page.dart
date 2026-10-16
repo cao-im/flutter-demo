@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
@@ -8,6 +10,8 @@ import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
+import '../models/chat_search_hit.dart';
+import '../widgets/chat_search_results.dart';
 import '../widgets/conversation_item.dart';
 import '../widgets/avatar_widget.dart';
 import '../widgets/desktop_group_create_dialog.dart';
@@ -31,8 +35,20 @@ class _ConversationListPageState extends State<ConversationListPage>
   @override
   bool get wantKeepAlive => true;
 
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
   bool _hasLoaded = false;
   String _conversationKeyword = '';
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchTimer;
+  int _searchSeq = 0;
+  bool _searchingMessages = false;
+  List<ChatSearchHit> _messageHits = [];
   final GlobalKey _addButtonKey = GlobalKey();
   final GlobalKey _appBarAddButtonKey = GlobalKey();
 
@@ -47,16 +63,51 @@ class _ConversationListPageState extends State<ConversationListPage>
     });
   }
 
-  List<ConversationModel> _visibleConversations(List<ConversationModel> source) {
-    final keyword = _conversationKeyword.trim().toLowerCase();
+  void _onSearchChanged(String value) {
+    setState(() => _conversationKeyword = value);
+    _searchTimer?.cancel();
+    final keyword = value.trim();
     if (keyword.isEmpty) {
-      return source;
+      setState(() {
+        _messageHits = [];
+        _searchingMessages = false;
+      });
+      return;
     }
-    return source.where((conversation) {
-      final name = conversation.name.toLowerCase();
-      final last = conversation.lastMessage?.content.toLowerCase() ?? '';
-      return name.contains(keyword) || last.contains(keyword);
-    }).toList();
+    _searchTimer = Timer(const Duration(milliseconds: 300), () => _runMessageSearch(keyword));
+  }
+
+  Future<void> _runMessageSearch(String keyword) async {
+    final seq = ++_searchSeq;
+    setState(() => _searchingMessages = true);
+    try {
+      final hits = await context.read<ChatProvider>().searchMessages(keyword);
+      if (!mounted || seq != _searchSeq || _conversationKeyword.trim() != keyword) return;
+      setState(() {
+        _messageHits = hits;
+        _searchingMessages = false;
+      });
+    } catch (e) {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() => _searchingMessages = false);
+    }
+  }
+
+  void _openSearchedConversation(String id, String name, bool isGroup, int targetId) {
+    if (widget.isEmbeddedMode && widget.onConversationSelected != null) {
+      widget.onConversationSelected!(id, name, isGroup);
+      return;
+    }
+    Navigator.pushNamed(
+      context,
+      AppRouter.chat,
+      arguments: {
+        'conversationId': id,
+        'conversationName': name,
+        'isGroup': isGroup,
+        'targetId': targetId,
+      },
+    );
   }
 
   /// 智能加载：只在首次加载时执行，避免重复请求
@@ -369,6 +420,7 @@ class _ConversationListPageState extends State<ConversationListPage>
               );
             },
           ),
+          _buildSearchBox(showAdd: false),
           Expanded(
             child: _buildBody(),
           ),
@@ -456,24 +508,34 @@ class _ConversationListPageState extends State<ConversationListPage>
               );
             },
           ),
-          _buildEmbeddedSearchBox(),
+          _buildSearchBox(showAdd: true),
           Expanded(child: _buildBody()),
         ],
       ),
     );
   }
 
-  Widget _buildEmbeddedSearchBox() {
+  Widget _buildSearchBox({required bool showAdd}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
           Expanded(
             child: TextField(
-              onChanged: (value) => setState(() => _conversationKeyword = value),
+              controller: _searchController,
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: '搜索',
                 prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _conversationKeyword.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onSearchChanged('');
+                        },
+                      ),
                 filled: true,
                 fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
@@ -484,6 +546,7 @@ class _ConversationListPageState extends State<ConversationListPage>
               ),
             ),
           ),
+          if (showAdd) ...[
           const SizedBox(width: 8),
           // + 号按钮，点击弹出菜单（仿微信）
           Material(
@@ -501,6 +564,7 @@ class _ConversationListPageState extends State<ConversationListPage>
               ),
             ),
           ),
+          ],
         ],
       ),
     );
@@ -567,9 +631,17 @@ class _ConversationListPageState extends State<ConversationListPage>
   }
 
   Widget _buildBody() {
+    if (_conversationKeyword.trim().isNotEmpty) {
+      return ChatSearchResults(
+        keyword: _conversationKeyword.trim(),
+        hits: _messageHits,
+        searching: _searchingMessages,
+        onOpen: _openSearchedConversation,
+      );
+    }
     return Consumer<ChatProvider>(
       builder: (context, chatProvider, _) {
-        final conversations = _visibleConversations(chatProvider.conversations);
+        final conversations = chatProvider.conversations;
         if (chatProvider.isLoading && chatProvider.conversations.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -586,7 +658,7 @@ class _ConversationListPageState extends State<ConversationListPage>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _conversationKeyword.trim().isEmpty ? '暂无会话' : '没有匹配的会话',
+                  '暂无会话',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 8),
