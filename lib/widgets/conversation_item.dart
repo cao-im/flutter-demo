@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/chat_model.dart';
+import '../models/message_model.dart';
+import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
+import 'group_avatar.dart';
 
 class ConversationItem extends StatelessWidget {
   final ConversationModel conversation;
@@ -46,11 +50,17 @@ class ConversationItem extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                AvatarWidget(
-                  imageUrl: conversation.avatar,
-                  name: conversation.name,
-                  size: 50,
-                ),
+                conversation.isGroup
+                    ? GroupAvatar(
+                        groupId: conversation.targetId,
+                        size: 50,
+                        fallbackName: conversation.name,
+                      )
+                    : AvatarWidget(
+                        imageUrl: conversation.avatar,
+                        name: conversation.name,
+                        size: 50,
+                      ),
                 if (conversation.unreadCount > 0)
                   Positioned(
                     right: -6,
@@ -133,7 +143,7 @@ class ConversationItem extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          conversation.lastMessage?.displayText ?? '暂无消息',
+                          _preview(context),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -161,6 +171,16 @@ class ConversationItem extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _preview(BuildContext context) {
+    final message = conversation.lastMessage;
+    if (message == null) return '暂无消息';
+    if (message.type == MessageType.notice) {
+      final user = context.read<AuthProvider>().user;
+      return message.noticeText(user?.imUserId ?? user?.id);
+    }
+    return message.displayText;
   }
 
   String _formatTime(DateTime? time) {

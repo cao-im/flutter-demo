@@ -28,6 +28,8 @@ class ChatProvider with ChangeNotifier {
   ConversationModel? _currentConversation;
   List<MessageModel> _messages = [];
   MessageModel? _replyingTo;
+  final List<int> _pendingMentions = [];
+  final Map<int, String> _mentionLabels = {};
   List<ConversationModel> _conversations = [];
   bool _isLoading = false;
   bool _isListening = false;
@@ -52,6 +54,24 @@ class ChatProvider with ChangeNotifier {
     if (_replyingTo == null) return;
     _replyingTo = null;
     notifyListeners();
+  }
+
+  void addMention(int userId, String name) {
+    if (userId <= 0 || name.isEmpty) return;
+    _mentionLabels[userId] = name;
+    if (!_pendingMentions.contains(userId)) {
+      _pendingMentions.add(userId);
+    }
+  }
+
+  String? _consumeAtUserIds(String content) {
+    final kept = _pendingMentions.where((id) {
+      final name = _mentionLabels[id];
+      return name != null && content.contains('@$name');
+    }).toList();
+    _pendingMentions.clear();
+    if (kept.isEmpty) return null;
+    return kept.join(',');
   }
 
   int get totalUnreadCount {
@@ -126,8 +146,9 @@ class ChatProvider with ChangeNotifier {
       // 如果不在当前会话，正常加载会话列表（包含未读数）并触发通知
       if (!isInCurrentConversation) {
         loadConversations();
-        // ✅ 触发消息通知（通知服务内部会判断是否需要显示）
-        _triggerMessageNotification(event.message);
+        if (event.message.msgType != sdk.MessageType.system) {
+          _triggerMessageNotification(event.message);
+        }
       } else {
         // 在当前会话时：消息已由 receiveMessage() 增量添加到列表，
         // 只需刷新会话列表以更新 lastMessage/unreadCount
@@ -219,26 +240,7 @@ class ChatProvider with ChangeNotifier {
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
-          // ✅ 优先使用已有数据（lastMessage.groupInfo 或 SDK 缓存），避免阻塞等待网络请求
-          if (conv.lastMessage?.groupInfo != null &&
-              conv.lastMessage!.groupInfo!.groupName.isNotEmpty) {
-            displayName = conv.lastMessage!.groupInfo!.groupName;
-          } else {
-            // 尝试从 SDK 缓存获取（同步，无网络请求）
-            try {
-              final cachedGroup = _sdkManager.client.groupService.getFromCache(conv.targetId);
-              if (cachedGroup != null && cachedGroup.name.isNotEmpty) {
-                displayName = cachedGroup.name;
-              } else {
-                displayName = '群组 ${conv.targetId}';
-                // 异步刷新：后台获取群信息并缓存（不阻塞 UI）
-                _refreshGroupInfoInBackground(conv.targetId);
-              }
-            } catch (e) {
-              displayName = '群组 ${conv.targetId}';
-              _refreshGroupInfoInBackground(conv.targetId);
-            }
-          }
+          displayName = _groupDisplayName(conv);
         } else {
           final resolved = _resolvePrivatePeerDisplay(conv);
           displayName = resolved.$1;
@@ -318,6 +320,53 @@ class ChatProvider with ChangeNotifier {
     }
 
     return ('用户${conv.targetId}', null);
+  }
+
+  /// 群名以本地缓存为准。改名和群提示消息都会刷新这份缓存，避免会话列表停在旧名称。
+  String _groupDisplayName(sdk.Conversation conv) {
+    final cached = _sdkManager.client.groupService.getFromCache(conv.targetId);
+    if (cached != null && cached.name.isNotEmpty) {
+      return cached.name;
+    }
+    final snapshot = conv.lastMessage?.groupInfo;
+    if (snapshot != null && snapshot.groupName.isNotEmpty) {
+      _sdkManager.client.groupService.cacheGroupFromInfo(snapshot);
+      return snapshot.groupName;
+    }
+    _refreshGroupInfoInBackground(conv.targetId);
+    return '群组 ${conv.targetId}';
+  }
+
+  void renameGroup(int groupId, String name) {
+    final trimmed = name.trim();
+    if (groupId <= 0 || trimmed.isEmpty) return;
+    final cached = _sdkManager.client.groupService.getFromCache(groupId);
+    var changed = cached == null || cached.name != trimmed;
+    if (changed) {
+      _sdkManager.client.groupService.cacheGroupFromInfo(sdk.GroupInfo(
+        groupId: groupId,
+        groupName: trimmed,
+        groupAvatar: cached?.avatar,
+      ));
+    }
+    final next = <ConversationModel>[];
+    for (final conversation in _conversations) {
+      if (conversation.isGroup && conversation.targetId == groupId && conversation.name != trimmed) {
+        next.add(conversation.copyWith(name: trimmed));
+        changed = true;
+      } else {
+        next.add(conversation);
+      }
+    }
+    _conversations = next;
+    if (_currentConversation != null &&
+        _currentConversation!.isGroup &&
+        _currentConversation!.targetId == groupId &&
+        _currentConversation!.name != trimmed) {
+      _currentConversation = _currentConversation!.copyWith(name: trimmed);
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   /// 自己的资料变更后覆盖缓存，后续发出的消息带上新昵称和头像。
@@ -414,24 +463,7 @@ class ChatProvider with ChangeNotifier {
         DateTime? lastActiveTime;
 
         if (conv.isGroup) {
-          // ✅ 优先使用已有数据，避免阻塞等待网络请求
-          if (conv.lastMessage?.groupInfo != null &&
-              conv.lastMessage!.groupInfo!.groupName.isNotEmpty) {
-            displayName = conv.lastMessage!.groupInfo!.groupName;
-          } else {
-            try {
-              final cachedGroup = _sdkManager.client.groupService.getFromCache(conv.targetId);
-              if (cachedGroup != null && cachedGroup.name.isNotEmpty) {
-                displayName = cachedGroup.name;
-              } else {
-                displayName = '群组 ${conv.targetId}';
-                _refreshGroupInfoInBackground(conv.targetId);
-              }
-            } catch (e) {
-              displayName = '群组 ${conv.targetId}';
-              _refreshGroupInfoInBackground(conv.targetId);
-            }
-          }
+          displayName = _groupDisplayName(conv);
         } else {
           final resolved = _resolvePrivatePeerDisplay(conv);
           displayName = resolved.$1;
@@ -720,6 +752,8 @@ class ChatProvider with ChangeNotifier {
         return;
       }
 
+      final atUserIds = isGroup && type == 'text' ? _consumeAtUserIds(content) : null;
+
       sdk.Message sentMessage;
       if (isGroup) {
         sentMessage = await _sdkManager.client.sendGroupMessage(
@@ -731,6 +765,7 @@ class ChatProvider with ChangeNotifier {
           replyMsgId: reply?.mid,
           replyPreview: reply?.quoteText,
           replySenderName: reply?.senderDisplayName,
+          atUserIds: atUserIds,
         );
       } else {
         sentMessage = await _sdkManager.client.sendMessage(
@@ -790,6 +825,7 @@ class ChatProvider with ChangeNotifier {
         MessageType.file => 'file',
         MessageType.video => 'text',
         MessageType.text => 'text',
+        MessageType.notice => 'text',
       };
       await sendMessage(source.content, type: wire);
       return;
@@ -1448,6 +1484,7 @@ class ChatProvider with ChangeNotifier {
       case MessageType.video:
         return 4;
       case MessageType.text:
+      case MessageType.notice:
         return sdk.MessageType.text.value;
     }
   }
@@ -1461,8 +1498,9 @@ class ChatProvider with ChangeNotifier {
       case sdk.MessageType.file:
         return MessageType.file;
       case sdk.MessageType.text:
-      case sdk.MessageType.system:
         return MessageType.text;
+      case sdk.MessageType.system:
+        return MessageType.notice;
     }
   }
 

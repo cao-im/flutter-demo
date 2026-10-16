@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
-import '../widgets/avatar_widget.dart';
+import '../widgets/group_avatar.dart';
 
 class GroupListPage extends StatefulWidget {
   const GroupListPage({super.key});
@@ -112,7 +112,6 @@ class _GroupListPageState extends State<GroupListPage> {
   Widget _buildGroupItem(dynamic group) {
     final groupId = group['id']?.toString() ?? '';
     final groupName = group['name']?.toString() ?? '未命名群组';
-    final avatar = group['avatar'];
 
     return InkWell(
       onTap: () => Navigator.pushNamed(
@@ -130,7 +129,11 @@ class _GroupListPageState extends State<GroupListPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            AvatarWidget(imageUrl: avatar, name: groupName, size: 48),
+            GroupAvatar(
+              groupId: int.tryParse(groupId) ?? 0,
+              size: 48,
+              fallbackName: groupName,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

@@ -221,6 +221,16 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                   children: [
                     if (showTimeSeparator)
                       TimeSeparator(time: message.timestamp),
+                    if (message.type == MessageType.notice)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                        child: Text(
+                          message.noticeText(imUserId ?? appUserId),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12, height: 1.4, color: Color(0xFFB2B2B2)),
+                        ),
+                      )
+                    else
                     MessageBubble(
                       key: message.mid != null && message.mid! > 0
                           ? _keyFor(message.mid!)

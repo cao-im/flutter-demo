@@ -9,6 +9,7 @@ import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_widget.dart';
+import 'group_avatar.dart';
 import '../services/api_service.dart';
 import 'desktop_group_create_dialog.dart';
 
@@ -302,11 +303,10 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
         child: Row(
           children: [
             // 群头像（微信风格：小圆角方形+群图标）
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
-              child: Icon(Icons.group, size: 20, color: Colors.grey[600]),
+            GroupAvatar(
+              groupId: int.tryParse(groupId) ?? 0,
+              size: 36,
+              fallbackName: groupName,
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(groupName, style: const TextStyle(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),

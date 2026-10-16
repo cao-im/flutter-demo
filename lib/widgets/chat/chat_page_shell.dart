@@ -21,6 +21,12 @@ class ChatPageShell extends StatelessWidget {
   /// 空状态占位（当 conversationId 为空时显示）
   final Widget? placeholder;
 
+  /// 聊天区域右侧抽屉，例如群资料。宽屏并排，窄屏覆盖在消息上方。
+  final Widget? sidePanel;
+
+  /// 点击遮罩时关闭抽屉
+  final VoidCallback? onSidePanelDismissed;
+
   const ChatPageShell({
     super.key,
     this.header,
@@ -28,39 +34,69 @@ class ChatPageShell extends StatelessWidget {
     this.bottomBar,
     this.isPanelMode = false,
     this.placeholder,
+    this.sidePanel,
+    this.onSidePanelDismissed,
   });
 
   @override
   Widget build(BuildContext context) {
-    // 空状态：显示占位
     if (placeholder != null) return placeholder!;
 
+    final chat = Column(
+      children: [
+        if (header != null && (isPanelMode || header is! PreferredSizeWidget)) header!,
+        Expanded(child: body),
+        if (bottomBar != null) bottomBar!,
+      ],
+    );
+    final content = _withSidePanel(chat);
+
     if (isPanelMode) {
-      // 桌面端面板模式：Scaffold + Column 布局，正确处理 IME 插入
       return Scaffold(
         resizeToAvoidBottomInset: false,
         body: Material(
           color: AppTheme.surfaceColor,
-          child: Column(
-            children: [
-              if (header != null) header!,
-              Expanded(child: body),
-              if (bottomBar != null) bottomBar!,
-            ],
-          ),
+          child: content,
         ),
       );
     }
 
-    // 移动端完整页面模式：Scaffold + AppBar
     return Scaffold(
       appBar: header is PreferredSizeWidget ? header as PreferredSizeWidget : null,
-      body: Column(
-        children: [
-          Expanded(child: body),
-          if (bottomBar != null) bottomBar!,
-        ],
-      ),
+      body: content,
+    );
+  }
+
+  Widget _withSidePanel(Widget chat) {
+    final panel = sidePanel;
+    if (panel == null) return chat;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final overlay = constraints.maxWidth < 760;
+        final width = overlay ? (constraints.maxWidth * 0.86).clamp(260.0, 320.0) : 300.0;
+        final drawer = SizedBox(width: width, child: panel);
+        if (overlay) {
+          return Stack(
+            children: [
+              chat,
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: onSidePanelDismissed,
+                  child: const ColoredBox(color: Color(0x33000000)),
+                ),
+              ),
+              Positioned(top: 0, right: 0, bottom: 0, child: drawer),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: chat),
+            drawer,
+          ],
+        );
+      },
     );
   }
 }

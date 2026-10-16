@@ -1,7 +1,7 @@
 import 'sender_info_model.dart';
 import 'voice_content.dart';
 
-enum MessageType { text, image, video, audio, file }
+enum MessageType { text, image, video, audio, file, notice }
 
 enum MessageStatus { sending, sent, delivered, read, failed, recalled }
 
@@ -171,6 +171,16 @@ class MessageModel {
     return groupInfo?.groupName;
   }
 
+  /// 群提示在自己这边显示「你」，其他人显示操作者名字。
+  String noticeText(String? myId) {
+    const marker = '修改群名为';
+    final index = content.indexOf(marker);
+    if (index < 0) return content;
+    final mine = myId != null && myId.isNotEmpty && senderId == myId;
+    if (mine) return '你${content.substring(index)}';
+    return content;
+  }
+
   /// 被引用时展示的摘要
   String get quoteText {
     switch (type) {
@@ -182,6 +192,8 @@ class MessageModel {
         return '[视频]';
       case MessageType.file:
         return '[文件]';
+      case MessageType.notice:
+        return content;
       case MessageType.text:
         final text = content.replaceAll('\n', ' ').trim();
         if (text.length <= 60) return text;

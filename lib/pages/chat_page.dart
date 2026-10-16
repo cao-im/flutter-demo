@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +18,8 @@ import '../widgets/chat/message_list_widget.dart';
 import '../widgets/chat/chat_input_widget.dart';
 import 'user_profile_page.dart';
 import 'profile_page.dart';
+import 'group_info_page.dart';
+import '../services/apis/group_api.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -51,6 +54,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   int _lastMessageCount = 0;
   bool _currentConversationNotSetInInit = false; // 标记 initState 中是否成功设置会话
   int? _resolvedTargetId; // 解析后的 targetId（含兜底查询）
+  String _announcement = '';
+  bool _showGroupDrawer = false;
+  int _memberCount = 0;
+  String? _groupNameOverride;
 
   /// 键盘防抖 Timer（避免 didChangeMetrics 频繁触发）
   Timer? _keyboardDebounceTimer;
@@ -115,6 +122,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     debugPrint('🔄[ChatPage] initState 被调用: conversationId=${widget.conversationId}, conversationName=${widget.conversationName}');
     _scrollController.addListener(_scrollListener);
     _lastMessageCount = 0;
+    if (widget.isGroup) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadGroupMeta());
+    }
 
     if (widget.conversationId.isNotEmpty) {
       // ✅ 同步设置当前会话（不使用 postFrameCallback）
@@ -177,9 +187,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _currentPage = 1;
     _hasMore = true;
     _lastMessageCount = 0;
+    _showGroupDrawer = false;
+    _memberCount = 0;
+    _groupNameOverride = null;
+    _announcement = '';
     // 会话切换时重新解析 targetId
     _resolvedTargetId = null;
     _resolveTargetIdFromConversations();
+    if (widget.isGroup) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadGroupMeta());
+    }
 
     if (widget.conversationId.isNotEmpty) {
       // ✅ 同步设置当前会话（不使用 postFrameCallback）
@@ -506,6 +523,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildOptionItem(Icons.photo_library, '图片', _pickImage),
+                    if (widget.isGroup)
+                      _buildOptionItem(Icons.alternate_email, '提及', () {
+                        Navigator.pop(context);
+                        _mentionMember();
+                      }),
                     _buildOptionItem(Icons.camera_alt, '拍照', () async {
                       try {
                         final XFile? photo = await _picker.pickImage(
@@ -581,20 +603,70 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             placeholder: (widget.isPanelMode && widget.conversationId.isEmpty)
                 ? _buildPlaceholder()
                 : null,
+            sidePanel: widget.isGroup && _showGroupDrawer && _useSideGroupPanel()
+                ? GroupInfoDrawer(
+                    groupId: effectiveTargetId,
+                    groupName: _groupNameOverride ?? widget.conversationName,
+                    onClose: () => _setGroupDrawer(false),
+                    onMemberCount: (count) {
+                      if (!mounted || count == _memberCount) return;
+                      setState(() => _memberCount = count);
+                    },
+                    onAnnouncementChanged: (text) {
+                      if (!mounted || text == _announcement) return;
+                      setState(() => _announcement = text);
+                    },
+                    onNameChanged: (name) => _applyGroupName(name),
+                    onMemberTap: (userId, name, avatar) => _openUserProfile(
+                      context,
+                      userId: userId,
+                      nickname: name,
+                      avatar: avatar,
+                    ),
+                  )
+                : null,
+            onSidePanelDismissed: () => _setGroupDrawer(false),
 
             // 标题栏：根据平台选择样式
             header: ChatHeaderWidget(
-              title: _liveConversationName(context.watch<ChatProvider>()),
-              subtitle: widget.isGroup ? '群聊' : '在线',
+              title: _headerTitle(context.watch<ChatProvider>()),
+              subtitle: widget.isGroup ? null : '在线',
               style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
               showVoiceCall: widget.isPanelMode,
               showVideoCall: widget.isPanelMode,
-              onTitleTap: widget.isGroup ? null : () => _openPeerProfile(context),
-              onMoreTap: () {},
+              onTitleTap: widget.isGroup ? () => _openGroupSurface() : () => _openPeerProfile(context),
+              onMoreTap: widget.isGroup ? () => _openGroupSurface() : () {},
             ),
 
             // 消息列表：使用提取的组件
-            body: MessageListWidget(
+            body: Column(
+              children: [
+                if (widget.isGroup && _announcement.isNotEmpty)
+                  Material(
+                    color: const Color(0xFFFFF7E8),
+                    child: InkWell(
+                      onTap: () => _openGroupSurface(toggle: false),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.campaign_outlined, size: 18, color: Color(0xFFB26A00)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _announcement,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF8A5A00)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: MessageListWidget(
               scrollController: _scrollController,
               onScrollToBottom: () => _scrollToBottom(),
               targetId: effectiveTargetId,
@@ -605,6 +677,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onQuote: _quoteMessage,
               onForward: _forwardMessage,
               onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
+            ),
+                ),
+              ],
             ),
 
             // 输入栏：使用提取的组件，传入动态面板高度
@@ -640,7 +715,150 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         return conversation.name;
       }
     }
+    if (_groupNameOverride != null && _groupNameOverride!.isNotEmpty) {
+      return _groupNameOverride!;
+    }
     return widget.conversationName;
+  }
+
+  String _headerTitle(ChatProvider chatProvider) {
+    final name = _liveConversationName(chatProvider);
+    if (widget.isGroup && _memberCount > 0) return '$name ($_memberCount)';
+    return name;
+  }
+
+  bool _useSideGroupPanel() {
+    final phone = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    return !phone;
+  }
+
+  void _openGroupSurface({bool toggle = true}) {
+    if (effectiveTargetId <= 0) return;
+    if (_useSideGroupPanel()) {
+      _setGroupDrawer(toggle ? !_showGroupDrawer : true);
+      return;
+    }
+    _openGroupInfoPage();
+  }
+
+  Future<void> _openGroupInfoPage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupInfoPage(
+          groupId: effectiveTargetId,
+          groupName: _groupNameOverride ?? widget.conversationName,
+          onMemberCount: (count) {
+            if (!mounted || count == _memberCount) return;
+            setState(() => _memberCount = count);
+          },
+          onAnnouncementChanged: (text) {
+            if (!mounted || text == _announcement) return;
+            setState(() => _announcement = text);
+          },
+          onNameChanged: _applyGroupName,
+          onMemberTap: (userId, name, avatar) {
+            if (!mounted) return;
+            _openUserProfile(
+              context,
+              userId: userId,
+              nickname: name,
+              avatar: avatar,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _applyGroupName(String name) {
+    if (!mounted || name.isEmpty) return;
+    context.read<ChatProvider>().renameGroup(effectiveTargetId, name);
+    final layout = context.read<LayoutProvider>();
+    layout.renameConversationIfOpen(widget.conversationId, name);
+    layout.renameConversationIfOpen('$effectiveTargetId', name);
+    if (name == _groupNameOverride) return;
+    setState(() => _groupNameOverride = name);
+  }
+
+  void _setGroupDrawer(bool open) {
+    if (open && effectiveTargetId <= 0) return;
+    setState(() => _showGroupDrawer = open);
+  }
+
+  Future<void> _loadGroupMeta() async {
+    if (!widget.isGroup || effectiveTargetId <= 0) return;
+    try {
+      final group = await GroupApi().getGroupInfo(effectiveTargetId);
+      final text = group['introduction']?.toString() ?? '';
+      final name = group['name']?.toString() ?? '';
+      if (!mounted) return;
+      if (name.isNotEmpty) _applyGroupName(name);
+      setState(() {
+        if (text != _announcement) _announcement = text;
+      });
+    } catch (e) {
+      debugPrint('加载群公告失败: $e');
+    }
+    try {
+      final members = await GroupApi().fetchMembers(effectiveTargetId);
+      if (!mounted) return;
+      setState(() => _memberCount = members.length);
+    } catch (e) {
+      debugPrint('加载群成员数失败: $e');
+    }
+  }
+
+  Future<void> _mentionMember() async {
+    if (effectiveTargetId <= 0) return;
+    try {
+      final members = await GroupApi().fetchMembers(effectiveTargetId);
+      if (!mounted) return;
+      final me = context.read<AuthProvider>().user;
+      final myId = int.tryParse(me?.imUserId ?? '') ?? int.tryParse(me?.id ?? '') ?? 0;
+      final picked = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: ListView(
+            children: [
+              const ListTile(title: Text('选择要提及的成员')),
+              for (final raw in members.whereType<Map>())
+                if (_asMentionId(raw['userId']) != myId)
+                  ListTile(
+                    title: Text(_mentionName(raw)),
+                    onTap: () => Navigator.pop(sheetContext, Map<String, dynamic>.from(raw)),
+                  ),
+            ],
+          ),
+        ),
+      );
+      if (picked == null || !mounted) return;
+      final name = _mentionName(picked);
+      final userId = _asMentionId(picked['userId']);
+      final text = _messageController.text;
+      final spacer = text.isEmpty || text.endsWith(' ') ? '' : ' ';
+      _messageController.text = '$text$spacer@$name ';
+      _messageController.selection = TextSelection.collapsed(offset: _messageController.text.length);
+      context.read<ChatProvider>().addMention(userId, name);
+      _inputFocusNode.requestFocus();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法加载成员：$e')));
+    }
+  }
+
+  String _mentionName(Map raw) {
+    final groupNick = raw['groupNickname']?.toString() ?? '';
+    if (groupNick.isNotEmpty) return groupNick;
+    final name = raw['nickname']?.toString() ?? '';
+    if (name.isNotEmpty) return name;
+    return '用户${raw['userId']}';
+  }
+
+  int _asMentionId(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   void _openPeerProfile(BuildContext context) {
