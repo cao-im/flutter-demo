@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../models/chat_search_hit.dart';
+import '../pages/qr_scan_page.dart';
 import '../widgets/chat_search_results.dart';
 import '../widgets/conversation_item.dart';
 import '../widgets/avatar_widget.dart';
@@ -314,6 +315,15 @@ class _ConversationListPageState extends State<ConversationListPage>
             Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
           ]),
         ),
+        PopupMenuItem<String>(
+          value: 'scan',
+          height: 44,
+          child: Row(children: [
+            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondaryColor),
+            SizedBox(width: 12),
+            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+          ]),
+        ),
       ],
     ).then((value) {
       if (value == 'single_chat') {
@@ -323,6 +333,8 @@ class _ConversationListPageState extends State<ConversationListPage>
         }
       } else if (value == 'group_chat') {
         Navigator.pushNamed(context, AppRouter.groupCreate);
+      } else if (value == 'scan') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScanPage()));
       }
     });
   }
@@ -605,6 +617,15 @@ class _ConversationListPageState extends State<ConversationListPage>
             Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
           ]),
         ),
+        PopupMenuItem<String>(
+          value: 'scan',
+          height: 44,
+          child: Row(children: [
+            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondaryColor),
+            SizedBox(width: 12),
+            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+          ]),
+        ),
       ],
     ).then((value) {
       if (value == 'add_friend') {
@@ -617,6 +638,8 @@ class _ConversationListPageState extends State<ConversationListPage>
           // 移动端：导航到发起群聊页面
           Navigator.pushNamed(context, AppRouter.groupCreate);
         }
+      } else if (value == 'scan') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScanPage()));
       }
     });
   }

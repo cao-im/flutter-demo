@@ -377,7 +377,7 @@ class ContactProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendFriendRequest(int friendId) async {
+  Future<void> sendFriendRequest(int friendId, {int source = 0}) async {
     try {
       final imUserIdStr = await StorageService.getImUserId();
       if (imUserIdStr == null) return;
@@ -385,7 +385,7 @@ class ContactProvider with ChangeNotifier {
       final userId = int.tryParse(imUserIdStr);
       if (userId == null) return;
 
-      await _apiService.sendFriendRequest(userId, friendId);
+      await _apiService.sendFriendRequest(userId, friendId, source: source);
     } catch (e) {
       debugPrint('发送好友请求失败: $e');
       rethrow;

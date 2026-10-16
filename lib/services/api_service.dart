@@ -77,8 +77,8 @@ class ApiService {
   }
 
   /// 发送好友请求（委托给 [ContactApi.sendFriendRequest]）
-  Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
-    return contactApi.sendFriendRequest(fromUserId, toUserId);
+  Future<void> sendFriendRequest(int fromUserId, int toUserId, {int source = 0}) async {
+    return contactApi.sendFriendRequest(fromUserId, toUserId, source: source);
   }
 
   /// 发送好友请求-字符串参数版本

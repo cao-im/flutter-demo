@@ -11,6 +11,7 @@ import '../widgets/desktop_navigation_rail.dart';
 import '../widgets/profile_editor.dart';
 import '../widgets/desktop_contacts_panel.dart';
 import '../widgets/avatar_widget.dart';
+import '../widgets/qr_code_card.dart';
 import '../theme/app_theme.dart';
 import 'conversation_list_page.dart';
 import 'chat_page.dart';
@@ -215,6 +216,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           '通用设置',
           style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor, fontWeight: FontWeight.w500),
         )),
+
+        _buildSettingsItem(
+          icon: Icons.qr_code_2,
+          iconColor: AppTheme.primaryColor,
+          title: '我的二维码',
+          subtitle: '扫码加我为好友',
+          onTap: () => showMyQrCode(context),
+        ),
+
+        Divider(height: 1, indent: 20, endIndent: 20),
 
         _buildSettingsItem(icon: Icons.delete_sweep, iconColor: AppTheme.errorColor, title: '清空聊天记录', subtitle: '删除所有本地聊天数据', onTap: () => _showClearChatDataDialog(context, chatProvider)),
 
@@ -493,6 +504,14 @@ class _SettingsPanel extends StatelessWidget {
             // 设置项
             Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('通用设置', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor, fontWeight: FontWeight.w500))),
 
+            _SettingsItem(
+              icon: Icons.qr_code_2,
+              iconColor: AppTheme.primaryColor,
+              title: '我的二维码',
+              subtitle: '扫码加我为好友',
+              onTap: () => showMyQrCode(context),
+            ),
+            Divider(height: 1, indent: 40, endIndent: 40),
             _SettingsItem(icon: Icons.delete_sweep, iconColor: AppTheme.errorColor, title: '清空聊天记录', subtitle: '删除所有本地聊天数据'),
             Divider(height: 1, indent: 40, endIndent: 40),
             _SettingsItem(icon: Icons.logout, iconColor: AppTheme.errorColor, title: '退出登录', subtitle: '退出当前账号'),
@@ -511,11 +530,19 @@ class _SettingsItem extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _SettingsItem({required this.icon, required this.iconColor, required this.title, required this.subtitle});
+  final VoidCallback? onTap;
+
+  const _SettingsItem({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(onTap: () {}, child: Padding(
+    return InkWell(onTap: onTap, child: Padding(
       padding: EdgeInsets.symmetric(horizontal: 40, vertical: 14),
       child: Row(children: [
         Container(width: 36, height: 36, decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: iconColor)),

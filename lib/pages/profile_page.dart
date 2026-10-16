@@ -6,6 +6,7 @@ import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/profile_editor.dart';
+import '../widgets/qr_code_card.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -177,6 +178,7 @@ class _ProfilePageState extends State<ProfilePage> {
         children: [
           const ProfileEditor(),
           const Divider(height: 1, indent: 16),
+          _buildMenuItem(Icons.qr_code_2, '我的二维码', () => showMyQrCode(context)),
           _buildMenuItem(Icons.delete_sweep, '清空聊天记录', () => _showClearChatDataDialog(context)),
           _buildMenuItem(Icons.info_outline, '关于我们', () {
             showAboutDialog(

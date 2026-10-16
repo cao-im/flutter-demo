@@ -107,6 +107,12 @@ class GroupApi extends BaseApi {
     return extractList(response);
   }
 
+  Future<String> join(int groupId) async {
+    final response = await postIm('/group/$groupId/join');
+    _ensureOk(response);
+    return extractData(response)?.toString() ?? 'joined';
+  }
+
   Future<String> addMember(int groupId, int userId) async {
     final response = await postIm(
       '/group/$groupId/member',

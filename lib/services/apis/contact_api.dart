@@ -158,10 +158,14 @@ class ContactApi extends BaseApi {
   ///
   /// [fromUserId] 发送者用户 ID
   /// [toUserId] 接收者用户 ID
-  Future<void> sendFriendRequest(int fromUserId, int toUserId) async {
+  Future<void> sendFriendRequest(int fromUserId, int toUserId, {int source = 0}) async {
     await postIm(
       '/friend-request/request',
-      queryParameters: {'fromUserId': fromUserId, 'toUserId': toUserId},
+      queryParameters: {
+        'fromUserId': fromUserId,
+        'toUserId': toUserId,
+        if (source != 0) 'source': source,
+      },
     );
   }
 

@@ -7,8 +7,10 @@ import '../providers/auth_provider.dart';
 import '../providers/contact_provider.dart';
 import '../services/apis/group_api.dart';
 import '../theme/app_theme.dart';
+import '../utils/qr_payload.dart';
 import '../widgets/avatar_widget.dart';
 import '../widgets/group_avatar.dart';
+import '../widgets/qr_code_card.dart';
 
 class GroupInfoPage extends StatelessWidget {
   final int groupId;
@@ -308,22 +310,13 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
   }
 
   void _showQr() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('群二维码'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.qr_code_2, size: 96, color: Color(0xFF191919)),
-            const SizedBox(height: 12),
-            Text('群号 ${widget.groupId}', style: const TextStyle(fontSize: 16)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
-        ],
-      ),
+    final rawName = _group['name']?.toString().trim() ?? '';
+    final name = rawName.isNotEmpty ? rawName : widget.groupName;
+    showQrCodeDialog(
+      context,
+      data: QrPayload.group(widget.groupId),
+      title: name.isEmpty ? '群聊' : name,
+      subtitle: '扫一扫加入群聊',
     );
   }
 
