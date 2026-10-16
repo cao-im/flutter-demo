@@ -16,6 +16,7 @@ class MessageBubble extends StatelessWidget {
   final String? senderAvatar;
   final String? senderName;
   final bool showName;
+  final bool isGroup;
   final VoidCallback? onRetry;
   final VoidCallback? onImageTap;
   final Function(MessageModel)? onRecall;
@@ -34,6 +35,7 @@ class MessageBubble extends StatelessWidget {
     this.senderAvatar,
     this.senderName,
     this.showName = false,
+    this.isGroup = false,
     this.onRetry,
     this.onImageTap,
     this.onRecall,
@@ -156,6 +158,21 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (isMe &&
+                        message.readCount != null &&
+                        message.status != MessageStatus.recalled)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          _readLabel(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: message.readCount! > 0
+                                ? const Color(0xFF07C160)
+                                : const Color(0xFFB2B2B2),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -187,6 +204,12 @@ class MessageBubble extends StatelessWidget {
   bool get _isVideoMessage =>
       message.type == MessageType.video &&
       message.status != MessageStatus.recalled;
+
+  String _readLabel() {
+    final count = message.readCount ?? 0;
+    if (!isGroup) return count > 0 ? '已读' : '未读';
+    return count > 0 ? '已读 $count' : '未读';
+  }
 
   Widget _buildStatusIcon() {
     switch (message.status) {

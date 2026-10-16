@@ -17,6 +17,7 @@ import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
 import '../router/app_router.dart';
 import '../services/apis/file_api.dart';
+import '../services/apis/message_api.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
@@ -167,6 +168,19 @@ class ChatProvider with ChangeNotifier {
     });
 
     // 监听消息撤回 → 刷新相关数据
+    _eventBus.on<sdk.MessagesReadEvent>().listen((event) {
+      if (event.readCounts.isEmpty) return;
+      var changed = false;
+      for (var index = 0; index < _messages.length; index++) {
+        final mid = _messages[index].mid;
+        final count = mid == null ? null : event.readCounts[mid];
+        if (count == null || _messages[index].readCount == count) continue;
+        _messages[index] = _messages[index].copyWith(readCount: count);
+        changed = true;
+      }
+      if (changed) notifyListeners();
+    });
+
     _eventBus.on<MessageRecalledEvent>().listen((event) {
       debugPrint('📍[ChatProvider] 📢 收到 MessageRecalledEvent');
       loadConversations();
@@ -582,6 +596,13 @@ class ChatProvider with ChangeNotifier {
           .toList();
 
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      if (targetId > 0) {
+        if (isGroup) {
+          await _fillGroupReadCounts(targetId);
+        } else {
+          await _fillPrivateReadCounts(targetId);
+        }
+      }
       
       debugPrint('📍[ChatProvider] ✅ 排序后的顺序（前10条）：');
       for (var i = 0; i < (_messages.length < 10 ? _messages.length : 10); i++) {
@@ -696,6 +717,7 @@ class ChatProvider with ChangeNotifier {
       isSending: true,
       isSent: true,
       status: MessageStatus.sending,
+      readCount: 0,
       senderInfo: currentUserInfo,
       canRecall: true,
     ));
@@ -802,6 +824,7 @@ class ChatProvider with ChangeNotifier {
       isSending: true,
       isSent: true,
       status: MessageStatus.sending,
+      readCount: 0,
       senderInfo: currentUserInfo,
       canRecall: true,
     ));
@@ -911,6 +934,7 @@ class ChatProvider with ChangeNotifier {
       isSending: true,
       isSent: true,
       status: MessageStatus.sending,
+      readCount: 0,
       senderInfo: currentUserInfo,
       canRecall: true,
     ));
@@ -997,6 +1021,7 @@ class ChatProvider with ChangeNotifier {
       isSending: true,
       isSent: true,
       status: MessageStatus.sending,
+      readCount: 0,
       senderInfo: currentUserInfo,
       canRecall: true,
       replyMsgId: reply?.mid,
@@ -1260,6 +1285,95 @@ class ChatProvider with ChangeNotifier {
     _messages.add(message);
     _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     notifyListeners();
+    final conversation = _currentConversation;
+    final mid = message.mid ?? 0;
+    final me = _sdkManager.client.currentUserId;
+    if (conversation != null &&
+        mid > 0 &&
+        me != null &&
+        message.senderId != '$me') {
+      _sdkManager.client.sendReadReceipt(
+        mid,
+        groupId: conversation.isGroup ? conversation.targetId : null,
+      );
+    }
+  }
+
+  Future<void> _fillPrivateReadCounts(int peerId) async {
+    final me = _sdkManager.client.currentUserId?.toString();
+    if (me == null || me.isEmpty) return;
+    final ownIndexes = <int>[];
+    final mids = <int>[];
+    for (var index = 0; index < _messages.length; index++) {
+      final message = _messages[index];
+      final mid = message.mid ?? 0;
+      if (message.senderId != me ||
+          mid <= 0 ||
+          message.type == MessageType.notice ||
+          message.status == MessageStatus.recalled) {
+        continue;
+      }
+      ownIndexes.add(index);
+      mids.add(mid);
+    }
+    if (mids.isEmpty) return;
+    try {
+      final api = MessageApi();
+      final counts = <int, int>{};
+      for (var start = 0; start < mids.length; start += 50) {
+        final end = start + 50 < mids.length ? start + 50 : mids.length;
+        counts.addAll(await api.privateReadCounts(peerId, mids.sublist(start, end)));
+      }
+      for (final index in ownIndexes) {
+        final mid = _messages[index].mid!;
+        _messages[index] = _messages[index].copyWith(readCount: counts[mid] ?? 0);
+      }
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 拉取私聊已读状态失败: $e');
+      for (final index in ownIndexes) {
+        final alreadyRead = _messages[index].status == MessageStatus.read;
+        _messages[index] = _messages[index].copyWith(
+          readCount: _messages[index].readCount ?? (alreadyRead ? 1 : 0),
+        );
+      }
+    }
+  }
+
+  Future<void> _fillGroupReadCounts(int groupId) async {
+    final me = _sdkManager.client.currentUserId?.toString();
+    if (me == null || me.isEmpty) return;
+    final ownIndexes = <int>[];
+    final mids = <int>[];
+    for (var index = 0; index < _messages.length; index++) {
+      final message = _messages[index];
+      final mid = message.mid ?? 0;
+      if (message.senderId != me ||
+          mid <= 0 ||
+          message.type == MessageType.notice ||
+          message.status == MessageStatus.recalled) {
+        continue;
+      }
+      ownIndexes.add(index);
+      mids.add(mid);
+    }
+    if (mids.isEmpty) return;
+    try {
+      final api = MessageApi();
+      final counts = <int, int>{};
+      for (var start = 0; start < mids.length; start += 50) {
+        final end = start + 50 < mids.length ? start + 50 : mids.length;
+        counts.addAll(await api.groupReadCounts(groupId, mids.sublist(start, end)));
+      }
+      for (final index in ownIndexes) {
+        final mid = _messages[index].mid!;
+        _messages[index] = _messages[index].copyWith(readCount: counts[mid] ?? 0);
+      }
+    } catch (e) {
+      debugPrint('⚠️[ChatProvider] 拉取群已读人数失败: $e');
+      for (final index in ownIndexes) {
+        _messages[index] = _messages[index].copyWith(readCount: _messages[index].readCount ?? 0);
+      }
+    }
   }
 
   /// 仅从本机删除这条消息，不影响对方。
@@ -1956,11 +2070,13 @@ class ChatProvider with ChangeNotifier {
     if (mid == null) return;
     final index = _messages.indexWhere((item) => item.mid == mid);
     if (index == -1) return;
+    final trackRead = _currentConversation != null;
     _messages[index] = _messages[index].copyWith(
       isSending: false,
       isSent: true,
       status: _convertSdkStatus(message.status),
       mediaUrl: _mediaUrlFromSdk(message) ?? _messages[index].mediaUrl,
+      readCount: trackRead ? (_messages[index].readCount ?? 0) : _messages[index].readCount,
     );
     notifyListeners();
   }

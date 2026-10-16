@@ -242,6 +242,7 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                       senderAvatar: senderAvatar,
                       senderName: senderName,
                       showName: widget.isGroup && !isMe,
+                      isGroup: widget.isGroup,
                       highlighted: message.mid != null && message.mid == _highlightMid,
                       onRetry: () => widget.onRetry(message),
                       onRecall: widget.onRecall,

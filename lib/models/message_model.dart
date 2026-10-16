@@ -26,6 +26,8 @@ class MessageModel {
   final int? replyMsgId;
   final String? replyPreview;
   final String? replySenderName;
+  /// 群消息已读人数。私聊不使用。
+  final int? readCount;
 
   MessageModel({
     required this.id,
@@ -47,6 +49,7 @@ class MessageModel {
     this.replyMsgId,
     this.replyPreview,
     this.replySenderName,
+    this.readCount,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -226,6 +229,7 @@ class MessageModel {
     int? replyMsgId,
     String? replyPreview,
     String? replySenderName,
+    int? readCount,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -247,6 +251,7 @@ class MessageModel {
       replyMsgId: replyMsgId ?? this.replyMsgId,
       replyPreview: replyPreview ?? this.replyPreview,
       replySenderName: replySenderName ?? this.replySenderName,
+      readCount: readCount ?? this.readCount,
     );
   }
 }
