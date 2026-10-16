@@ -21,6 +21,7 @@ class MessageListWidget extends StatefulWidget {
   final void Function(MessageModel)? onDelete;
   final void Function(MessageModel)? onQuote;
   final void Function(MessageModel)? onForward;
+  final void Function(MessageModel)? onFavorite;
   final void Function(MessageModel message, bool isMe)? onAvatarTap;
 
   const MessageListWidget({
@@ -34,6 +35,7 @@ class MessageListWidget extends StatefulWidget {
     this.onDelete,
     this.onQuote,
     this.onForward,
+    this.onFavorite,
     this.onAvatarTap,
   });
 
@@ -246,6 +248,7 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                       onDelete: widget.onDelete,
                       onQuote: widget.onQuote,
                       onForward: widget.onForward,
+                      onFavorite: widget.onFavorite,
                       onAvatarTap: widget.onAvatarTap == null
                           ? null
                           : () => widget.onAvatarTap!(message, isMe),

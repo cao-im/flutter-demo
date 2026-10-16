@@ -22,6 +22,7 @@ class MessageBubble extends StatelessWidget {
   final void Function(MessageModel)? onDelete;
   final void Function(MessageModel)? onQuote;
   final void Function(MessageModel)? onForward;
+  final void Function(MessageModel)? onFavorite;
   final VoidCallback? onQuoteTap;
   final VoidCallback? onAvatarTap;
   final bool highlighted;
@@ -39,6 +40,7 @@ class MessageBubble extends StatelessWidget {
     this.onDelete,
     this.onQuote,
     this.onForward,
+    this.onFavorite,
     this.onQuoteTap,
     this.onAvatarTap,
     this.highlighted = false,
@@ -504,6 +506,17 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
+        if (onFavorite != null && message.type != MessageType.notice && message.status != MessageStatus.recalled)
+          PopupMenuItem(
+            value: 'favorite',
+            child: Row(
+              children: [
+                const Icon(Icons.star_outline, size: 20),
+                const SizedBox(width: 8),
+                const Text('收藏'),
+              ],
+            ),
+          ),
         PopupMenuItem(
           value: 'forward',
           child: Row(
@@ -554,6 +567,9 @@ class MessageBubble extends StatelessWidget {
         break;
       case 'quote':
         onQuote?.call(message);
+        break;
+      case 'favorite':
+        onFavorite?.call(message);
         break;
       case 'forward':
         if (onForward != null) {

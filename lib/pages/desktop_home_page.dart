@@ -15,6 +15,7 @@ import '../widgets/qr_code_card.dart';
 import '../theme/app_theme.dart';
 import 'conversation_list_page.dart';
 import 'chat_page.dart';
+import 'favorites_page.dart';
 
 class _NewConversationIntent extends Intent {
   const _NewConversationIntent();
@@ -60,7 +61,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
       });
     }
 
-    return Shortcuts(
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      body: Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyN):
             const _NewConversationIntent(),
@@ -108,6 +111,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -154,13 +158,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         );
 
       case 2:
-        return SizedBox(
+        return const SizedBox(
           width: _middlePanelWidth,
-          child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.star_outline, size: 48, color: Colors.grey[400]),
-            SizedBox(height: 12),
-            Text('收藏夹开发中...', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
-          ])),
+          child: FavoritesPage(embedded: true),
         );
 
       case 3:
@@ -382,8 +382,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         );
 
       case 2:
-        // 收藏：开发中占位
-        return const Expanded(child: _PlaceholderPanel(icon: Icons.star_outline, title: '收藏夹', subtitle: '此功能开发中...'));
+        return const Expanded(child: FavoriteDetailPane());
 
       case 3:
         // 文件：开发中占位

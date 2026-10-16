@@ -8,6 +8,7 @@ import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_keyboard_provider.dart';
+import '../providers/favorite_provider.dart';
 import '../providers/layout_provider.dart';
 import '../models/message_model.dart';
 import '../models/file_content.dart';
@@ -374,6 +375,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     await Provider.of<ChatProvider>(context, listen: false).deleteMessage(message);
   }
 
+  Future<void> _favoriteMessage(MessageModel message) async {
+    final mid = message.mid ?? 0;
+    if (mid <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('消息还在发送，稍后再收藏')));
+      return;
+    }
+    try {
+      await context.read<FavoriteProvider>().add(mid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已收藏')));
+    } catch (error) {
+      if (!mounted) return;
+      final text = error.toString().replaceFirst('Exception: ', '').replaceFirst('Bad state: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
+  }
+
   void _quoteMessage(MessageModel message) {
     context.read<ChatProvider>().setReplyingTo(message);
     _inputFocusNode.requestFocus();
@@ -731,6 +749,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onDelete: (message) => _deleteMessage(message),
               onQuote: _quoteMessage,
               onForward: _forwardMessage,
+              onFavorite: _favoriteMessage,
               onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
             ),
                 ),
