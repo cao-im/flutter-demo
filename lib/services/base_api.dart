@@ -15,10 +15,10 @@ import '../services/storage_service.dart';
 /// 使用方式：各领域 API 类继承此类，直接使用封装好的请求方法
 abstract class BaseApi {
   /// App Server 基础地址（认证、用户资料等）
-  static const String appServerUrl = ServerConfig.appServerUrl;
+  static String get appServerUrl => ServerConfig.appServerUrl;
 
   /// IM Server 基础地址（联系人、好友、群组等）
-  static const String imServerUrl = ServerConfig.imServerUrl;
+  static String get imServerUrl => ServerConfig.imServerUrl;
 
   /// 连接超时时间（秒）
   static const int connectTimeoutSeconds = 10;
