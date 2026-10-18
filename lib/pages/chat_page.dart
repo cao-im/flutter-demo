@@ -65,6 +65,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   /// 键盘防抖 Timer（避免 didChangeMetrics 频繁触发）
   Timer? _keyboardDebounceTimer;
+  final ChatKeyboardProvider _keyboardProvider = ChatKeyboardProvider();
 
   /// 获取 targetId：优先使用传入值，为0时从已加载的会话列表中查找兜底
   int get effectiveTargetId {
@@ -248,6 +249,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.removeObserver(this);
     _keyboardDebounceTimer?.cancel();
+    _keyboardProvider.dispose();
     _inputFocusNode.dispose();
     _messageController.dispose();
     _scrollController.dispose();
@@ -275,7 +277,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     super.didChangeMetrics();
     if (!mounted) return;
 
-    final keyboardProvider = Provider.of<ChatKeyboardProvider>(context, listen: false);
     final currentKeyboardHeight = EdgeInsets.fromWindowPadding(
       WidgetsBinding.instance.window.viewInsets,
       WidgetsBinding.instance.window.devicePixelRatio,
@@ -285,7 +286,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _keyboardDebounceTimer?.cancel();
     _keyboardDebounceTimer = Timer(const Duration(milliseconds: 39), () {
       if (!mounted) return;
-      keyboardProvider.updateKeyboardHeight(
+      _keyboardProvider.updateKeyboardHeight(
         currentKeyboardHeight,
         hasFocus: _inputFocusNode.hasFocus,
       );
@@ -491,16 +492,14 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _pickImage() async {
+    final chat = context.read<ChatProvider>();
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        await Provider.of<ChatProvider>(
-          context,
-          listen: false,
-        ).sendImage(bytes, image.name);
-        _scrollToBottom();
-      }
+      if (image == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      await chat.sendImage(bytes, image.name);
+      _scrollToBottom();
     } catch (e) {
       debugPrint('选择图片失败: $e');
     }
@@ -578,6 +577,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   void _showMoreOptions() {
+    final chat = context.read<ChatProvider>();
     try {
       showModalBottomSheet(
         context: context,
@@ -598,7 +598,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     _buildOptionItem(Icons.insert_drive_file_outlined, '文件', _pickFile),
                     if (widget.isGroup)
                       _buildOptionItem(Icons.alternate_email, '提及', () {
-                        Navigator.pop(context);
                         _mentionMember();
                       }),
                     _buildOptionItem(Icons.camera_alt, '拍照', () async {
@@ -606,14 +605,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         final XFile? photo = await _picker.pickImage(
                           source: ImageSource.camera,
                         );
-                        if (photo != null) {
-                          final bytes = await photo.readAsBytes();
-                          await Provider.of<ChatProvider>(
-                            context,
-                            listen: false,
-                          ).sendImage(bytes, photo.name);
-                          _scrollToBottom();
-                        }
+                        if (photo == null || !mounted) return;
+                        final bytes = await photo.readAsBytes();
+                        if (!mounted) return;
+                        await chat.sendImage(bytes, photo.name);
+                        _scrollToBottom();
                       } catch (e) {
                         debugPrint('拍照失败: $e');
                       }
@@ -634,7 +630,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Widget _buildOptionItem(IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: () {
-        Navigator.pop(context);
+        Navigator.of(context, rootNavigator: true).pop();
         onTap();
       },
       child: Column(
@@ -666,8 +662,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
 
     // 使用 ChatKeyboardProvider 管理键盘/面板高度，实现丝滑切换
-    return ChangeNotifierProvider(
-      create: (_) => ChatKeyboardProvider(),
+    return ChangeNotifierProvider.value(
+      value: _keyboardProvider,
       child: Builder(
         builder: (context) {
           // 使用 ChatPageShell 组装页面
