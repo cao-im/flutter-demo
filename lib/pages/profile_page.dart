@@ -161,7 +161,7 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppTheme.textSecondaryColor),
+          Icon(icon, size: 16, color: AppTheme.textSecondary(context)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(text, style: const TextStyle(fontSize: 13)),
@@ -233,7 +233,7 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: AppTheme.textSecondaryColor, size: 24),
+            Icon(icon, color: AppTheme.textSecondary(context), size: 24),
             const SizedBox(width: 16),
             Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
             const Icon(Icons.chevron_right, color: Colors.grey),

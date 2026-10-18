@@ -62,7 +62,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.background(context),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth >= 800;
@@ -163,13 +163,13 @@ class _RegisterPageState extends State<RegisterPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 40),
-                      const Center(
+                      Center(
                         child: Text(
                           '注册',
                           style: TextStyle(
                             fontSize: 60,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimaryColor,
+                            color: AppTheme.textPrimary(context),
                           ),
                         ),
                       ),
@@ -303,7 +303,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         children: [
                           Text(
                             '已有账号？',
-                            style: TextStyle(color: AppTheme.textSecondaryColor),
+                            style: TextStyle(color: AppTheme.textSecondary(context)),
                           ),
                           TextButton(
                             onPressed: () {
@@ -338,12 +338,12 @@ class _RegisterPageState extends State<RegisterPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 40),
-                const Text(
+                Text(
                   '创建新账号',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimaryColor,
+                    color: AppTheme.textPrimary(context),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -351,7 +351,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   '填写以下信息完成注册',
                   style: TextStyle(
                     fontSize: 14,
-                    color: AppTheme.textSecondaryColor,
+                    color: AppTheme.textSecondary(context),
                   ),
                 ),
                 const SizedBox(height: 32),

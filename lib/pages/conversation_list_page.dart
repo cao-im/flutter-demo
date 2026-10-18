@@ -184,7 +184,7 @@ class _ConversationListPageState extends State<ConversationListPage>
               Icon(
                 conversation.isTop ? Icons.push_pin_outlined : Icons.push_pin,
                 size: 20,
-                color: AppTheme.textSecondaryColor,
+                color: AppTheme.textSecondary(context),
               ),
               const SizedBox(width: 8),
               Text(conversation.isTop ? '取消置顶' : '置顶聊天'),
@@ -201,7 +201,7 @@ class _ConversationListPageState extends State<ConversationListPage>
                     ? Icons.notifications_active_outlined
                     : Icons.notifications_off_outlined,
                 size: 20,
-                color: AppTheme.textSecondaryColor,
+                color: AppTheme.textSecondary(context),
               ),
               const SizedBox(width: 8),
               Text(conversation.isMute ? '关闭免打扰' : '消息免打扰'),
@@ -301,27 +301,27 @@ class _ConversationListPageState extends State<ConversationListPage>
           value: 'single_chat',
           height: 44,
           child: Row(children: [
-            Icon(Icons.person_add, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.person_add, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('发起单聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('发起单聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
         PopupMenuItem<String>(
           value: 'group_chat',
           height: 44,
           child: Row(children: [
-            Icon(Icons.group_add, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.group_add, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
         PopupMenuItem<String>(
           value: 'scan',
           height: 44,
           child: Row(children: [
-            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
       ],
@@ -443,7 +443,7 @@ class _ConversationListPageState extends State<ConversationListPage>
 
   Widget _buildEmbeddedBody() {
     return Material(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.surface(context),
       child: Column(
         children: [
           Consumer<ConnectionProvider>(
@@ -549,7 +549,7 @@ class _ConversationListPageState extends State<ConversationListPage>
                         },
                       ),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: AppTheme.inputFill(context),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none,
@@ -563,8 +563,8 @@ class _ConversationListPageState extends State<ConversationListPage>
           // + 号按钮，点击弹出菜单（仿微信）
           Material(
             key: _addButtonKey,
-            color: Colors.white,
-            shape: CircleBorder(side: BorderSide(color: Colors.grey[300]!)),
+            color: AppTheme.surface(context),
+            shape: CircleBorder(side: BorderSide(color: AppTheme.divider(context))),
             child: InkWell(
               onTap: () => _showAddMenu(context),
               customBorder: const CircleBorder(),
@@ -603,27 +603,27 @@ class _ConversationListPageState extends State<ConversationListPage>
           value: 'add_friend',
           height: 44,
           child: Row(children: [
-            Icon(Icons.person_add_outlined, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.person_add_outlined, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('添加好友', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('添加好友', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
         PopupMenuItem<String>(
           value: 'group_chat',
           height: 44,
           child: Row(children: [
-            Icon(Icons.group_add_outlined, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.group_add_outlined, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('发起群聊', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
         PopupMenuItem<String>(
           value: 'scan',
           height: 44,
           child: Row(children: [
-            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondaryColor),
+            Icon(Icons.qr_code_scanner, size: 20, color: AppTheme.textSecondary(context)),
             SizedBox(width: 12),
-            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor)),
+            Text('扫一扫', style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context))),
           ]),
         ),
       ],
@@ -682,12 +682,12 @@ class _ConversationListPageState extends State<ConversationListPage>
                 const SizedBox(height: 16),
                 Text(
                   '暂无会话',
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary(context)),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '点击右上角 + 发起聊天',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary(context)),
                 ),
               ],
             ),
@@ -728,7 +728,7 @@ class _ConversationListPageState extends State<ConversationListPage>
         return RefreshIndicator(
           onRefresh: _onRefresh,
           color: AppTheme.primaryColor,
-          backgroundColor: Colors.white,
+          backgroundColor: AppTheme.surface(context),
           edgeOffset: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
           child: Consumer<LayoutProvider>(
             builder: (context, layoutProvider, _) {
@@ -837,7 +837,7 @@ class _AddFriendDialogState extends State<_AddFriendDialog> {
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('添加朋友', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor)),
+                Text('添加朋友', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context))),
                 IconButton(icon: Icon(Icons.close, size: 20, color: Colors.grey[500]), tooltip: '关闭', onPressed: () => Navigator.of(context).pop(), visualDensity: VisualDensity.compact),
               ]),
             ),

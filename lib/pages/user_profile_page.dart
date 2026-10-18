@@ -253,7 +253,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 Center(
                   child: Text(
                     '用户名 ${_contact.username}',
-                    style: const TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor),
+                    style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                   ),
                 ),
               ],
@@ -270,10 +270,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
               const SizedBox(height: 28),
               Card(
                 elevation: 0,
-                color: Colors.white,
+                color: AppTheme.surface(context),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: AppTheme.dividerColor),
+                  side: BorderSide(color: AppTheme.divider(context)),
                 ),
                 child: Column(
                   children: [
@@ -283,8 +283,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         _contact.remark.isEmpty ? '添加备注名' : _contact.remark,
                         style: TextStyle(
                           color: _contact.remark.isEmpty
-                              ? AppTheme.textSecondaryColor
-                              : AppTheme.textPrimaryColor,
+                              ? AppTheme.textSecondary(context)
+                              : AppTheme.textPrimary(context),
                         ),
                       ),
                       trailing: const Icon(Icons.chevron_right),

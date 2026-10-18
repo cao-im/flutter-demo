@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
+
 /// 聊天输入栏上方/下方的可扩展面板容器（类微信）
 ///
 /// - 桌面端：以浮层弹窗形式展示在输入栏上方
@@ -60,7 +62,7 @@ class _DesktopPopupPanel extends StatelessWidget {
           width: 420,
           constraints: const BoxConstraints(maxHeight: 450),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.surface(context),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -105,9 +107,9 @@ class _MobileExpandPanel extends StatelessWidget {
       height: height,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: AppTheme.surface(context),
           border: Border(
-            top: BorderSide(color: Colors.grey[200]!),
+            top: BorderSide(color: AppTheme.divider(context)),
           ),
         ),
         child: contentBuilder(context),

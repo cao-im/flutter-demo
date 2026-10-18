@@ -94,8 +94,8 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: hp, vertical: vp),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
+        color: AppTheme.surface(context),
+        border: Border(bottom: BorderSide(color: AppTheme.divider(context))),
       ),
       child: Row(
         children: [
@@ -107,7 +107,7 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
                 style: TextStyle(
                   fontSize: style == ChatHeaderStyle.panel ? 17.0 : 16.0,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimaryColor,
+                  color: AppTheme.textPrimary(context),
                 ),
               ),
             ),

@@ -1014,8 +1014,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Widget _buildPlaceholder() {
-    return const Material(
-      color: AppTheme.backgroundColor,
+    return Material(
+      color: AppTheme.background(context),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1028,7 +1028,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 fontSize: 16,
                 height: 1.4,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4E5964),
+                color: AppTheme.textPrimary(context),
               ),
             ),
             SizedBox(height: 6),
@@ -1037,7 +1037,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               style: TextStyle(
                 fontSize: 13,
                 height: 1.4,
-                color: Color(0xFF9AA3AB),
+                color: AppTheme.textSecondary(context),
               ),
             ),
           ],

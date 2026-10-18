@@ -63,7 +63,7 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.surface(context),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -156,7 +156,7 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.white,
+              color: AppTheme.surface(context),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

@@ -65,7 +65,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.surface(context),
       child: Column(
         children: [
           _buildSearchBar(),
@@ -398,7 +398,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
     }
 
     return [
-      Padding(padding: const EdgeInsets.only(left: 56, top: 12, bottom: 8), child: Text('搜索结果 (${filtered.length})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondaryColor))),
+      Padding(padding: const EdgeInsets.only(left: 56, top: 12, bottom: 8), child: Text('搜索结果 (${filtered.length})', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary(context)))),
       ...filtered.map((c) => _buildContactItem(c)),
     ];
   }
@@ -486,7 +486,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
           children: [
             Icon(icon, size: 20, color: Colors.grey[600]),
             const SizedBox(width: 14),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor))),
+            Expanded(child: Text(title, style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context)))),
             if (badgeCount > 0)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -524,9 +524,9 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: isBold ? AppTheme.textPrimaryColor : Colors.grey[600]),
+          Icon(icon, size: 20, color: isBold ? AppTheme.textPrimary(context) : Colors.grey[600]),
           const SizedBox(width: 14),
-          Expanded(child: Text(title, style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor, fontWeight: isBold ? FontWeight.w600 : FontWeight.normal))),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context), fontWeight: isBold ? FontWeight.w600 : FontWeight.normal))),
           if (count != null)
             Text('$count', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
           else
@@ -573,7 +573,7 @@ class _DesktopContactsPanelState extends State<DesktopContactsPanel> {
             AvatarWidget(imageUrl: contact.avatar, name: name, size: 46),
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimaryColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimary(context)), maxLines: 1, overflow: TextOverflow.ellipsis),
             ])),
             Icon(Icons.more_vert, size: 18, color: Colors.grey[400]),
           ],
@@ -767,7 +767,7 @@ class _AddFriendDialogState extends State<_AddFriendDialog> {
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('添加朋友', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor)),
+                Text('添加朋友', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context))),
                 IconButton(icon: Icon(Icons.close, size: 20, color: Colors.grey[500]), tooltip: '关闭', onPressed: () => Navigator.of(context).pop(), visualDensity: VisualDensity.compact),
               ]),
             ),

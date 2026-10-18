@@ -116,14 +116,14 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          color: AppTheme.surfaceColor,
+          color: AppTheme.surface(context),
         ),
         child: Column(
           children: [
             _buildHeader(),
-            Divider(height: 1, color: AppTheme.dividerColor),
+            Divider(height: 1, color: AppTheme.divider(context)),
             Expanded(child: _buildBody()),
-            Divider(height: 1, color: AppTheme.dividerColor),
+            Divider(height: 1, color: AppTheme.divider(context)),
             _buildFooter(),
           ],
         ),
@@ -139,7 +139,7 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
         children: [
           Text(
             '发起群聊',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context)),
           ),
           IconButton(
             icon: Icon(Icons.close, size: 20, color: Colors.grey[500]),
@@ -167,13 +167,13 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
               child: Column(
                 children: [
                   _buildSearchBar(),
-                  Divider(height: 1, color: AppTheme.dividerColor),
+                  Divider(height: 1, color: AppTheme.divider(context)),
                   Expanded(child: _buildFriendList(filteredContacts, contactProvider.isLoading)),
                 ],
               ),
             ),
 
-            VerticalDivider(width: 1, color: AppTheme.dividerColor),
+            VerticalDivider(width: 1, color: AppTheme.divider(context)),
 
             // 右侧：已选成员预览（40%）
             Expanded(
@@ -266,7 +266,7 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
             Expanded(
               child: Text(
                 displayName,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textPrimaryColor),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textPrimary(context)),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -290,12 +290,12 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
               children: [
                 Text(
                   '已选成员 (${_selectedMemberIds.length})',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context)),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: AppTheme.dividerColor),
+          Divider(height: 1, color: AppTheme.divider(context)),
           Expanded(
             child: selectedContacts.isEmpty
                 ? Center(
@@ -324,9 +324,9 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
     return Container(
       constraints: const BoxConstraints(minWidth: 72),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface(context),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.dividerColor),
+        border: Border.all(color: AppTheme.divider(context)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
@@ -362,7 +362,7 @@ class _DesktopGroupCreateDialogState extends State<DesktopGroupCreateDialog> {
         children: [
           Text(
             '群名称:',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textSecondaryColor),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textSecondary(context)),
           ),
           const SizedBox(width: 10),
           Expanded(

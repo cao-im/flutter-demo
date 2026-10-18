@@ -55,7 +55,7 @@ class ChatPageShell extends StatelessWidget {
       return Scaffold(
         resizeToAvoidBottomInset: false,
         body: Material(
-          color: AppTheme.surfaceColor,
+          color: AppTheme.surface(context),
           child: content,
         ),
       );

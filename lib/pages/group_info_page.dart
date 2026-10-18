@@ -444,10 +444,10 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
     final myNick = _me?.groupNickname.isNotEmpty == true ? _me!.groupNickname : (_me?.accountName ?? '');
 
     return Material(
-      color: Colors.white,
+      color: AppTheme.surface(context),
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: Color(0xFFE7E7E7))),
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: AppTheme.divider(context))),
         ),
         child: Stack(
           children: [
@@ -462,18 +462,18 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                         child: Container(
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF5F5F5),
+                            color: AppTheme.inputFill(context),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: TextField(
                             controller: _searchController,
                             onChanged: (value) => setState(() => _query = value),
                             style: const TextStyle(fontSize: 13),
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               isDense: true,
                               hintText: '搜索群成员',
-                              hintStyle: TextStyle(fontSize: 13, color: Color(0xFFB2B2B2)),
-                              prefixIcon: Icon(Icons.search, size: 16, color: Color(0xFFB2B2B2)),
+                              hintStyle: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
+                              prefixIcon: Icon(Icons.search, size: 16, color: AppTheme.textSecondary(context)),
                               prefixIconConstraints: BoxConstraints(minWidth: 32, minHeight: 32),
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -485,7 +485,7 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                         IconButton(
                           tooltip: '关闭',
                           onPressed: widget.onClose,
-                          icon: const Icon(Icons.close, size: 18, color: Color(0xFF8C8C8C)),
+                          icon: Icon(Icons.close, size: 18, color: AppTheme.textSecondary(context)),
                         ),
                     ],
                   ),
@@ -500,7 +500,7 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                     padding: const EdgeInsets.symmetric(vertical: 32),
                     child: Column(
                       children: [
-                        Text(_error!, style: const TextStyle(color: Color(0xFF8C8C8C))),
+                        Text(_error!, style: TextStyle(color: AppTheme.textSecondary(context))),
                         TextButton(onPressed: _load, child: const Text('重试')),
                       ],
                     ),
@@ -561,7 +561,7 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                 if (_requests.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Text('入群申请（${_requests.length}）', style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
+                    child: Text('入群申请（${_requests.length}）', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
                   ),
                   for (final request in _requests) _requestTile(request),
                   const _SectionGap(),
@@ -571,7 +571,7 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                   value: groupName,
                   onTap: _canManage && !_busy ? _editName : null,
                 ),
-                const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF0F0F0)),
+                Divider(height: 1, indent: 16, endIndent: 16, color: AppTheme.divider(context)),
                 _InfoRow(
                   label: '群公告',
                   value: announcement.isEmpty ? '未设置' : announcement,
@@ -585,14 +585,14 @@ class _GroupInfoDrawerState extends State<GroupInfoDrawer> {
                   muted: _remark.isEmpty,
                   onTap: _busy ? null : _editRemark,
                 ),
-                const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF0F0F0)),
+                Divider(height: 1, indent: 16, endIndent: 16, color: AppTheme.divider(context)),
                 _InfoRow(
                   label: '我在本群的昵称',
                   value: myNick.isEmpty ? '未设置' : myNick,
                   muted: myNick.isEmpty,
                   onTap: _busy ? null : _editMyNickname,
                 ),
-                const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF0F0F0)),
+                Divider(height: 1, indent: 16, endIndent: 16, color: AppTheme.divider(context)),
                 _InfoRow(
                   label: '群二维码',
                   value: '群号 ${widget.groupId}',
@@ -755,7 +755,7 @@ class _MemberCell extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF888888)),
+              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary(context)),
             ),
           ],
         ),
@@ -779,14 +779,14 @@ class _AddMemberCell extends StatelessWidget {
           children: [
             CustomPaint(
               painter: _DashCirclePainter(),
-              child: const SizedBox(
+              child: SizedBox(
                 width: 46,
                 height: 46,
-                child: Icon(Icons.add, size: 22, color: Color(0xFFB2B2B2)),
+                child: Icon(Icons.add, size: 22, color: AppTheme.textSecondary(context)),
               ),
             ),
             const SizedBox(height: 4),
-            const Text('添加', style: TextStyle(fontSize: 11, color: Color(0xFF888888))),
+            Text('添加', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary(context))),
           ],
         ),
       ),
@@ -846,21 +846,21 @@ class _InfoRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
+                  Text(label, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
                   const SizedBox(height: 6),
                   Text(
                     value,
                     maxLines: maxLines,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, height: 1.3, color: muted ? const Color(0xFFB2B2B2) : const Color(0xFF191919)),
+                    style: TextStyle(fontSize: 14, height: 1.3, color: muted ? AppTheme.textSecondary(context) : AppTheme.textPrimary(context)),
                   ),
                 ],
               ),
             ),
             if (onTap != null)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 10),
-                child: Icon(Icons.chevron_right, size: 18, color: Color(0xFFC8C8C8)),
+                child: Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondary(context)),
               ),
           ],
         ),
@@ -874,8 +874,8 @@ class _SectionGap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Color(0xFFF7F7F7),
+    return ColoredBox(
+      color: AppTheme.background(context),
       child: SizedBox(height: 8, width: double.infinity),
     );
   }

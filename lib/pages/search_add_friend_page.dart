@@ -77,12 +77,12 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: AppTheme.inputFill(context),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           '已添加',
-          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          style: TextStyle(color: AppTheme.textSecondary(context), fontSize: 13),
         ),
       );
     } else if (status == 1) {
@@ -246,7 +246,7 @@ class _SearchAddFriendPageState extends State<SearchAddFriendPage> {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                     ),
                   ],
                 ),

@@ -16,11 +16,11 @@ class FullTextPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.background(context),
       appBar: AppBar(
         title: Text(title ?? '全文'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.textPrimaryColor,
+        backgroundColor: AppTheme.surface(context),
+        foregroundColor: AppTheme.textPrimary(context),
         elevation: 0.5,
         actions: [
           TextButton(
@@ -43,10 +43,10 @@ class FullTextPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           child: SelectableText(
             content,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               height: 1.55,
-              color: AppTheme.textPrimaryColor,
+              color: AppTheme.textPrimary(context),
             ),
           ),
         ),

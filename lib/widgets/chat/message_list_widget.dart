@@ -144,9 +144,9 @@ class _MessageListWidgetState extends State<MessageListWidget> {
               children: [
                 Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey[400]),
                 const SizedBox(height: 16),
-                Text('暂无消息', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                Text('暂无消息', style: TextStyle(fontSize: 16, color: AppTheme.textSecondary(context))),
                 const SizedBox(height: 8),
-                Text('发送消息开始聊天吧~', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                Text('发送消息开始聊天吧~', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary(context))),
               ],
             ),
           );

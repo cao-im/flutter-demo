@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../theme/app_theme.dart';
+
 import '../../models/file_content.dart';
 import '../../models/message_model.dart';
 
@@ -16,7 +18,7 @@ class FileMessageContent extends StatelessWidget {
     final size = file?.sizeLabel ?? '';
     final ext = FileContent.extensionOf(name);
     return Material(
-      color: Colors.white,
+      color: AppTheme.bubbleIncoming(context),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -26,7 +28,7 @@ class FileMessageContent extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE5E5E5)),
+            border: Border.all(color: AppTheme.divider(context)),
           ),
           child: Row(
             children: [
@@ -39,11 +41,11 @@ class FileMessageContent extends StatelessWidget {
                       name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14, height: 1.3, color: Color(0xFF191919)),
+                      style: TextStyle(fontSize: 14, height: 1.3, color: AppTheme.textPrimary(context)),
                     ),
                     if (size.isNotEmpty) ...[
                       const SizedBox(height: 6),
-                      Text(size, style: const TextStyle(fontSize: 12, color: Color(0xFF8C8C8C))),
+                      Text(size, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
                     ],
                   ],
                 ),

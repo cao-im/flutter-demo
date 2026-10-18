@@ -109,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.background(context),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth >= 800;
@@ -216,13 +216,13 @@ class _LoginPageState extends State<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 40),
-                      const Center(
+                      Center(
                         child: Text(
                           '登录',
                           style: TextStyle(
                             fontSize: 60,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimaryColor,
+                            color: AppTheme.textPrimary(context),
                           ),
                         ),
                       ),
@@ -302,7 +302,7 @@ class _LoginPageState extends State<LoginPage> {
                               style: TextStyle(
                                 color: _isAutoLoggingIn
                                     ? Colors.grey[400]
-                                    : AppTheme.textSecondaryColor,
+                                    : AppTheme.textSecondary(context),
                               ),
                             ),
                           ),
@@ -326,7 +326,7 @@ class _LoginPageState extends State<LoginPage> {
                               style: TextStyle(
                                 color: _isAutoLoggingIn
                                     ? Colors.grey[400]
-                                    : AppTheme.textSecondaryColor,
+                                    : AppTheme.textSecondary(context),
                               ),
                             ),
                           ),
@@ -362,7 +362,7 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           Text(
                             '还没有账号？',
-                            style: TextStyle(color: AppTheme.textSecondaryColor),
+                            style: TextStyle(color: AppTheme.textSecondary(context)),
                           ),
                           TextButton(
                             onPressed: _isAutoLoggingIn
@@ -413,13 +413,13 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 32),
-              const Text(
+              Text(
                 '欢迎回来',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimaryColor,
+                  color: AppTheme.textPrimary(context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -428,7 +428,7 @@ class _LoginPageState extends State<LoginPage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textSecondaryColor,
+                  color: AppTheme.textSecondary(context),
                 ),
               ),
               const SizedBox(height: 48),
@@ -506,7 +506,7 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(
                         color: _isAutoLoggingIn
                             ? Colors.grey[400]
-                            : AppTheme.textSecondaryColor,
+                            : AppTheme.textSecondary(context),
                       ),
                     ),
                   ),
@@ -530,7 +530,7 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(
                         color: _isAutoLoggingIn
                             ? Colors.grey[400]
-                            : AppTheme.textSecondaryColor,
+                            : AppTheme.textSecondary(context),
                       ),
                     ),
                   ),
@@ -563,7 +563,7 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   Text(
                     '还没有账号？',
-                    style: TextStyle(color: AppTheme.textSecondaryColor),
+                    style: TextStyle(color: AppTheme.textSecondary(context)),
                   ),
                   TextButton(
                     onPressed: _isAutoLoggingIn

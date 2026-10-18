@@ -154,7 +154,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
                   const SizedBox(height: 16),
                   Text(
                     '暂无好友请求',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                    style: TextStyle(color: AppTheme.textSecondary(context), fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -205,7 +205,7 @@ class _NewFriendsPageState extends State<NewFriendsPage> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
+              color: AppTheme.textSecondary(context),
             ),
           ),
           const SizedBox(width: 8),

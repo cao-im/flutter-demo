@@ -194,7 +194,7 @@ class _SectionTitle extends StatelessWidget {
       width: double.infinity,
       color: const Color(0xFFF7F7F7),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Text(text, style: const TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor)),
+      child: Text(text, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context))),
     );
   }
 }
@@ -230,7 +230,7 @@ class _ResultRow extends StatelessWidget {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor),
+                    style: TextStyle(fontSize: 15, color: AppTheme.textPrimary(context)),
                   ),
                   if (subtitle.isNotEmpty) ...[
                     const SizedBox(height: 2),
@@ -238,7 +238,7 @@ class _ResultRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
                     ),
                   ],
                 ],

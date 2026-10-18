@@ -70,7 +70,7 @@ class _GroupListPageState extends State<GroupListPage> {
           children: [
             Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
             const SizedBox(height: 12),
-            Text('加载失败', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+            Text('加载失败', style: TextStyle(color: AppTheme.textSecondary(context), fontSize: 16)),
             const SizedBox(height: 8),
             Text(_errorMsg!, style: TextStyle(color: Colors.grey[400], fontSize: 13)),
             const SizedBox(height: 16),
@@ -90,9 +90,9 @@ class _GroupListPageState extends State<GroupListPage> {
           children: [
             Icon(Icons.group_outlined, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text('暂无群组', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+            Text('暂无群组', style: TextStyle(color: AppTheme.textSecondary(context), fontSize: 16)),
             const SizedBox(height: 8),
-            Text('点击右上角发起群聊', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+            Text('点击右上角发起群聊', style: TextStyle(color: AppTheme.textSecondary(context), fontSize: 14)),
           ],
         ),
       );
@@ -103,7 +103,7 @@ class _GroupListPageState extends State<GroupListPage> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: _groups.length,
-        separatorBuilder: (_, __) => Divider(height: 1, indent: 56, endIndent: 16, color: Colors.grey[200]),
+        separatorBuilder: (_, __) => Divider(height: 1, indent: 56, endIndent: 16, color: AppTheme.divider(context)),
         itemBuilder: (context, index) => _buildGroupItem(_groups[index]),
       ),
     );

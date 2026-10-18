@@ -96,7 +96,7 @@ class MessageBubble extends StatelessWidget {
                       ),
                     if (message.replyPreview != null &&
                         message.replyPreview!.isNotEmpty)
-                      _buildQuoteStrip(bubbleMaxWidth),
+                      _buildQuoteStrip(context, bubbleMaxWidth),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -127,10 +127,10 @@ class MessageBubble extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: message.status ==
                                             MessageStatus.recalled
-                                        ? Colors.grey[200]
+                                        ? AppTheme.inputFill(context)
                                         : isMe
                                             ? AppTheme.primaryColor
-                                            : Colors.white,
+                                            : AppTheme.bubbleIncoming(context),
                                     borderRadius: BorderRadius.only(
                                       topLeft: const Radius.circular(16),
                                       topRight: const Radius.circular(16),
@@ -240,7 +240,7 @@ class MessageBubble extends StatelessWidget {
 
   static const int _foldMaxLines = 6;
 
-  Widget _buildQuoteStrip(double maxWidth) {
+  Widget _buildQuoteStrip(BuildContext context, double maxWidth) {
     final name = message.replySenderName;
     final preview = message.replyPreview ?? '';
     final strip = Container(
@@ -248,7 +248,9 @@ class MessageBubble extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.05),
+        color: AppTheme.isDark(context)
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(color: AppTheme.primaryColor, width: 3),
@@ -258,7 +260,7 @@ class MessageBubble extends StatelessWidget {
         name == null || name.isEmpty ? preview : '$name：$preview',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 12, color: Colors.grey[700], height: 1.3),
+        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context), height: 1.3),
       ),
     );
     if (onQuoteTap == null) return strip;
@@ -303,7 +305,7 @@ class MessageBubble extends StatelessWidget {
   Widget _buildFoldableText(BuildContext context, double maxTextWidth) {
     final style = TextStyle(
       fontSize: 15,
-      color: isMe ? Colors.white : AppTheme.textPrimaryColor,
+      color: isMe ? Colors.white : AppTheme.textPrimary(context),
       height: 1.4,
     );
     final exceeds = _textExceedsMaxLines(

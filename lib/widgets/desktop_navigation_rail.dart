@@ -33,13 +33,13 @@ class DesktopNavigationRail extends StatelessWidget {
 
     return Material(
       elevation: 0,
-      color: AppTheme.surfaceColor,
+      color: AppTheme.surface(context),
       child: Container(
         width: _railWidth,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             right: BorderSide(
-              color: AppTheme.dividerColor,
+              color: AppTheme.divider(context),
               width: 1,
             ),
           ),
@@ -53,7 +53,7 @@ class DesktopNavigationRail extends StatelessWidget {
             Container(
               width: _railWidth - 20,
               height: 1,
-              color: AppTheme.dividerColor,
+              color: AppTheme.divider(context),
             ),
             SizedBox(height: 8),
             ..._navItems.asMap().entries.map((entry) {
@@ -129,7 +129,7 @@ class DesktopNavigationRail extends StatelessWidget {
                 size: _iconSize,
                 color: isSelected
                     ? AppTheme.primaryColor
-                    : AppTheme.textSecondaryColor,
+                    : AppTheme.textSecondary(context),
               ),
               if (badgeCount > 0)
                 Positioned(

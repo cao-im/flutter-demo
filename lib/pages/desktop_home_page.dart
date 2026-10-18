@@ -62,7 +62,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.background(context),
       body: Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyN):
@@ -77,7 +77,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         child: Focus(
           autofocus: true,
           child: Container(
-            color: AppTheme.backgroundColor,
+            color: AppTheme.background(context),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth < _minWindowWidth) {
@@ -98,9 +98,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                     return Row(
                       children: [
                         DesktopNavigationRail(),
-                        Container(width: 1, color: AppTheme.dividerColor),
+                        Container(width: 1, color: AppTheme.divider(context)),
                         _buildMiddlePanel(context, layoutProvider),
-                        Container(width: 1, color: AppTheme.dividerColor),
+                        Container(width: 1, color: AppTheme.divider(context)),
                         _buildRightPanel(layoutProvider),
                       ],
                     );
@@ -196,25 +196,25 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     final userName = user?.nickname ?? user?.username ?? '用户';
 
     return Material(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.surface(context),
       child: ListView(padding: EdgeInsets.zero, children: [
         Container(
           padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.dividerColor))),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.divider(context)))),
           child: Row(children: [
             AvatarWidget(imageUrl: avatarUrl, name: userName, size: 56),
             SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(userName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(userName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context)), maxLines: 1, overflow: TextOverflow.ellipsis),
               SizedBox(height: 2),
-              Text('在右侧修改头像、昵称、邮箱和手机号', style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor), maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text('在右侧修改头像、昵称、邮箱和手机号', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)), maxLines: 2, overflow: TextOverflow.ellipsis),
             ])),
           ]),
         ),
 
         Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text(
           '通用设置',
-          style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor, fontWeight: FontWeight.w500),
+          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context), fontWeight: FontWeight.w500),
         )),
 
         _buildSettingsItem(
@@ -245,8 +245,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         Container(width: 36, height: 36, decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: iconColor)),
         SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor)),
-          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor)),
+          Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimary(context))),
+          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
         ])),
         Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
       ]),
@@ -332,7 +332,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
 
   Widget _buildWarningItem(IconData icon, String text) {
     return Padding(padding: EdgeInsets.symmetric(vertical: 2), child: Row(children: [
-      Icon(icon, size: 16, color: AppTheme.textSecondaryColor),
+      Icon(icon, size: 16, color: AppTheme.textSecondary(context)),
       SizedBox(width: 8),
       Expanded(child: Text(text, style: TextStyle(fontSize: 13))),
     ]));
@@ -399,7 +399,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
   /// 通讯录未选中联系人时的空状态面板
   Widget _ContactsEmptyPanel() {
     return Material(
-      color: AppTheme.backgroundColor,
+      color: AppTheme.background(context),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -428,7 +428,7 @@ class _DesktopProfilePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.backgroundColor,
+      color: AppTheme.background(context),
       child: SingleChildScrollView(
         child: Align(
           alignment: Alignment.topCenter,
@@ -453,7 +453,7 @@ class _PlaceholderPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.backgroundColor,
+      color: AppTheme.background(context),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -483,25 +483,25 @@ class _SettingsPanel extends StatelessWidget {
         final userName = user?.nickname ?? user?.username ?? '用户';
 
         return Material(
-          color: AppTheme.backgroundColor,
+          color: AppTheme.background(context),
           child: ListView(padding: EdgeInsets.zero, children: [
             // 用户信息头部
             Container(
               padding: EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.dividerColor))),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.divider(context)))),
               child: Row(children: [
                 AvatarWidget(imageUrl: avatarUrl, name: userName, size: 56),
                 SizedBox(width: 20),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(userName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor)),
+                  Text(userName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context))),
                   SizedBox(height: 4),
-                  Text(user?.email ?? '', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor)),
+                  Text(user?.email ?? '', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context))),
                 ])),
               ]),
             ),
 
             // 设置项
-            Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('通用设置', style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor, fontWeight: FontWeight.w500))),
+            Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('通用设置', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context), fontWeight: FontWeight.w500))),
 
             _SettingsItem(
               icon: Icons.qr_code_2,
@@ -547,8 +547,8 @@ class _SettingsItem extends StatelessWidget {
         Container(width: 36, height: 36, decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: iconColor)),
         SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimaryColor)),
-          if (subtitle.isNotEmpty) Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor)),
+          Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimary(context))),
+          if (subtitle.isNotEmpty) Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
         ])),
         Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
       ]),
@@ -785,13 +785,13 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
     final avatarUrl = contact.avatar;
 
     return Material(
-      color: AppTheme.backgroundColor,
+      color: AppTheme.background(context),
       child: Column(
         children: [
           Container(
             padding: EdgeInsets.symmetric(horizontal: 32, vertical: 24),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
+              border: Border(bottom: BorderSide(color: AppTheme.divider(context))),
             ),
             child: Row(
               children: [
@@ -810,13 +810,13 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimaryColor,
+                          color: AppTheme.textPrimary(context),
                         ),
                       ),
                       SizedBox(height: 2),
                       Text(
                         '用户名: ${contact.username}',
-                        style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor),
+                        style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                       ),
                     ],
                   ),
@@ -872,7 +872,7 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
           Container(
             padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: AppTheme.dividerColor)),
+              border: Border(top: BorderSide(color: AppTheme.divider(context))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -902,7 +902,7 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
           padding: EdgeInsets.symmetric(horizontal: 32, vertical: 8),
           child: Text(
             title,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor, fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context), fontWeight: FontWeight.w500),
           ),
         ),
         ...children,
@@ -922,9 +922,9 @@ class _ContactDetailPanelState extends State<_ContactDetailPanel> {
         padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 80, child: Text(label, style: TextStyle(fontSize: 14, color: AppTheme.textSecondaryColor))),
-            Expanded(child: Text(value, style: TextStyle(fontSize: 14, color: AppTheme.textPrimaryColor))),
-            if (onTap != null) Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondaryColor),
+            SizedBox(width: 80, child: Text(label, style: TextStyle(fontSize: 14, color: AppTheme.textSecondary(context)))),
+            Expanded(child: Text(value, style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context)))),
+            if (onTap != null) Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondary(context)),
           ],
         ),
       ),

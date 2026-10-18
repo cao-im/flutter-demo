@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 
+import '../../theme/app_theme.dart';
+
 /// 表情选择面板 — 基于 emoji_picker_flutter
 class EmojiPickerPanel extends StatelessWidget {
   /// 选择表情后的回调，返回 Unicode 字符串
@@ -30,25 +32,25 @@ class EmojiPickerPanel extends StatelessWidget {
           backgroundColor: Colors.transparent,
           buttonMode: ButtonMode.MATERIAL,
         ),
-        skinToneConfig: const SkinToneConfig(
+        skinToneConfig: SkinToneConfig(
           enabled: false,
-          dialogBackgroundColor: Colors.white,
-          indicatorColor: Colors.grey,
+          dialogBackgroundColor: AppTheme.surface(context),
+          indicatorColor: AppTheme.textSecondary(context),
         ),
-        categoryViewConfig: const CategoryViewConfig(
+        categoryViewConfig: CategoryViewConfig(
           initCategory: Category.SMILEYS,
-          backgroundColor: Colors.white,
-          indicatorColor: Color(0xFF4A90D9),
-          iconColorSelected: Color(0xFF4A90D9),
-          iconColor: Color(0xFFBDBDBD),
+          backgroundColor: AppTheme.surface(context),
+          indicatorColor: const Color(0xFF4A90D9),
+          iconColorSelected: const Color(0xFF4A90D9),
+          iconColor: AppTheme.textSecondary(context),
         ),
         bottomActionBarConfig: const BottomActionBarConfig(
           enabled: false,
           showSearchViewButton: true,
           buttonColor: Color(0xFF4A90D9),
         ),
-        searchViewConfig: const SearchViewConfig(
-          backgroundColor: Colors.white,
+        searchViewConfig: SearchViewConfig(
+          backgroundColor: AppTheme.surface(context),
           hintText: '搜索表情...',
         ),
       ),

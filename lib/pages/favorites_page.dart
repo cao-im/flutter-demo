@@ -30,7 +30,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget build(BuildContext context) {
     const body = _FavoriteList();
     if (widget.embedded) {
-      return Material(color: AppTheme.surfaceColor, child: body);
+      return Material(color: AppTheme.surface(context), child: body);
     }
     return Scaffold(
       appBar: AppBar(title: const Text('收藏')),
@@ -56,9 +56,9 @@ class _FavoriteList extends StatelessWidget {
               children: [
                 Icon(Icons.star_outline, size: 48, color: Colors.grey[400]),
                 const SizedBox(height: 12),
-                Text('还没有收藏', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                Text('还没有收藏', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary(context))),
                 const SizedBox(height: 4),
-                Text('在聊天里长按消息，选择收藏', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+                Text('在聊天里长按消息，选择收藏', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
               ],
             ),
           );
@@ -74,7 +74,7 @@ class _FavoriteList extends StatelessWidget {
               return Material(
                 color: selected ? AppTheme.primaryColor.withValues(alpha: 0.08) : Colors.transparent,
                 child: ListTile(
-                  leading: Icon(_iconFor(item.type), color: AppTheme.textSecondaryColor),
+                  leading: Icon(_iconFor(item.type), color: AppTheme.textSecondary(context)),
                   title: Text(item.preview, maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                     '${item.senderLabel} · ${item.sourceLabel}',
@@ -131,9 +131,9 @@ class FavoriteDetailPane extends StatelessWidget {
     final item = context.watch<FavoriteProvider>().selected;
     if (item == null) {
       return Material(
-        color: AppTheme.backgroundColor,
+        color: AppTheme.background(context),
         child: Center(
-          child: Text('选择一条收藏查看', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+          child: Text('选择一条收藏查看', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary(context))),
         ),
       );
     }
@@ -169,7 +169,7 @@ class FavoriteDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.backgroundColor,
+      color: AppTheme.background(context),
       child: Column(
         children: [
           Padding(
@@ -184,7 +184,7 @@ class FavoriteDetailView extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         '${item.sourceLabel}  ${_formatTime(item.messageTime)}',
-                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor),
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
                       ),
                     ],
                   ),

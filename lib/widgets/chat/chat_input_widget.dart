@@ -307,7 +307,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 bottom: (!isDesktop && showEmojiPanel) ? bp : bottomInset + bp,
               ),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.surface(context),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
@@ -347,7 +347,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     final title = widget.quoteTitle;
     final preview = widget.quotePreview ?? '';
     return Material(
-      color: const Color(0xFFF7F7F7),
+      color: AppTheme.inputFill(context),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
         child: Row(
@@ -376,7 +376,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
                   ),
                 ],
               ),
@@ -403,7 +403,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFE5E5E5), width: 1),
+        border: Border.all(color: AppTheme.divider(context), width: 1),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -429,7 +429,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppTheme.inputFill(context),
                 hoverColor: Colors.transparent,
                 focusColor: Colors.transparent,
                 contentPadding: EdgeInsets.symmetric(
@@ -442,7 +442,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
               style: TextStyle(fontSize: widget.style.fontSize, height: 1.8),
             ),
           ),
-          const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
+          Divider(height: 1, thickness: 1, color: AppTheme.divider(context)),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
             child: Row(
@@ -471,7 +471,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                 if (_recording) ...[
                   TextButton(
                     onPressed: () => _finishRecord(send: false),
-                    style: _toolbarTextButtonStyle(AppTheme.textSecondaryColor),
+                    style: _toolbarTextButtonStyle(AppTheme.textSecondary(context)),
                     child: const Text('取消'),
                   ),
                   TextButton(
@@ -522,7 +522,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
               hintText: '输入消息...',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
               filled: true,
-              fillColor: Colors.grey[100],
+              fillColor: AppTheme.inputFill(context),
               contentPadding: EdgeInsets.symmetric(
                 horizontal: widget.style.inputHorizontalPadding,
                 vertical: widget.style.inputVerticalPadding,
@@ -572,9 +572,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     final label = _recording
         ? (_cancelArmed ? '松开 取消' : '松开 结束')
         : '按住 说话';
-    final bg = _recording
-        ? (_cancelArmed ? const Color(0xFFFA5151) : const Color(0xFFD6D6D6))
-        : const Color(0xFFF2F2F2);
+    final bg = _recording && _cancelArmed ? const Color(0xFFFA5151) : AppTheme.inputFill(context);
     return Listener(
       onPointerDown: (event) {
         _pointerDown = event.position;
@@ -611,7 +609,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
           style: TextStyle(
             fontSize: widget.style.fontSize,
             fontWeight: FontWeight.w600,
-            color: _cancelArmed ? Colors.white : const Color(0xFF4E5964),
+            color: _cancelArmed ? Colors.white : AppTheme.textPrimary(context),
           ),
         ),
       ),
@@ -844,7 +842,7 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
       height: widget.style.iconButtonSize,
       child: IconButton(
         icon: Icon(icon, size: 22),
-        color: color ?? AppTheme.textSecondaryColor,
+        color: color ?? AppTheme.textSecondary(context),
         onPressed: onPressed,
         tooltip: tooltip,
       ),
@@ -857,14 +855,14 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
       key: key,
       width: widget.style.iconButtonSize,
       height: widget.style.iconButtonSize,
-      child: IconButton(icon: Icon(icon, size: 22), color: AppTheme.textSecondaryColor, onPressed: onPressed, tooltip: tooltip),
+      child: IconButton(icon: Icon(icon, size: 22), color: AppTheme.textSecondary(context), onPressed: onPressed, tooltip: tooltip),
     );
   }
 
   Widget _buildPublicAccountBar() {
     return Container(
       padding: EdgeInsets.symmetric(vertical: 10, horizontal: widget.style.horizontalPadding),
-      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: AppTheme.dividerColor))),
+      decoration: BoxDecoration(color: AppTheme.surface(context), border: Border(top: BorderSide(color: AppTheme.divider(context)))),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
         _buildPAMenuItem(Icons.article_outlined, '文章'),
         _buildPAMenuItem(Icons.chat_bubble_outline, '消息'),
@@ -932,7 +930,7 @@ class _AnchoredEmojiPopup extends StatelessWidget {
                       width: arrowWidth,
                       height: arrowSize,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.surface(context),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.08),
@@ -949,7 +947,7 @@ class _AnchoredEmojiPopup extends StatelessWidget {
                     width: popupWidth,
                     height: popupHeight,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.surface(context),
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(

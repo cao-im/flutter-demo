@@ -281,7 +281,7 @@ class _DesktopNotificationCard extends StatelessWidget {
           width: width,
           height: height,
           decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
+            color: AppTheme.surface(context),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -341,7 +341,7 @@ class _DesktopNotificationCard extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimaryColor,
+                                    color: AppTheme.textPrimary(context),
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -351,7 +351,7 @@ class _DesktopNotificationCard extends StatelessWidget {
                                 _formatTime(data.time),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: AppTheme.textSecondaryColor,
+                                  color: AppTheme.textSecondary(context),
                                 ),
                               ),
                             ],
@@ -363,7 +363,7 @@ class _DesktopNotificationCard extends StatelessWidget {
                             data.content,
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.textSecondaryColor,
+                              color: AppTheme.textSecondary(context),
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -391,7 +391,7 @@ class _DesktopNotificationCard extends StatelessWidget {
                     child: Icon(
                       Icons.close,
                       size: 12,
-                      color: AppTheme.textSecondaryColor,
+                      color: AppTheme.textSecondary(context),
                     ),
                   ),
                 ),

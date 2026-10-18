@@ -146,7 +146,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
               bottom: MediaQuery.of(context).padding.bottom + 8,
             ),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.surface(context),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),

@@ -29,7 +29,7 @@ class AvatarWidget extends StatelessWidget {
           shape: BoxShape.circle,
           color: AppTheme.primaryColor.withOpacity(0.1),
           border: Border.all(
-            color: AppTheme.dividerColor,
+            color: AppTheme.divider(context),
             width: 1,
           ),
         ),

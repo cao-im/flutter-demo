@@ -243,7 +243,7 @@ class _ContactsPageState extends State<ContactsPage>
                     '暂无联系人',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.grey[600],
+                      color: AppTheme.textSecondary(context),
                     ),
                   ),
                 ],
@@ -607,7 +607,7 @@ class _IndexBar extends StatelessWidget {
                   fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
                   color: isHighlighted
                       ? AppTheme.primaryColor
-                      : (hasContacts ? Colors.grey[600] : Colors.grey[300]),
+                      : (hasContacts ? AppTheme.textSecondary(context) : AppTheme.textSecondary(context).withValues(alpha: 0.45)),
                 ),
               ),
             );
@@ -647,7 +647,7 @@ class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Colors.grey[600],
+          color: AppTheme.textSecondary(context),
         ),
       ),
     );

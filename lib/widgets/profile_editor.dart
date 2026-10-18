@@ -173,14 +173,14 @@ class _ProfileEditorState extends State<ProfileEditor> {
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           '编辑资料',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.textPrimaryColor),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.textPrimary(context)),
         ),
         const SizedBox(height: 6),
         Text(
           '用户名 ${user?.username ?? ''}',
-          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondaryColor),
+          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
         ),
         const SizedBox(height: 24),
         Center(
@@ -219,8 +219,8 @@ class _ProfileEditorState extends State<ProfileEditor> {
           ),
         ),
         const SizedBox(height: 8),
-        const Center(
-          child: Text('点击更换头像', style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryColor)),
+        Center(
+          child: Text('点击更换头像', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
         ),
         const SizedBox(height: 24),
         _field(controller: _nicknameController, label: '昵称', maxLength: 20),

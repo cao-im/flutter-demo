@@ -39,10 +39,10 @@ class ConversationItem extends StatelessWidget {
           color: isSelected
               ? Colors.blue.withOpacity(0.1)
               : (conversation.isTop
-                  ? AppTheme.dividerColor.withOpacity(0.35)
+                  ? AppTheme.divider(context).withOpacity(0.35)
                   : Colors.transparent),
           border: Border(
-            bottom: BorderSide(color: AppTheme.dividerColor, width: 0.5),
+            bottom: BorderSide(color: AppTheme.divider(context), width: 0.5),
           ),
         ),
         child: Row(
@@ -111,17 +111,17 @@ class ConversationItem extends StatelessWidget {
                         child: Row(
                           children: [
                             if (conversation.isTop)
-                              const Padding(
+                              Padding(
                                 padding: EdgeInsets.only(right: 4),
-                                child: Icon(Icons.push_pin, size: 14, color: AppTheme.textSecondaryColor),
+                                child: Icon(Icons.push_pin, size: 14, color: AppTheme.textSecondary(context)),
                               ),
                             Flexible(
                               child: Text(
                                 conversation.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimaryColor,
+                                  color: AppTheme.textPrimary(context),
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -131,9 +131,9 @@ class ConversationItem extends StatelessWidget {
                       ),
                       Text(
                         _formatTime(conversation.lastActiveTime),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.textSecondaryColor,
+                          color: AppTheme.textSecondary(context),
                         ),
                       ),
                     ],
@@ -149,8 +149,8 @@ class ConversationItem extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             color: conversation.unreadCount > 0 && !conversation.isMute
-                                ? AppTheme.textPrimaryColor
-                                : AppTheme.textSecondaryColor,
+                                ? AppTheme.textPrimary(context)
+                                : AppTheme.textSecondary(context),
                             fontWeight: conversation.unreadCount > 0 && !conversation.isMute
                                 ? FontWeight.w500
                                 : FontWeight.normal,
@@ -158,9 +158,9 @@ class ConversationItem extends StatelessWidget {
                         ),
                       ),
                       if (conversation.isMute)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(left: 6),
-                          child: Icon(Icons.notifications_off_outlined, size: 16, color: AppTheme.textSecondaryColor),
+                          child: Icon(Icons.notifications_off_outlined, size: 16, color: AppTheme.textSecondary(context)),
                         ),
                     ],
                   ),

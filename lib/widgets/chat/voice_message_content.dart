@@ -90,7 +90,7 @@ class _VoiceMessageContentState extends State<VoiceMessageContent> {
     final played = _player.hasPlayed(widget.message.id);
     final duration = widget.message.voiceDuration;
     final width = (72 + duration * 2.6).clamp(88.0, 220.0);
-    final color = widget.isMe ? Colors.white : AppTheme.textPrimaryColor;
+    final color = widget.isMe ? Colors.white : AppTheme.textPrimary(context);
     final showDot = !widget.isMe && !played && !playing;
     final showRoute = playing && _player.canRouteToSpeaker;
 
@@ -140,7 +140,7 @@ class _VoiceMessageContentState extends State<VoiceMessageContent> {
               icon: Icon(
                 _player.speakerOn ? Icons.volume_up : Icons.hearing,
                 size: 16,
-                color: AppTheme.textSecondaryColor,
+                color: AppTheme.textSecondary(context),
               ),
             ),
           ),
