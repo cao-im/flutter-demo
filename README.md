@@ -1,238 +1,175 @@
-# CaoIM - 即时通讯 Flutter Demo 客户端
+# flutter-demo
 
-## 项目简介
+CaoIM 客户端。覆盖 Android、iOS、macOS、Windows 和 Web，桌面端是三栏布局，手机端是底部三个 Tab。登录和上传走 app-server，消息和通话信令走 im-server，长连接由 `im-sdk-flutter` 维护。音视频媒体使用 `flutter_webrtc`，只做一对一。
 
-CaoIM 是一个基于 Flutter 开发的即时通讯（IM）应用 Demo 客户端，采用现代化的 UI 设计和 Material Design 规范。该项目完整实现了 IM 应用的核心功能模块，包括用户认证、单聊/群聊、会话管理、联系人管理等。
+## 仓库一览
 
-## 功能特性
-
-### ✅ 已实现功能
-
-- **用户认证系统**
-  - 用户注册与登录
-  - JWT Token 持久化存储
-  - 自动登录状态检测
-
-- **即时消息功能**
-  - 单聊消息收发
-  - 群组聊天
-  - 文本消息发送
-  - 图片选择与发送（支持相册和拍照）
-  - 消息气泡 UI（自己靠右蓝色，对方靠左白色）
-  - 消息时间戳显示
-  - 发送状态指示
-
-- **会话管理**
-  - 会话列表展示
-  - 最后消息预览
-  - 未读消息计数
-  - 下拉刷新
-  - 会话时间格式化显示
-
-- **通讯录功能**
-  - 好友列表展示
-  - 新朋友入口
-  - 群组管理
-  - 创建群组（选择成员）
-
-- **个人中心**
-  - 用户信息展示
-  - 设置项列表
-  - 退出登录
-  - 关于我们
-
-### 🎨 UI 特性
-
-- Material Design 3 规范
-- 蓝色主色调 (#2196F3)
-- 支持深色模式基础配置
-- 流畅的动画过渡效果
-- 响应式布局设计
-- 圆角卡片式界面
-
-## 技术架构
-
-### 技术栈
-
-| 技术 | 用途 |
+| 仓库 | 作用 |
 |------|------|
-| **Flutter** | 跨平台 UI 框架 |
-| **Provider** | 状态管理 |
-| **Dio** | HTTP 网络请求 |
-| **SharedPreferences** | 本地数据持久化 |
-| **ImagePicker** | 图片选择器 |
-| **CachedNetworkImage** | 网络图片缓存 |
-| **Intl** | 国际化日期格式化 |
+| im-server | 消息与长连接。好友、群、历史、已读、离线同步和一对一通话信令。端口 8080，库 `cao_im_db` |
+| app-server | 客户端注册、登录、个人资料和文件上传。端口 8081，库 `cao_im_app_server` |
+| im-admin | 运营后台：用户启停、群、消息检索、敏感词、系统配置、角色和审计。API 端口 8082，页面开发端口 5173，库 `cao_im_admin` |
+| im-sdk-flutter | Flutter SDK。负责 WebSocket、本地消息库、会话、群和通话信令，不包含界面 |
+| flutter-demo | 本仓库。同一套客户端运行在 Windows、macOS、Android、iOS 和 Web |
 
-### 项目结构
+## 界面
 
+### Windows
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/windows/01-conversation-list.png" alt="会话列表" width="420" /><br/><b>会话列表</b></td>
+    <td align="center"><img src="docs/screenshots/windows/02-private-chat.png" alt="私聊" width="420" /><br/><b>私聊</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/windows/03-group-info.png" alt="群资料" width="420" /><br/><b>群资料</b></td>
+    <td align="center"><img src="docs/screenshots/windows/04-contacts.png" alt="通讯录" width="420" /><br/><b>通讯录</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/windows/05-contact-profile.png" alt="联系人资料" width="420" /><br/><b>联系人资料</b></td>
+    <td align="center"><img src="docs/screenshots/windows/06-voice-call.png" alt="语音呼叫" width="420" /><br/><b>语音呼叫</b></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/screenshots/windows/07-video-call.jpg" alt="视频通话" width="420" /><br/><b>视频通话</b></td>
+  </tr>
+</table>
+
+### App
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/app/01-messages.png" alt="消息" width="180" /><br/><b>消息</b></td>
+    <td align="center"><img src="docs/screenshots/app/02-chat.png" alt="私聊" width="180" /><br/><b>私聊</b></td>
+    <td align="center"><img src="docs/screenshots/app/08-contacts.png" alt="通讯录" width="180" /><br/><b>通讯录</b></td>
+    <td align="center"><img src="docs/screenshots/app/03-profile.png" alt="个人资料" width="180" /><br/><b>个人资料</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/app/06-emoji.png" alt="表情" width="180" /><br/><b>表情</b></td>
+    <td align="center"><img src="docs/screenshots/app/07-attach.png" alt="图片视频文件" width="180" /><br/><b>图片、视频、文件</b></td>
+    <td align="center"><img src="docs/screenshots/app/04-voice-call.png" alt="语音呼叫" width="180" /><br/><b>语音呼叫</b></td>
+    <td align="center"><img src="docs/screenshots/app/05-video-call.jpg" alt="视频通话" width="180" /><br/><b>视频通话</b></td>
+  </tr>
+</table>
+
+### Web
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/web/01-group-chat.png" alt="群聊" width="420" /><br/><b>群聊</b></td>
+    <td align="center"><img src="docs/screenshots/web/02-group-info.png" alt="群资料" width="420" /><br/><b>群资料</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/web/03-contacts.png" alt="通讯录" width="420" /><br/><b>通讯录</b></td>
+    <td align="center"><img src="docs/screenshots/web/04-voice-call.png" alt="语音呼叫" width="420" /><br/><b>语音呼叫</b></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/screenshots/web/05-video-incoming.png" alt="视频来电" width="420" /><br/><b>视频来电</b></td>
+  </tr>
+</table>
+
+## 功能
+
+- 注册、登录，Token 本地保存，启动时恢复会话
+- 会话列表：最后一条消息、未读、置顶、免打扰、下拉刷新。当前打开的会话不再增加未读
+- 私聊和群聊：文本、表情、图片、拍照、语音消息、文件、短视频
+- 引用、转发、撤回、已读和群已读人数
+- 本地记录与服务端消息搜索，消息收藏
+- 好友申请、备注、黑名单、个人资料、二维码加好友和扫码入群
+- 建群、成员拼接头像、改群名、公告、管理员、禁言、入群验证、群昵称。桌面端群资料从右侧抽屉打开
+- 一对一语音、视频通话：等待铃声、接听后建立媒体、视频本地预览和切换摄像头
+- 深色模式，后台新消息本地通知
+- 应用图标使用产品 logo
+
+群通话还没有做。一对一媒体只配置了公共 STUN（`stun:stun.l.google.com:19302`），同一局域网可以通。放到公网后，信令仍可用，对称 NAT 下经常没有声音和画面，需要另外部署 TURN 并把地址写进 `lib/providers/call_provider.dart` 的 `iceServers`。
+
+## 环境
+
+| 环境 | 版本 |
+|------|------|
+| Flutter | 3.x |
+| Dart | 3.11 及以上 |
+
+依赖本机的 `../im-sdk-flutter`。运行前 app-server（8081）和 im-server（8080）都要已启动。
+
+## 服务器地址
+
+默认地址在 `lib/config/server_config.dart`，当前写的是一台开发机的局域网 IP。换机器或上线时改这个文件，或在启动时覆盖：
+
+```bash
+flutter run --dart-define=APP_SERVER_URL=http://192.168.0.10:8081/api --dart-define=IM_SERVER_URL=http://192.168.0.10:8080/api --dart-define=IM_WS_URL=ws://192.168.0.10:8080/api/ws
 ```
-lib/
-├── main.dart                 # 应用入口，配置 Provider
-├── app.dart                  # MaterialApp 配置
-├── theme/
-│   └── app_theme.dart        # 主题样式（亮色/暗色模式）
-├── router/
-│   └── app_router.dart       # 路由配置
-├── models/
-│   ├── user_model.dart       # 用户信息模型
-│   ├── chat_model.dart       # 聊天状态模型
-│   └── message_model.dart    # 消息模型
-├── providers/
-│   ├── auth_provider.dart    # 认证状态管理
-│   ├── chat_provider.dart    # 聊天状态管理
-│   └── contact_provider.dart # 联系人管理
-├── services/
-│   ├── api_service.dart      # HTTP API 服务
-│   ├── im_service.dart       # WebSocket IM 服务
-│   └── storage_service.dart  # 本地存储服务
-├── pages/
-│   ├── splash_page.dart      # 启动页
-│   ├── login_page.dart       # 登录页
-│   ├── register_page.dart    # 注册页
-│   ├── home_page.dart        # 主页（底部导航）
-│   ├── conversation_list_page.dart  # 会话列表
-│   ├── chat_page.dart        # 聊天页面
-│   ├── contacts_page.dart    # 通讯录
-│   ├── group_create_page.dart # 创建群组
-│   ├── group_chat_page.dart  # 群聊页面
-│   └── profile_page.dart     # 个人中心
-└── widgets/
-    ├── message_bubble.dart   # 消息气泡组件
-    ├── conversation_item.dart # 会话列表项
-    └── avatar_widget.dart    # 头像组件
-```
 
-## 运行步骤
+- 真机和桌面端填写电脑的局域网 IP，或服务器域名。`localhost` 指的是手机自己
+- Android 模拟器访问宿主机时，主机名用 `10.0.2.2`
+- app-server 的 `file.domain` 也要改成同一台机器的可访问地址，否则发出去的图片和文件打不开
+- 修改 SDK、原生库或服务器地址后做一次完整运行。热重载不会重建 Dio、长连接监听和原生库
 
-### 前置要求
+WebSocket 使用登录返回的 `imToken`。
 
-- Flutter SDK >= 3.0.0
-- Dart SDK >= 3.0.0
-- Android Studio / VS Code
-- Android SDK / Xcode（iOS）
-
-### 安装依赖
+## 运行
 
 ```bash
 cd flutter-demo
 flutter pub get
-```
-
-### 运行项目
-
-**Android:**
-```bash
 flutter run
 ```
 
-**iOS:**
+指定设备：
+
 ```bash
-flutter run ios
+flutter devices
+flutter run -d windows
+flutter run -d chrome
+flutter run -d <android-device-id>
 ```
 
-**Web（实验性）:**
+Android 需要麦克风、摄像头和网络权限，这些已经写在 `AndroidManifest.xml`。安装包内带有 `libsqlite3.so`（`android/app/src/main/jniLibs`），因为 Android 上 Drift 加载不到系统 SQLite。`pubspec.yaml` 里 `sqlite3` 使用 `source: system`，Windows 走系统 `winsqlite3`，避免和 Android 的 so 打出两份。
+
+iOS、macOS 的麦克风和摄像头用途说明在各自的 `Info.plist`，macOS 还在 entitlements 里打开了摄像头和音频输入。
+
+## 打包
+
 ```bash
-flutter run chrome
+flutter build apk
+flutter build ios
+flutter build macos
+flutter build windows
+flutter build web
 ```
 
-## API 对接说明
+把 `--dart-define` 加到对应的 `flutter build` 上，安装包才会指向生产服务器。Windows 的 exe 图标在完整构建后才会换成 logo，调试热重载不会更新 exe 图标。
 
-### 后端接口配置
+Web 构建产物在 `build/web`，由任意静态服务器托管。浏览器里的音视频还受页面是否 HTTPS、以及设备是否允许麦克风和摄像头影响。
 
-项目已配置好与后端对接的接口地址：
+## 目录
 
-#### App Server (HTTP API)
-- **Base URL**: `http://localhost:8081/api`（可用 `--dart-define=APP_SERVER_URL=...` 覆盖）
-- **登录**: `POST /client/login`
-- **注册**: `POST /client/register`
+```
+lib/
+├── main.dart / app.dart
+├── config/server_config.dart
+├── theme/app_theme.dart          # 浅色与深色
+├── providers/                    # 登录、会话、联系人、通话
+├── services/                     # HTTP、本地通知、通话铃声
+├── pages/                        # 登录、会话、聊天、群、资料、通话、桌面主页
+└── widgets/
+```
 
-#### IM Server
-- **HTTP Base URL**: `http://localhost:8080/api`
-- **WebSocket**: `ws://localhost:8080/api/ws`
-- 好友、群组和实时消息都连这个服务。Android 模拟器访问宿主机时把 `localhost` 换成 `10.0.2.2`。
+通话界面是盖在 `MaterialApp` 上的全局层。私聊右上角有语音和视频按钮，群聊没有。
 
-### 对接 im-sdk 说明
+## 联系与支持
 
-当前版本使用 HTTP API + WebSocket 实现消息通信。如需对接专业的 IM SDK：
+有新功能、定制开发或合作意向，欢迎扫码加微信私信。
 
-1. **替换 IMService**:
-   ```dart
-   // 在 lib/services/im_service.dart 中
-   // 替换为实际 IM SDK 的初始化和连接逻辑
-   ```
+独立开发不易。如果这个项目对你有帮助，也可以通过微信或支付宝支持一下，你的认可是我继续更新的动力。
 
-2. **修改 ChatProvider**:
-   - 使用 IM SDK 的消息监听替代 HTTP 轮询
-   - 实现 SDK 的消息发送方法
-
-3. **Token 认证**:
-   - 登录后获取的 JWT Token 可用于 IM SDK 的身份验证
-
-## 页面截图说明
-
-### 主要页面流程
-
-1. **启动页** → 显示品牌 Logo 和动画，自动检测登录状态
-2. **登录页** → 用户名+密码表单，跳转注册或进入主页
-3. **注册页** → 用户名、昵称、密码、确认密码
-4. **主页** → 底部三个 Tab（消息、通讯录、我的）
-5. **会话列表** → 显示所有聊天会话，支持下拉刷新
-6. **聊天页** → 气泡式消息 UI，支持文本和图片
-7. **通讯录** → 好友列表，新朋友/群组入口
-8. **创建群组** → 输入群名，多选成员
-9. **个人中心** → 用户信息、设置项、退出登录
-
-## 注意事项
-
-### 开发环境
-
-1. 确保 Flutter 环境正确配置：
-   ```bash
-   flutter doctor
-   ```
-
-2. iOS 需要配置权限（相机、相册访问）
-
-3. 需要启动后端服务才能正常使用完整功能：
-   - App Server: `localhost:8081`
-   - IM Server: `localhost:8080`
-
-### 已知限制
-
-- 当前为 Demo 版本，部分功能使用 Mock 数据
-- 图片上传需配合后端文件存储服务
-- 群聊功能为基础实现
-- 未实现消息撤回、转发等高级功能
-
-### 性能优化建议
-
-- 使用 ListView.builder 进行长列表渲染
-- 图片使用 CachedNetworkImage 缓存
-- Provider 精细化更新，避免不必要的 rebuild
-- WebSocket 连接管理优化
-
-## 版本信息
-
-- **Version**: 1.0.0
-- **Build**: 1
-- **Last Update**: 2025-05-21
+<table>
+  <tr>
+    <td align="center"><img src="docs/contact/wechat.jpg" alt="微信" width="220" /><br/><b>微信</b><br/>定制与合作</td>
+    <td align="center"><img src="docs/contact/wechat-pay.jpg" alt="微信支付" width="220" /><br/><b>微信支付</b></td>
+    <td align="center"><img src="docs/contact/alipay.jpg" alt="支付宝" width="220" /><br/><b>支付宝</b></td>
+  </tr>
+</table>
 
 ## License
 
 MIT License
-
-## 联系方式
-
-如有问题或建议，欢迎提交 Issue 或 Pull Request。
-
-## ⭐ 求 Star
-
-如果这个项目对你有帮助，请帮忙点个 Star 支持一下！你的支持是我持续更新的动力！
-
-## 🤝 联系作者
-
-如果你有任何问题、建议，或者有开发类需求想要合作，欢迎随时联系我：
-
-- **微信**：dxmcpjl
-- **QQ**：1529097251
