@@ -704,8 +704,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               subtitle: widget.isGroup ? null : '在线',
               style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
               showVoiceCall: !widget.isGroup,
-              showVideoCall: false,
+              showVideoCall: !widget.isGroup,
               onVoiceCallTap: widget.isGroup ? null : () => _startVoiceCall(context),
+              onVideoCallTap: widget.isGroup ? null : () => _startVideoCall(context),
               onTitleTap: widget.isGroup ? () => _openGroupSurface() : () => _openPeerProfile(context),
               onMoreTap: widget.isGroup ? () => _openGroupSurface() : () {},
             ),
@@ -937,11 +938,19 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   void _startVoiceCall(BuildContext context) {
+    _startCall(context, withVideo: false);
+  }
+
+  void _startVideoCall(BuildContext context) {
+    _startCall(context, withVideo: true);
+  }
+
+  void _startCall(BuildContext context, {required bool withVideo}) {
     final peerId = effectiveTargetId;
     if (peerId <= 0) return;
     FocusManager.instance.primaryFocus?.unfocus();
     SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-    context.read<CallProvider>().invite(peerId, widget.conversationName);
+    context.read<CallProvider>().invite(peerId, widget.conversationName, withVideo: withVideo);
   }
 
   void _openPeerProfile(BuildContext context) {

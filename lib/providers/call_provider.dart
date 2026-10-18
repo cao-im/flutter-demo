@@ -9,7 +9,7 @@ import '../services/call_ringtone.dart';
 
 enum CallPhase { idle, outgoing, incoming, connecting, active, failed }
 
-/// 一对一语音。信令走现有 WebSocket，声音在两端之间直连。
+/// 一对一语音或视频。信令走现有 WebSocket，音视频在两端之间直连。
 class CallProvider extends ChangeNotifier {
   CallProvider() {
     _signals = EventBus().on<CallSignalEvent>().listen(_onEvent);
@@ -22,6 +22,7 @@ class CallProvider extends ChangeNotifier {
   final CallRingtone _ringtone = CallRingtone();
 
   CallPhase phase = CallPhase.idle;
+  bool video = false;
   String peerName = '';
   String errorText = '';
   int elapsedSeconds = 0;
@@ -31,8 +32,13 @@ class CallProvider extends ChangeNotifier {
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
   final RTCVideoRenderer remoteRenderer = RTCVideoRenderer();
+  final RTCVideoRenderer localRenderer = RTCVideoRenderer();
   bool _rendererReady = false;
+  bool _localRendererReady = false;
+  bool _localPreviewReady = false;
+  bool remoteVideoReady = false;
   bool _remoteReady = false;
+  MediaStream? _remoteStream;
   final List<RTCIceCandidate> _pendingCandidates = [];
   Timer? _ticker;
 
@@ -40,12 +46,14 @@ class CallProvider extends ChangeNotifier {
 
   bool get rendererReady => _rendererReady;
 
+  bool get localPreviewReady => _localPreviewReady;
+
   String get statusText {
     switch (phase) {
       case CallPhase.outgoing:
         return '正在呼叫';
       case CallPhase.incoming:
-        return '邀请你语音通话';
+        return video ? '邀请你视频通话' : '邀请你语音通话';
       case CallPhase.connecting:
         return '正在连接';
       case CallPhase.active:
@@ -59,9 +67,10 @@ class CallProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> invite(int peerId, String name) async {
+  Future<void> invite(int peerId, String name, {bool withVideo = false}) async {
     if (phase != CallPhase.idle || peerId <= 0) return;
     _caller = true;
+    video = withVideo;
     _callId = '${DateTime.now().microsecondsSinceEpoch}';
     peerName = name;
     phase = CallPhase.outgoing;
@@ -69,7 +78,7 @@ class CallProvider extends ChangeNotifier {
     notifyListeners();
     _ringtone.playOutgoing();
     try {
-      _sdk.client.inviteCall(peerId, _callId!);
+      _sdk.client.inviteCall(peerId, _callId!, video: withVideo);
     } catch (e) {
       _fail('网络未连接');
     }
@@ -88,7 +97,17 @@ class CallProvider extends ChangeNotifier {
       if (_callId != null) {
         _safe(() => _sdk.client.rejectCall(_callId!));
       }
-      _fail('无法使用麦克风');
+      _fail(video ? '无法使用摄像头' : '无法使用麦克风');
+    }
+  }
+
+  Future<void> switchCamera() async {
+    final tracks = _localStream?.getVideoTracks();
+    if (tracks == null || tracks.isEmpty) return;
+    try {
+      await Helper.switchCamera(tracks.first);
+    } catch (e) {
+      debugPrint('切换摄像头失败: $e');
     }
   }
 
@@ -116,7 +135,8 @@ class CallProvider extends ChangeNotifier {
         if (phase != CallPhase.idle) return;
         _caller = false;
         _callId = event.callId;
-        peerName = (event.name ?? '').isEmpty ? '语音通话' : event.name!;
+        video = event.video;
+        peerName = (event.name ?? '').isEmpty ? (event.video ? '视频通话' : '语音通话') : event.name!;
         phase = CallPhase.incoming;
         notifyListeners();
         _ringtone.playIncoming();
@@ -158,22 +178,36 @@ class CallProvider extends ChangeNotifier {
       if (_callId != null) {
         _safe(() => _sdk.client.cancelCall(_callId!));
       }
-      _fail('无法使用麦克风');
+      _fail(video ? '无法使用摄像头' : '无法使用麦克风');
     }
   }
 
   Future<void> _preparePeer() async {
     await _ensureRenderer();
+    if (video) {
+      await _ensureLocalRenderer();
+    }
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
-      'video': false,
+      'video': video
+          ? {
+              'facingMode': 'user',
+              'width': 640,
+              'height': 480,
+            }
+          : false,
     });
+    if (video && _localRendererReady) {
+      localRenderer.srcObject = _localStream;
+      _localPreviewReady = true;
+      notifyListeners();
+    }
     _pc = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
       ],
     });
-    for (final track in _localStream!.getAudioTracks()) {
+    for (final track in _localStream!.getTracks()) {
       await _pc!.addTrack(track, _localStream!);
     }
     _pc!.onIceCandidate = (candidate) {
@@ -187,14 +221,32 @@ class CallProvider extends ChangeNotifier {
           }));
     };
     _pc!.onTrack = (event) {
-      if (event.streams.isNotEmpty) {
-        remoteRenderer.srcObject = event.streams.first;
-        notifyListeners();
-      }
+      _attachRemoteTrack(event);
     };
     try {
       await Helper.setSpeakerphoneOn(true);
     } catch (_) {}
+  }
+
+  Future<void> _attachRemoteTrack(RTCTrackEvent event) async {
+    try {
+      event.track.enabled = true;
+      MediaStream? stream = event.streams.isNotEmpty ? event.streams.first : null;
+      if (event.track.kind == 'video') {
+        if (stream == null || stream.getVideoTracks().isEmpty) {
+          _remoteStream ??= await createLocalMediaStream('remote');
+          await _remoteStream!.addTrack(event.track);
+          stream = _remoteStream;
+        }
+        await remoteRenderer.setSrcObject(stream: stream, trackId: event.track.id);
+        remoteVideoReady = true;
+        notifyListeners();
+      } else if (remoteRenderer.srcObject == null && stream != null) {
+        remoteRenderer.srcObject = stream;
+      }
+    } catch (e) {
+      debugPrint('挂载对方画面失败: $e');
+    }
   }
 
   Future<void> _ensureRenderer() async {
@@ -205,6 +257,16 @@ class CallProvider extends ChangeNotifier {
       if (visible) notifyListeners();
     } catch (e) {
       debugPrint('音频渲染初始化失败: $e');
+    }
+  }
+
+  Future<void> _ensureLocalRenderer() async {
+    if (_localRendererReady) return;
+    try {
+      await localRenderer.initialize();
+      _localRendererReady = true;
+    } catch (e) {
+      debugPrint('本地画面初始化失败: $e');
     }
   }
 
@@ -284,6 +346,9 @@ class CallProvider extends ChangeNotifier {
     errorText = '';
     peerName = '';
     elapsedSeconds = 0;
+    video = false;
+    remoteVideoReady = false;
+    _localPreviewReady = false;
     _callId = null;
     _caller = false;
     notifyListeners();
@@ -295,6 +360,11 @@ class CallProvider extends ChangeNotifier {
     _ticker = null;
     _pendingCandidates.clear();
     _remoteReady = false;
+    remoteVideoReady = false;
+    _localPreviewReady = false;
+    final remote = _remoteStream;
+    _remoteStream = null;
+    remote?.dispose();
     final stream = _localStream;
     _localStream = null;
     if (stream != null) {
@@ -307,6 +377,9 @@ class CallProvider extends ChangeNotifier {
     _pc = null;
     pc?.close();
     remoteRenderer.srcObject = null;
+    if (_localRendererReady) {
+      localRenderer.srcObject = null;
+    }
   }
 
   void _safe(void Function() action) {
@@ -324,6 +397,9 @@ class CallProvider extends ChangeNotifier {
     _ringtone.dispose();
     if (_rendererReady) {
       remoteRenderer.dispose();
+    }
+    if (_localRendererReady) {
+      localRenderer.dispose();
     }
     super.dispose();
   }
