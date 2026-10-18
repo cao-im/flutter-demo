@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
+import 'pages/call_page.dart';
 import 'router/app_router.dart';
 import 'providers/auth_provider.dart';
 import 'providers/connection_provider.dart';
@@ -35,6 +36,7 @@ class _CaoAppState extends State<CaoApp> {
       darkTheme: AppTheme.darkTheme,
       initialRoute: AppRouter.splash,
       onGenerateRoute: AppRouter.generateRoute,
+      builder: (context, child) => CallOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

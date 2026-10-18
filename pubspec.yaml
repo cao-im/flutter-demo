@@ -56,6 +56,7 @@ dependencies:
   video_player: ^2.10.0
   video_player_win: ^3.2.1
   fc_native_video_thumbnail: ^0.17.2
+  flutter_webrtc: ^0.14.2
 
 dev_dependencies:
   flutter_test:
@@ -63,7 +64,9 @@ dev_dependencies:
   flutter_lints: ^3.0.0
 
 # sqlite3 原生 hook 默认要从 GitHub 下 DLL，国内网络经常失败。
-# 改用系统自带库；Windows 10+ 为 winsqlite3。
+# Windows 10+ 使用系统自带的 winsqlite3。
+# Android 没有可加载的系统 libsqlite3.so，因此把库放在 android/app/src/main/jniLibs，
+# 并由 source: system 在运行时加载安装包内的 libsqlite3.so（不要再走 native assets 打包，否则会重复）。
 hooks:
   user_defines:
     sqlite3:

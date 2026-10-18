@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   emoji_picker_flutter
   fc_native_video_thumbnail
   file_selector_windows
+  flutter_webrtc
   record_windows
   url_launcher_windows
   video_player_win

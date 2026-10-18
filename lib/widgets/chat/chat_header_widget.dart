@@ -78,6 +78,8 @@ class ChatHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
         actions: [
+          if (showVoiceCall)
+            IconButton(icon: const Icon(Icons.phone_outlined), tooltip: '语音通话', onPressed: onVoiceCallTap),
           IconButton(icon: const Icon(Icons.more_vert), onPressed: onMoreTap ?? () {}),
         ],
       );

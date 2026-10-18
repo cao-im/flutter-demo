@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
 import '../providers/auth_provider.dart';
@@ -701,8 +702,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               title: _headerTitle(context.watch<ChatProvider>()),
               subtitle: widget.isGroup ? null : '在线',
               style: widget.isPanelMode ? ChatHeaderStyle.panel : ChatHeaderStyle.appBar,
-              showVoiceCall: widget.isPanelMode,
-              showVideoCall: widget.isPanelMode,
+              showVoiceCall: !widget.isGroup,
+              showVideoCall: false,
+              onVoiceCallTap: widget.isGroup ? null : () => _startVoiceCall(context),
               onTitleTap: widget.isGroup ? () => _openGroupSurface() : () => _openPeerProfile(context),
               onMoreTap: widget.isGroup ? () => _openGroupSurface() : () {},
             ),
@@ -931,6 +933,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  void _startVoiceCall(BuildContext context) {
+    final peerId = effectiveTargetId;
+    if (peerId <= 0) return;
+    context.read<CallProvider>().invite(peerId, widget.conversationName);
   }
 
   void _openPeerProfile(BuildContext context) {
