@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -39,15 +41,20 @@ class NotificationData {
 /// - Windows：通过 PowerShell 的 SoundPlayer 播放 wav 文件
 /// - macOS：通过 afplay 命令播放 wav 文件
 /// - Linux：通过 aplay/aplay 命令播放 wav 文件
-class NotificationService {
+class NotificationService with WidgetsBindingObserver {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
+
+  /// 用户点了系统通知后打开对应会话。由聊天页注册。
+  void Function(NotificationData data)? onOpen;
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
+  bool _observing = false;
+  bool _inBackground = false;
 
   /// wav 文件在 assets 中的路径
   static const String _soundAssetPath = 'assets/sounds/new_msg.wav';
@@ -61,6 +68,10 @@ class NotificationService {
 
   /// 初始化
   Future<void> initialize() async {
+    if (!_observing) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+    }
     if (_isInitialized) return;
 
     debugPrint('🔔[NotificationService] 初始化...');
@@ -73,7 +84,10 @@ class NotificationService {
       requestSoundPermission: true,
     );
     await _notifications.initialize(
-      InitializationSettings(android: androidSettings, iOS: iosSettings),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      onDidReceiveNotificationResponse: (response) {
+        _dispatch(response.payload);
+      },
     );
 
     // Android：配置自定义提示音的通知渠道
@@ -130,7 +144,29 @@ class NotificationService {
     }
   }
 
-  /// 显示消息通知（统一入口）→ 实际就是播放提示音
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _inBackground = state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached;
+  }
+
+  /// 应用被通知点开时，补一次跳转。
+  Future<void> handleLaunchNotification() async {
+    if (kIsWeb || !_isInitialized) return;
+    final details = await _notifications.getNotificationAppLaunchDetails();
+    if (details?.didNotificationLaunchApp ?? false) {
+      _dispatch(details?.notificationResponse?.payload);
+    }
+  }
+
+  /// 进入某个会话后清掉它的通知。
+  Future<void> cancelForTarget(int targetId) async {
+    if (kIsWeb || !_isInitialized || targetId == 0) return;
+    await _notifications.cancel(_idFor(targetId));
+  }
+
+  /// 显示消息通知。前台只响提示音，退到后台时弹出可点击的系统通知。
   Future<void> showMessageNotification(NotificationData data) async {
     // 1. 未初始化 → 不播放
     if (!_isInitialized) {
@@ -144,11 +180,74 @@ class NotificationService {
       return;
     }
 
-    // 3. 决定播放
-    debugPrint('🔔[通知] ✅ 播放提示音：来自「${data.nickname}」的消息 (targetId=${data.targetId})');
+    if (!kIsWeb && _inBackground) {
+      debugPrint('🔔[通知] ✅ 后台通知：来自「${data.nickname}」(targetId=${data.targetId})');
+      await _showBackgroundNotification(data);
+      return;
+    }
 
+    debugPrint('🔔[通知] ✅ 播放提示音：来自「${data.nickname}」的消息 (targetId=${data.targetId})');
     await _playSound();
   }
+
+  Future<void> _showBackgroundNotification(NotificationData data) async {
+    final title = data.nickname.isEmpty ? '曹操IM' : data.nickname;
+    final body = data.content.trim().isEmpty ? '发来一条消息' : data.content.trim();
+    final payload = jsonEncode({
+      'senderId': data.senderId,
+      'nickname': data.nickname,
+      'content': body,
+      'targetId': data.targetId,
+      'isGroup': data.isGroup,
+    });
+    try {
+      await _notifications.show(
+        _idFor(data.targetId),
+        title,
+        body,
+        NotificationDetails(
+          android: const AndroidNotificationDetails(
+            'cao_im_msg',
+            '新消息',
+            channelDescription: '新消息提示',
+            importance: Importance.high,
+            priority: Priority.high,
+            ticker: '新消息',
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('🔕[通知] ❌ 后台通知失败: $e');
+    }
+  }
+
+  void _dispatch(String? payload) {
+    if (payload == null || payload.isEmpty || onOpen == null) return;
+    try {
+      final raw = jsonDecode(payload);
+      if (raw is! Map) return;
+      final target = raw['targetId'];
+      final sender = raw['senderId'];
+      onOpen!(NotificationData(
+        senderId: sender is int ? sender : int.tryParse('$sender') ?? 0,
+        nickname: raw['nickname']?.toString() ?? '',
+        content: raw['content']?.toString() ?? '',
+        time: DateTime.now(),
+        targetId: target is int ? target : int.tryParse('$target') ?? 0,
+        isGroup: raw['isGroup'] == true,
+      ));
+    } catch (e) {
+      debugPrint('🔕[通知] 无法打开通知: $e');
+    }
+  }
+
+  int _idFor(int targetId) => targetId & 0x7fffffff;
 
   /// 播放提示音（按平台分发）
   Future<void> _playSound() async {
@@ -224,10 +323,11 @@ class NotificationService {
               presentSound: true, // 非iOS平台用系统默认音兜底
             );
 
+      final id = DateTime.now().millisecondsSinceEpoch.remainder(100000) + 1;
       await _notifications.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        '',
-        '',
+        id,
+        null,
+        null,
         NotificationDetails(
           android: const AndroidNotificationDetails(
             'cao_im_msg', '新消息',
@@ -238,6 +338,9 @@ class NotificationService {
           iOS: iosSound,
         ),
       );
+      Future<void>.delayed(const Duration(milliseconds: 800), () {
+        _notifications.cancel(id);
+      });
       debugPrint('🔊[通知] ✅ 通知已发送，${Platform.isIOS ? "自定义" : "系统默认"}提示音应已播放');
     } catch (e) {
       debugPrint('🔕[通知] ❌ 通知提示音播放失败: $e');

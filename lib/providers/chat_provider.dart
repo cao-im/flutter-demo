@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
@@ -15,8 +16,12 @@ import '../models/video_content.dart';
 import '../services/video_inspect.dart';
 import '../models/contact_info_model.dart';
 import '../models/sender_info_model.dart';
+import '../providers/contact_provider.dart';
+import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../services/apis/file_api.dart';
+import '../services/keep_alive_service.dart';
+import '../widgets/adaptive_layout.dart';
 import '../services/apis/message_api.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
@@ -98,7 +103,9 @@ class ChatProvider with ChangeNotifier {
   void stopListening() {
     _sdkManager.client.removeMessageListener(_ChatMessageListener(this));
     _isListening = false;
-    
+    NotificationService().onOpen = null;
+    KeepAliveService.stop();
+
     // ✅ 停止监听事件总线
     stopEventListening();
   }
@@ -161,9 +168,15 @@ class ChatProvider with ChangeNotifier {
       }
     });
 
-    // 监听会话更新 → 刷新会话列表
+    // 监听会话更新 → 刷新会话列表。正在看的会话刚被加上未读时，立刻再标成已读。
     _eventBus.on<ConversationUpdatedEvent>().listen((event) {
       debugPrint('📍[ChatProvider] 📢 收到 ConversationUpdatedEvent, 自动刷新会话列表');
+      final conv = event.conversation;
+      if (_isViewingTarget(conv.targetId, conv.isGroup) &&
+          conv.unreadCount > 0 &&
+          (conv.id ?? 0) > 0) {
+        _sdkManager.client.markConversationAsRead(conv.id!);
+      }
       loadConversations();
     });
 
@@ -209,6 +222,14 @@ class ChatProvider with ChangeNotifier {
     debugPrint('[ChatProvider] 已停止监听 EventBus 事件');
   }
 
+  /// 当前打开的就是这个会话。用 targetId 判断，避免列表刷新后未读数又冒出来。
+  bool _isViewingTarget(int targetId, bool isGroup) {
+    final current = _currentConversation;
+    if (current == null || targetId <= 0 || current.isGroup != isGroup) return false;
+    if (current.targetId > 0) return current.targetId == targetId;
+    return current.id == '$targetId';
+  }
+
   void setCurrentConversation(ConversationModel conversation) {
     debugPrint('🔧[ChatProvider] setCurrentConversation 被调用: id=${conversation.id}, name=${conversation.name}');
     debugPrint('🔧[ChatProvider] 设置前 _currentConversation: ${_currentConversation?.id ?? "null"}');
@@ -220,6 +241,7 @@ class ChatProvider with ChangeNotifier {
 
     // ✅ 同步当前聊天会话到通知服务（用于判断是否需要显示通知）
     NotificationService().currentChatTargetId = conversation.targetId;
+    NotificationService().cancelForTarget(conversation.targetId);
 
     // 延迟通知，避免在 initState 等 build 期间调用 notifyListeners 导致报错
     Future.microtask(() => notifyListeners());
@@ -281,7 +303,7 @@ class ChatProvider with ChangeNotifier {
           lastMessage: conv.lastMessage != null
               ? _convertSdkMessageToModel(conv.lastMessage!)
               : null,
-          unreadCount: conv.unreadCount,
+          unreadCount: _isViewingTarget(conv.targetId, conv.isGroup) ? 0 : conv.unreadCount,
           isGroup: conv.isGroup,
           lastActiveTime: lastActiveTime,
           isTop: conv.isTop,
@@ -494,12 +516,7 @@ class ChatProvider with ChangeNotifier {
           lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.updateTime);
         }
 
-        // 如果是当前会话，清零未读数
-        int unreadCount = conv.unreadCount;
-        if (_currentConversation != null && displayId == _currentConversation!.id) {
-          unreadCount = 0;
-          debugPrint('📍[ChatProvider] 当前会话未读数已清零: $displayId');
-        }
+        final unreadCount = _isViewingTarget(conv.targetId, conv.isGroup) ? 0 : conv.unreadCount;
 
         conversationModels.add(ConversationModel(
           id: displayId,
@@ -1665,9 +1682,12 @@ class ChatProvider with ChangeNotifier {
     try {
       final notificationService = NotificationService();
       await notificationService.initialize();
+      notificationService.onOpen = _openFromNotification;
+      await notificationService.handleLaunchNotification();
 
       // 请求通知权限（Android 13+ 需要）
       await notificationService.requestPermission();
+      await KeepAliveService.start();
       debugPrint('✅[ChatProvider] 消息通知服务初始化完成');
     } catch (e) {
       debugPrint('⚠️[ChatProvider] 消息通知服务初始化失败: $e');
@@ -1722,11 +1742,25 @@ class ChatProvider with ChangeNotifier {
         return;
       }
 
+      final preview = _notificationPreview(message);
+      var title = nickname;
+      var body = preview;
+      if (isGroup) {
+        for (final conversation in _conversations) {
+          if (conversation.isGroup && conversation.targetId == message.groupId) {
+            title = conversation.name;
+            break;
+          }
+        }
+        if (title == nickname) title = '群聊';
+        body = '$nickname: $preview';
+      }
+
       final notificationData = NotificationData(
         senderId: message.fromId,
-        nickname: isGroup ? '$nickname(群)' : nickname,
+        nickname: title,
         avatarUrl: avatarUrl,
-        content: message.msgType == sdk.MessageType.video ? '[视频]' : message.content,
+        content: body,
         time: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
         targetId: targetId,
         isGroup: isGroup,
@@ -1737,6 +1771,59 @@ class ChatProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('⚠️[ChatProvider] 触发消息通知失败: $e');
     }
+  }
+
+  String _notificationPreview(sdk.Message message) {
+    switch (message.msgType) {
+      case sdk.MessageType.image:
+        return '[图片]';
+      case sdk.MessageType.voice:
+        return '[语音]';
+      case sdk.MessageType.video:
+        return '[视频]';
+      case sdk.MessageType.file:
+        final name = FileContent.tryParse(message.content)?.name ?? '';
+        return name.isEmpty ? '[文件]' : '[文件] $name';
+      case sdk.MessageType.system:
+        return '';
+      case sdk.MessageType.text:
+        final text = message.content.replaceAll('\n', ' ').trim();
+        if (text.length <= 40) return text;
+        return '${text.substring(0, 40)}…';
+    }
+  }
+
+  void _openFromNotification(NotificationData data) {
+    final context = AppRouter.navigatorKey.currentContext;
+    final navigator = AppRouter.navigatorKey.currentState;
+    if (context == null || navigator == null) return;
+    if (data.targetId < 0) {
+      context.read<ContactProvider>().onOpenContacts?.call();
+      context.read<LayoutProvider>().selectNavigation(1);
+      return;
+    }
+    if (data.targetId <= 0) return;
+    if (_currentConversation?.targetId == data.targetId &&
+        _currentConversation?.isGroup == data.isGroup) {
+      return;
+    }
+    final id = '${data.targetId}';
+    if (AdaptiveLayout.isDesktopPlatform) {
+      final layout = context.read<LayoutProvider>();
+      if (layout.currentConversationId != id) {
+        layout.selectConversation(id, data.nickname, data.isGroup);
+      }
+      return;
+    }
+    navigator.pushNamed(
+      AppRouter.chat,
+      arguments: {
+        'conversationId': id,
+        'conversationName': data.nickname,
+        'isGroup': data.isGroup,
+        'targetId': data.targetId,
+      },
+    );
   }
 
   /// 后台异步刷新群组信息（不阻塞 UI，成功后触发会话列表更新）

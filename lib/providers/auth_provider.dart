@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../router/app_router.dart';
 import '../services/api_service.dart';
+import '../services/keep_alive_service.dart';
 import '../services/storage_service.dart';
 import 'connection_provider.dart';
 import 'contact_provider.dart';
@@ -328,6 +329,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout(BuildContext context) async {
+    KeepAliveService.stop();
     final connectionProvider = context.read<ConnectionProvider>();
     if (connectionProvider.isConnected) {
       await connectionProvider.disconnect();
