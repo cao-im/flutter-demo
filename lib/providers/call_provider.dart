@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../sdk/im_sdk_manager.dart';
+import '../services/call_ringtone.dart';
 
 enum CallPhase { idle, outgoing, incoming, connecting, active, failed }
 
@@ -18,6 +19,7 @@ class CallProvider extends ChangeNotifier {
   late final StreamSubscription<CallSignalEvent> _signals;
 
   final IMSdkManager _sdk = IMSdkManager();
+  final CallRingtone _ringtone = CallRingtone();
 
   CallPhase phase = CallPhase.idle;
   String peerName = '';
@@ -65,6 +67,7 @@ class CallProvider extends ChangeNotifier {
     phase = CallPhase.outgoing;
     errorText = '';
     notifyListeners();
+    _ringtone.playOutgoing();
     try {
       _sdk.client.inviteCall(peerId, _callId!);
     } catch (e) {
@@ -76,6 +79,7 @@ class CallProvider extends ChangeNotifier {
     if (phase != CallPhase.incoming || _callId == null) return;
     phase = CallPhase.connecting;
     notifyListeners();
+    await _ringtone.stop();
     try {
       await _preparePeer();
       _sdk.client.acceptCall(_callId!);
@@ -115,6 +119,7 @@ class CallProvider extends ChangeNotifier {
         peerName = (event.name ?? '').isEmpty ? '语音通话' : event.name!;
         phase = CallPhase.incoming;
         notifyListeners();
+        _ringtone.playIncoming();
       case 'accepted':
         if (_caller && _same(event.callId)) {
           _beginCallerMedia();
@@ -142,6 +147,7 @@ class CallProvider extends ChangeNotifier {
     if (phase != CallPhase.outgoing && phase != CallPhase.connecting) return;
     phase = CallPhase.connecting;
     notifyListeners();
+    await _ringtone.stop();
     try {
       await _preparePeer();
       final offer = await _pc!.createOffer();
@@ -284,6 +290,7 @@ class CallProvider extends ChangeNotifier {
   }
 
   void _disposeMedia() {
+    _ringtone.stop();
     _ticker?.cancel();
     _ticker = null;
     _pendingCandidates.clear();
@@ -314,6 +321,7 @@ class CallProvider extends ChangeNotifier {
   void dispose() {
     _signals.cancel();
     _disposeMedia();
+    _ringtone.dispose();
     if (_rendererReady) {
       remoteRenderer.dispose();
     }

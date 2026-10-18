@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -938,6 +939,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void _startVoiceCall(BuildContext context) {
     final peerId = effectiveTargetId;
     if (peerId <= 0) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     context.read<CallProvider>().invite(peerId, widget.conversationName);
   }
 

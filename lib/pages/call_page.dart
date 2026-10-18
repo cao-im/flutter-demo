@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 
@@ -26,8 +27,25 @@ class CallOverlay extends StatelessWidget {
   }
 }
 
-class CallPage extends StatelessWidget {
+class CallPage extends StatefulWidget {
   const CallPage({super.key});
+
+  @override
+  State<CallPage> createState() => _CallPageState();
+}
+
+class _CallPageState extends State<CallPage> {
+  @override
+  void initState() {
+    super.initState();
+    _hideInput();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hideInput());
+  }
+
+  void _hideInput() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
 
   @override
   Widget build(BuildContext context) {
