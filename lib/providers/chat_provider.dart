@@ -608,9 +608,11 @@ class ChatProvider with ChangeNotifier {
         debugPrint('  [$i] id=${msg.id}, from=${msg.fromId}, to=${msg.toId}, timestamp=${msg.timestamp}, content="${msg.content.toString().substring(0, msg.content.toString().length > 20 ? 20 : msg.content.toString().length)}"');
       }
       
-      _messages = sdkMessages
-          .map((msg) => _convertSdkMessageToModel(msg))
-          .toList();
+      _messages = [];
+      for (final msg in sdkMessages.map(_convertSdkMessageToModel)) {
+        if (_messages.any((item) => _sameMessage(item, msg))) continue;
+        _messages.add(msg);
+      }
 
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       if (targetId > 0) {
@@ -649,6 +651,7 @@ class ChatProvider with ChangeNotifier {
 
       final newMessages = sdkMessages
           .map((msg) => _convertSdkMessageToModel(msg))
+          .where((msg) => !_messages.any((item) => _sameMessage(item, msg)))
           .toList();
       _messages.insertAll(0, newMessages);
       notifyListeners();
@@ -1298,7 +1301,23 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  bool _sameMessage(MessageModel a, MessageModel b) {
+    final aKey = a.midKey;
+    final bKey = b.midKey;
+    final aHasKey = aKey != null && aKey.isNotEmpty && aKey != '0';
+    final bHasKey = bKey != null && bKey.isNotEmpty && bKey != '0';
+    if (aHasKey && bHasKey && aKey == bKey) return true;
+    final aMid = a.mid ?? 0;
+    final bMid = b.mid ?? 0;
+    if (aMid <= 0 || aMid != bMid) return false;
+    // 旧记录只有舍入后的数字，新记录带完整雪花原文。数字相同且至少一边没有独立原文时，视为同一条。
+    final aIsLegacy = !aHasKey || aKey == '$aMid';
+    final bIsLegacy = !bHasKey || bKey == '$bMid';
+    return aIsLegacy || bIsLegacy;
+  }
+
   void receiveMessage(MessageModel message) {
+    if (_messages.any((item) => _sameMessage(item, message))) return;
     _messages.add(message);
     _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     notifyListeners();
@@ -2146,6 +2165,7 @@ class ChatProvider with ChangeNotifier {
       groupInfo: groupInfo,
       canRecall: canRecall,
       mid: msg.mid,
+      midKey: msg.midKey,
       replyMsgId: msg.replyMsgId,
       replyPreview: msg.replyPreview,
       replySenderName: msg.replySenderName,
@@ -2277,6 +2297,7 @@ class _ChatMessageListener implements sdk.MessageListener {
       senderInfo: senderInfo,
       groupInfo: groupInfo,
       mid: message.mid,
+      midKey: message.midKey,
       replyMsgId: message.replyMsgId,
       replyPreview: message.replyPreview,
       replySenderName: message.replySenderName,

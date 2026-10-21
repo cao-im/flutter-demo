@@ -23,6 +23,8 @@ class MessageModel {
   final SenderInfoModel? senderInfo;
   final GroupInfoModel? groupInfo;
   final int? mid; // SDK 生成的雪花算法消息ID
+  /// mid 的十进制原文。同一条消息在 Web 上可能无法用 int 精确比较。
+  final String? midKey;
   final int? replyMsgId;
   final String? replyPreview;
   final String? replySenderName;
@@ -46,6 +48,7 @@ class MessageModel {
     this.senderInfo,
     this.groupInfo,
     this.mid,
+    this.midKey,
     this.replyMsgId,
     this.replyPreview,
     this.replySenderName,
@@ -83,7 +86,8 @@ class MessageModel {
       groupInfo: json['groupInfo'] != null
           ? GroupInfoModel.fromJson(json['groupInfo'])
           : null,
-      mid: json['mid'],
+      mid: json['mid'] is int ? json['mid'] as int : int.tryParse('${json['mid'] ?? ''}'),
+      midKey: json['mid']?.toString(),
       replyMsgId: json['replyMsgId'],
       replyPreview: json['replyPreview'],
       replySenderName: json['replySenderName'],
@@ -226,6 +230,7 @@ class MessageModel {
     SenderInfoModel? senderInfo,
     GroupInfoModel? groupInfo,
     int? mid,
+    String? midKey,
     int? replyMsgId,
     String? replyPreview,
     String? replySenderName,
@@ -248,6 +253,7 @@ class MessageModel {
       senderInfo: senderInfo ?? this.senderInfo,
       groupInfo: groupInfo ?? this.groupInfo,
       mid: mid ?? this.mid,
+      midKey: midKey ?? this.midKey,
       replyMsgId: replyMsgId ?? this.replyMsgId,
       replyPreview: replyPreview ?? this.replyPreview,
       replySenderName: replySenderName ?? this.replySenderName,
