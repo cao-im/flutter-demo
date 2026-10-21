@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/chat_keyboard_provider.dart';
+import '../../services/key_chord.dart';
+import '../../services/screen_capture.dart';
+import '../../services/shortcut_controller.dart';
 import '../../services/voice_recorder.dart';
 import 'emoji_picker_panel.dart';
 import 'chat_overlay_panel.dart';
@@ -163,19 +166,58 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
       _finishRecord(send: false);
       return KeyEventResult.handled;
     }
-    if (event.logicalKey != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
-    if (_recording) {
+    if (_recording && _matchesSendChord(event)) {
       _finishRecord(send: true);
       return KeyEventResult.handled;
     }
+    return _handleSendKey(event);
+  }
 
-    if (HardwareKeyboard.instance.isShiftPressed) {
-      // Shift+Enter: 插入换行，让 TextField 处理
+  bool _matchesSendChord(KeyEvent event) {
+    final chord = KeyChord.fromEvent(event);
+    if (chord == null) return false;
+    return chord.sameAs(context.read<ShortcutController>().chord(ShortcutId.send));
+  }
+
+  KeyEventResult _handleSendKey(KeyEvent event) {
+    final composing = widget.controller.value.composing;
+    if (composing.isValid && !composing.isCollapsed) return KeyEventResult.ignored;
+    final pressed = KeyChord.fromEvent(event);
+    if (pressed == null) return KeyEventResult.ignored;
+    final send = context.read<ShortcutController>().chord(ShortcutId.send);
+    if (pressed.sameAs(send)) {
+      widget.onSend?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        send.sameAs(const KeyChord(key: LogicalKeyboardKey.enter)) &&
+        pressed.control &&
+        !pressed.alt &&
+        !pressed.shift) {
+      _insertNewline();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter && send.key == LogicalKeyboardKey.enter && send.hasModifier) {
       return KeyEventResult.ignored;
     }
-    // Enter: 发送消息
-    widget.onSend?.call();
-    return KeyEventResult.handled;
+    if (event.logicalKey == LogicalKeyboardKey.enter && !send.sameAs(const KeyChord(key: LogicalKeyboardKey.enter))) {
+      _insertNewline();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _insertNewline() {
+    final value = widget.controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.start < 0 ? text.length : selection.start;
+    final end = selection.end < 0 ? text.length : selection.end;
+    final next = text.replaceRange(start, end, '\n');
+    widget.controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + 1),
+    );
   }
 
   @override
@@ -465,8 +507,14 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
                   _onDesktopMic,
                   color: _recording ? const Color(0xFFFA5151) : null,
                 ),
-                const SizedBox(width: 16),
-                _buildToolbarIcon(Icons.crop_outlined, '截图', widget.onScreenshot),
+                if (ScreenCapture.supported) ...[
+                  const SizedBox(width: 16),
+                  _buildToolbarIcon(
+                    Icons.crop_outlined,
+                    '截图 ${context.watch<ShortcutController>().chord(ShortcutId.screenshot).label}',
+                    widget.onScreenshot,
+                  ),
+                ],
                 const Spacer(),
                 if (_recording) ...[
                   TextButton(

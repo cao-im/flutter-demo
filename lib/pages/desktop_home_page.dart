@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +15,10 @@ import '../widgets/desktop_contacts_panel.dart';
 import '../widgets/avatar_widget.dart';
 import '../widgets/qr_code_card.dart';
 import '../theme/app_theme.dart';
+import '../services/screen_capture.dart';
+import '../services/shortcut_controller.dart';
 import 'conversation_list_page.dart';
+import 'shortcut_settings_page.dart';
 import 'chat_page.dart';
 import 'favorites_page.dart';
 import 'files_page.dart';
@@ -34,6 +39,17 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
   static const double _minWindowWidth = 900.0;
   bool _initialized = false;
   bool _clearConversationScheduled = false;
+  bool _capturing = false;
+
+  @override
+  void dispose() {
+    final shortcuts = context.read<ShortcutController>();
+    shortcuts.onSearch = null;
+    shortcuts.onPreviousChat = null;
+    shortcuts.onNextChat = null;
+    shortcuts.onScreenshot = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +73,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           
           // 联系人数据就绪后再加载会话列表
           context.read<ChatProvider>().loadConversations();
+          await _bindShortcuts();
           debugPrint('✅ [DesktopHomePage] 初始化完成');
         }
       });
@@ -116,6 +133,87 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     );
   }
 
+  Future<void> _bindShortcuts() async {
+    final shortcuts = context.read<ShortcutController>();
+    await shortcuts.init();
+    if (!mounted) return;
+    shortcuts.onSearch = () {
+      if (!mounted) return;
+      context.read<LayoutProvider>().selectNavigation(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (shortcuts.searchFocus.canRequestFocus) {
+          shortcuts.searchFocus.requestFocus();
+        }
+      });
+    };
+    shortcuts.onPreviousChat = () => _moveChat(-1);
+    shortcuts.onNextChat = () => _moveChat(1);
+    shortcuts.onScreenshot = () {
+      unawaited(_captureScreenshot());
+    };
+    if (shortcuts.hasConflict) {
+      final names = ShortcutController.specs
+          .where((spec) => shortcuts.conflictText(spec.id) != null)
+          .map((spec) => spec.title)
+          .join('、');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$names与其他软件冲突，可在设置中修改快捷键')),
+      );
+    }
+  }
+
+  Future<void> _captureScreenshot() async {
+    if (_capturing || !mounted || !ScreenCapture.supported) return;
+    final chat = context.read<ChatProvider>();
+    if (chat.currentConversation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先打开一个会话，再截图发送')),
+      );
+      return;
+    }
+    _capturing = true;
+    try {
+      final shot = await ScreenCapture.select();
+      if (!mounted || shot.cancelled) return;
+      final bytes = shot.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('截图失败')));
+        return;
+      }
+      if (chat.currentConversation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('会话已关闭，截图未发送')));
+        return;
+      }
+      await chat.sendImage(bytes, '截图_${DateTime.now().millisecondsSinceEpoch}.png');
+    } catch (error) {
+      debugPrint('发送截图失败: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('截图发送失败')));
+    } finally {
+      _capturing = false;
+    }
+  }
+
+  void _moveChat(int delta) {
+    if (!mounted) return;
+    final chat = context.read<ChatProvider>();
+    final layout = context.read<LayoutProvider>();
+    final list = chat.conversations;
+    if (list.isEmpty) return;
+    layout.selectNavigation(0);
+    var index = list.indexWhere((item) => item.id == layout.currentConversationId);
+    if (index < 0) {
+      index = delta > 0 ? 0 : list.length - 1;
+    } else {
+      index += delta;
+      if (index >= list.length) index = 0;
+      if (index < 0) index = list.length - 1;
+    }
+    final item = list[index];
+    layout.openConversation(item.id, item.name, item.isGroup);
+    chat.setCurrentConversation(item);
+  }
+
   void _showNewConversationHint(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('新建会话功能开发中...'),
@@ -132,6 +230,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           width: _middlePanelWidth,
           child: ConversationListPage(
             isEmbeddedMode: true,
+            searchFocus: context.read<ShortcutController>().searchFocus,
             onConversationSelected: (id, name, isGroup) {
               layoutProvider.selectConversation(id, name, isGroup);
               
@@ -215,6 +314,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         )),
 
         _buildSettingsItem(
+          icon: Icons.keyboard_outlined,
+          iconColor: AppTheme.primaryColor,
+          title: '快捷键',
+          subtitle: context.watch<ShortcutController>().subtitleForSettings(),
+          subtitleColor: context.watch<ShortcutController>().hasConflict ? AppTheme.errorColor : null,
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const ShortcutSettingsPage()));
+          },
+        ),
+        _buildSettingsItem(
           icon: Icons.qr_code_2,
           iconColor: AppTheme.primaryColor,
           title: '我的二维码',
@@ -235,7 +344,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     );
   }
 
-  Widget _buildSettingsItem({required IconData icon, required Color iconColor, required String title, String? subtitle, required VoidCallback onTap}) {
+  Widget _buildSettingsItem({required IconData icon, required Color iconColor, required String title, String? subtitle, Color? subtitleColor, required VoidCallback onTap}) {
     return InkWell(onTap: onTap, child: Padding(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(children: [
@@ -243,7 +352,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: TextStyle(fontSize: 15, color: AppTheme.textPrimary(context))),
-          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context))),
+          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: subtitleColor ?? AppTheme.textSecondary(context))),
         ])),
         Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
       ]),

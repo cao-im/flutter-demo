@@ -11,11 +11,14 @@ import 'providers/connection_provider.dart';
 import 'providers/favorite_provider.dart';
 import 'providers/file_library_provider.dart';
 import 'providers/layout_provider.dart';
+import 'services/shortcut_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerDesktopVideoPlayer();
   await initializeDateFormatting('zh_CN');
+  final shortcuts = ShortcutController();
+  await shortcuts.init();
 
   runApp(
     MultiProvider(
@@ -28,6 +31,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => FavoriteProvider()),
         ChangeNotifierProvider(create: (_) => FileLibraryProvider()),
         ChangeNotifierProvider(create: (_) => CallProvider()),
+        ChangeNotifierProvider.value(value: shortcuts),
       ],
       child: const CaoApp(),
     ),

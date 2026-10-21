@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "win32_window.h"
+#include "win_hotkey.h"
+#include "win_screenshot.h"
 
 class ImeCaret;
 
@@ -33,6 +35,12 @@ class FlutterWindow : public Win32Window {
 
   // Corrects Windows IME candidate position to the real caret.
   std::unique_ptr<ImeCaret> ime_caret_;
+
+  // System-wide hotkeys. Registration fails when another program owns the chord.
+  std::unique_ptr<WinHotkey> win_hotkey_;
+
+  // Region screenshot over the frozen desktop.
+  std::unique_ptr<WinScreenshot> win_screenshot_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

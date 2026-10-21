@@ -26,6 +26,7 @@ import 'user_profile_page.dart';
 import 'profile_page.dart';
 import 'group_info_page.dart';
 import '../services/apis/group_api.dart';
+import '../services/shortcut_controller.dart';
 
 class ChatPage extends StatefulWidget {
   final String conversationId;
@@ -772,6 +773,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   onMoreOptions: _showMoreOptions,
                   onAttachFile: _pickFile,
                   onAttachVideo: _pickVideo,
+                  onScreenshot: widget.isPanelMode
+                      ? () => context.read<ShortcutController>().onScreenshot?.call()
+                      : null,
                   onVoiceRecorded: _sendVoice,
                   style: widget.isPanelMode ? ChatInputStyle.desktop : ChatInputStyle.mobile,
                   externalFocusNode: _inputFocusNode,

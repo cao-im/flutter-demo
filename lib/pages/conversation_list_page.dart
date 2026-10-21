@@ -19,11 +19,13 @@ import '../widgets/desktop_group_create_dialog.dart';
 
 class ConversationListPage extends StatefulWidget {
   final bool isEmbeddedMode;
+  final FocusNode? searchFocus;
   final void Function(String conversationId, String conversationName, bool isGroup)? onConversationSelected;
 
   const ConversationListPage({
     super.key,
     this.isEmbeddedMode = false,
+    this.searchFocus,
     this.onConversationSelected,
   });
 
@@ -535,6 +537,7 @@ class _ConversationListPageState extends State<ConversationListPage>
           Expanded(
             child: TextField(
               controller: _searchController,
+              focusNode: widget.searchFocus,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: '搜索',

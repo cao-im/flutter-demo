@@ -4,6 +4,8 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "ime_caret.h"
+#include "win_hotkey.h"
+#include "win_screenshot.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -30,6 +32,10 @@ bool FlutterWindow::OnCreate() {
   ime_caret_ = std::make_unique<ImeCaret>(
       flutter_controller_->engine()->messenger(), GetHandle(),
       flutter_controller_->view()->GetNativeWindow());
+  win_hotkey_ = std::make_unique<WinHotkey>(
+      flutter_controller_->engine()->messenger(), GetHandle());
+  win_screenshot_ = std::make_unique<WinScreenshot>(
+      flutter_controller_->engine()->messenger());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -44,6 +50,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  win_screenshot_ = nullptr;
+  win_hotkey_ = nullptr;
   ime_caret_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -56,6 +64,10 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (win_hotkey_ && win_hotkey_->HandleMessage(hwnd, message, wparam, lparam)) {
+    return 0;
+  }
+
   if (ime_caret_ && ime_caret_->HandleMessage(hwnd, message, wparam, lparam)) {
     return 0;
   }
