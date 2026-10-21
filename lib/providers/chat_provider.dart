@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:cao_im_sdk_flutter/cao_im_sdk_flutter.dart' as sdk;
 import 'package:cao_im_sdk_flutter/event/event_bus.dart';
 import 'package:cao_im_sdk_flutter/event/im_event.dart';
+import '../models/chat_file_item.dart';
 import '../models/chat_model.dart';
 import '../models/chat_search_hit.dart';
 import '../models/message_model.dart';
@@ -20,6 +21,7 @@ import '../providers/contact_provider.dart';
 import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
 import '../services/apis/file_api.dart';
+import '../services/media_store.dart';
 import '../services/keep_alive_service.dart';
 import '../widgets/adaptive_layout.dart';
 import '../services/apis/message_api.dart';
@@ -37,6 +39,11 @@ class ChatProvider with ChangeNotifier {
 
   ConversationModel? _currentConversation;
   List<MessageModel> _messages = [];
+  String? _focusMessageKey;
+  bool _focusReady = false;
+  final List<_RemoteMedia> _cacheQueue = [];
+  final Set<String> _cacheKeys = {};
+  int _cacheRunning = 0;
   MessageModel? _replyingTo;
   final List<int> _pendingMentions = [];
   final Map<int, String> _mentionLabels = {};
@@ -49,6 +56,7 @@ class ChatProvider with ChangeNotifier {
   final Map<int, ContactInfo> _contactInfoCache = {};
 
   ConversationModel? get currentConversation => _currentConversation;
+  String? get focusMessageKey => _focusReady ? _focusMessageKey : null;
   List<MessageModel> get messages => _messages;
   List<ConversationModel> get conversations => _conversations;
   MessageModel? get replyingTo => _replyingTo;
@@ -245,6 +253,38 @@ class ChatProvider with ChangeNotifier {
 
     // 延迟通知，避免在 initState 等 build 期间调用 notifyListeners 导致报错
     Future.microtask(() => notifyListeners());
+  }
+
+  /// 打开会话后滚到这条消息。加载完成前不会当成“找不到”。
+  void focusMessage(String key) {
+    final value = key.trim();
+    if (value.isEmpty) return;
+    _focusMessageKey = value;
+    _focusReady = false;
+    notifyListeners();
+  }
+
+  void markFocusReady() {
+    if (_focusMessageKey == null || _focusReady) return;
+    _focusReady = true;
+    notifyListeners();
+  }
+
+  void clearFocusMessage() {
+    _focusMessageKey = null;
+    _focusReady = false;
+  }
+
+  Future<void> rememberMediaPath(String midKey, String path) async {
+    final key = midKey.trim();
+    final value = path.trim();
+    if (key.isEmpty || value.isEmpty) return;
+    final index = _messages.indexWhere((item) => item.midKey == key || item.id == key);
+    if (index != -1 && _messages[index].localPath != value) {
+      _messages[index] = _messages[index].copyWith(localPath: value);
+      notifyListeners();
+    }
+    await _remember(key, value);
   }
 
   Future<void> loadConversations() async {
@@ -628,10 +668,14 @@ class ChatProvider with ChangeNotifier {
         final msg = _messages[i];
         debugPrint('  [$i] id=${msg.id}, from=${msg.senderId}, timestamp=${msg.timestamp.millisecondsSinceEpoch}, content="${msg.content.substring(0, msg.content.length > 20 ? 20 : msg.content.length)}"');
       }
+      _enqueueMedia(_messages);
     } catch (e) {
       debugPrint('加载消息失败: $e');
     } finally {
       _isLoading = false;
+      if (_focusMessageKey != null) {
+        _focusReady = true;
+      }
       notifyListeners();
     }
   }
@@ -696,8 +740,9 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> sendImage(Uint8List bytes, String filename) async {
+    final saved = await _storeOutgoing(bytes, filename);
     final url = await FileApi().uploadBytes(bytes, filename);
-    await sendMessage(url, type: 'image');
+    await sendMessage(url, type: 'image', localPath: saved);
   }
 
   /// 先在列表里放一条本地文件，上传成功后再按文件类型发出。
@@ -748,6 +793,10 @@ class ChatProvider with ChangeNotifier {
       if (data.length > FileContent.maxBytes) {
         throw StateError('文件不能超过 10MB');
       }
+      final saved = await _storeOutgoing(data, filename);
+      if (saved.isNotEmpty) {
+        _replaceMessage(tempId, (m) => m.copyWith(localPath: saved));
+      }
       final url = await FileApi().uploadBytes(data, filename);
       final content = FileContent.encode(url, filename, data.length);
       _replaceMessage(tempId, (m) => m.copyWith(content: content, mediaUrl: url));
@@ -771,7 +820,12 @@ class ChatProvider with ChangeNotifier {
               senderNickname: currentUserInfo?.nickname,
               senderAvatar: currentUserInfo?.avatar,
             );
-      _replaceMessage(tempId, (m) => m.copyWith(mid: sentMessage.mid));
+      _replaceMessage(tempId, (m) => m.copyWith(
+        mid: sentMessage.mid,
+        midKey: sentMessage.midKey,
+        localPath: saved.isEmpty ? m.localPath : saved,
+      ));
+      await _remember(sentMessage.midKey, saved);
       loadConversations();
     } catch (e) {
       debugPrint('发送文件失败: $e');
@@ -855,6 +909,10 @@ class ChatProvider with ChangeNotifier {
       if (data.length > VideoContent.maxBytes) {
         throw StateError('视频不能超过 50MB');
       }
+      final saved = await _storeOutgoing(data, filename);
+      if (saved.isNotEmpty) {
+        _replaceMessage(tempId, (m) => m.copyWith(localPath: saved));
+      }
       final url = await FileApi().uploadBytes(data, filename);
       var coverUrl = '';
       if (coverPath.isNotEmpty) {
@@ -893,7 +951,12 @@ class ChatProvider with ChangeNotifier {
               senderNickname: currentUserInfo?.nickname,
               senderAvatar: currentUserInfo?.avatar,
             );
-      _replaceMessage(tempId, (m) => m.copyWith(mid: sentMessage.mid));
+      _replaceMessage(tempId, (m) => m.copyWith(
+        mid: sentMessage.mid,
+        midKey: sentMessage.midKey,
+        localPath: saved.isEmpty ? m.localPath : saved,
+      ));
+      await _remember(sentMessage.midKey, saved);
       loadConversations();
     } catch (e) {
       debugPrint('发送视频失败: $e');
@@ -906,6 +969,114 @@ class ChatProvider with ChangeNotifier {
         avatar: currentUserInfo?.avatar,
       );
       rethrow;
+    }
+  }
+
+  void cacheStoredFiles(List<ChatFileItem> items) {
+    _enqueueRemote(items.map((item) => _RemoteMedia(
+          key: item.key,
+          url: item.url,
+          name: item.name,
+          localPath: item.localPath,
+        )));
+  }
+
+  void _enqueueMedia(List<MessageModel> messages) {
+    final targets = <_RemoteMedia>[];
+    for (final message in messages) {
+      final target = _remoteMedia(message);
+      if (target != null) targets.add(target);
+    }
+    _enqueueRemote(targets);
+  }
+
+  void _enqueueRemote(Iterable<_RemoteMedia> targets) {
+    if (kIsWeb) return;
+    for (final target in targets) {
+      final key = target.key.trim();
+      final url = target.url.trim();
+      if (key.isEmpty || !(url.startsWith('http://') || url.startsWith('https://'))) continue;
+      if (target.localPath.trim().isNotEmpty) continue;
+      if (!_cacheKeys.add(key)) continue;
+      _cacheQueue.add(target);
+    }
+    _pumpMediaCache();
+  }
+
+  void _pumpMediaCache() {
+    while (_cacheRunning < 2 && _cacheQueue.isNotEmpty) {
+      final target = _cacheQueue.removeAt(0);
+      _cacheRunning++;
+      _downloadMedia(target).whenComplete(() {
+        _cacheRunning--;
+        _cacheKeys.remove(target.key);
+        _pumpMediaCache();
+      });
+    }
+  }
+
+  Future<void> _downloadMedia(_RemoteMedia target) async {
+    try {
+      if (await MediaStore.exists(target.localPath)) return;
+      final saved = await MediaStore.ensure(
+        knownPath: target.localPath,
+        remoteUrl: target.url,
+        name: target.name,
+      );
+      if (saved.path.isEmpty) return;
+      await rememberMediaPath(target.key, saved.path);
+    } catch (error) {
+      debugPrint('自动保存附件失败: $error');
+    }
+  }
+
+  _RemoteMedia? _remoteMedia(MessageModel message) {
+    if (message.status == MessageStatus.recalled) return null;
+    final key = message.midKey ?? message.id;
+    switch (message.type) {
+      case MessageType.image:
+        final url = (message.mediaUrl ?? message.content).trim();
+        final name = Uri.tryParse(url)?.path.split('/').last;
+        return _RemoteMedia(
+          key: key,
+          url: url,
+          name: name == null || name.isEmpty ? 'image.jpg' : name,
+          localPath: message.localPath ?? '',
+        );
+      case MessageType.file:
+        final file = FileContent.tryParse(message.content);
+        final url = (file?.url ?? message.mediaUrl ?? '').trim();
+        final name = file?.name.trim().isNotEmpty == true ? file!.name.trim() : '文件';
+        return _RemoteMedia(key: key, url: url, name: name, localPath: message.localPath ?? '');
+      case MessageType.video:
+        final video = VideoContent.tryParse(message.content);
+        final url = (video?.url ?? message.mediaUrl ?? '').trim();
+        final name = video?.name.trim().isNotEmpty == true ? video!.name.trim() : 'video.mp4';
+        return _RemoteMedia(key: key, url: url, name: name, localPath: message.localPath ?? '');
+      case MessageType.text:
+      case MessageType.audio:
+      case MessageType.notice:
+        return null;
+    }
+  }
+
+  Future<String> _storeOutgoing(List<int> bytes, String name) async {
+    try {
+      return await MediaStore.keepBytes(bytes, name);
+    } catch (error) {
+      debugPrint('保存本地副本失败: $error');
+      return '';
+    }
+  }
+
+  Future<void> _remember(String? midKey, String path) async {
+    final key = midKey?.trim() ?? '';
+    final value = path.trim();
+    if (key.isEmpty || value.isEmpty) return;
+    try {
+      await _sdkManager.client.rememberLocalPath(midKey: key, path: value);
+    } catch (error) {
+      debugPrint('记录本地路径失败: $error');
     }
   }
 
@@ -1003,7 +1174,7 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String content, {String type = 'text'}) async {
+  Future<void> sendMessage(String content, {String type = 'text', String? localPath}) async {
     debugPrint('📤[ChatProvider] sendMessage 被调用: bytes=${utf8.encode(content).length}, type=$type');
     if (type == 'text' && utf8.encode(content).length > maxTextBytes) {
       throw StateError('消息过长，单条最多 60KB');
@@ -1047,6 +1218,7 @@ class ChatProvider with ChangeNotifier {
       replyMsgId: reply?.mid,
       replyPreview: reply?.quoteText,
       replySenderName: reply?.senderDisplayName,
+      localPath: localPath,
     );
 
     debugPrint('📤[ChatProvider] 发送消息(本地) senderInfo=${tempMessage.senderInfo?.toJson()}');
@@ -1098,9 +1270,12 @@ class ChatProvider with ChangeNotifier {
         // 使用 SDK 返回的消息信息更新本地消息
         _messages[index] = _messages[index].copyWith(
           mid: sentMessage.mid,
+          midKey: sentMessage.midKey,
+          localPath: (localPath == null || localPath.isEmpty) ? _messages[index].localPath : localPath,
         );
         notifyListeners();
       }
+      await _remember(sentMessage.midKey, localPath ?? '');
       
       // ✅ 发送成功后也主动刷新一次会话列表（双重保障）
       debugPrint('📍[ChatProvider] 发送成功，主动刷新会话列表');
@@ -1691,6 +1866,8 @@ class ChatProvider with ChangeNotifier {
     debugPrint('🗑️[ChatProvider] clearCurrentConversation 被调用，清空前: ${_currentConversation?.id ?? "null"}');
     _currentConversation = null;
     _messages = [];
+    _focusMessageKey = null;
+    _focusReady = false;
     // ✅ 清除通知服务的当前聊天状态
     NotificationService().currentChatTargetId = null;
     notifyListeners();
@@ -2169,6 +2346,7 @@ class ChatProvider with ChangeNotifier {
       replyMsgId: msg.replyMsgId,
       replyPreview: msg.replyPreview,
       replySenderName: msg.replySenderName,
+      localPath: msg.localPath,
     );
   }
 
@@ -2301,12 +2479,14 @@ class _ChatMessageListener implements sdk.MessageListener {
       replyMsgId: message.replyMsgId,
       replyPreview: message.replyPreview,
       replySenderName: message.replySenderName,
+      localPath: message.localPath,
     );
 
     debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');
 
     // ✅ 只有当消息属于当前正在查看的会话时，才添加到消息列表
     // 否则由 EventBus 的 MessageReceivedEvent 处理器统一管理（刷新会话列表 + 触发通知）
+    _provider._enqueueMedia([model]);
     if (_isMessageBelongsToCurrentConversation(message)) {
       _provider.receiveMessage(model);
     } else {
@@ -2321,4 +2501,18 @@ class _ChatMessageListener implements sdk.MessageListener {
 
   @override
   void onMessageRecalled(sdk.Message message) {}
+}
+
+class _RemoteMedia {
+  final String key;
+  final String url;
+  final String name;
+  final String localPath;
+
+  const _RemoteMedia({
+    required this.key,
+    required this.url,
+    required this.name,
+    this.localPath = '',
+  });
 }

@@ -162,7 +162,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         debugPrint('🔄[ChatPage] initState postFrameCallback 执行: 加载消息');
         await _chatProvider?.loadMessages(widget.conversationId);
 
-        _scrollToBottom(animate: false);  // 首次加载使用无动画跳转
+        if (_chatProvider?.focusMessageKey == null) {
+          _scrollToBottom(animate: false);
+        }
 
         // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
         final targetId = effectiveTargetId;
@@ -224,7 +226,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         debugPrint('🔄[ChatPage] _onConversationChanged postFrameCallback 执行: 加载消息');
         await _chatProvider?.loadMessages(widget.conversationId);
 
-        _scrollToBottom(animate: false);  // 切换会话时也使用无动画跳转
+        if (_chatProvider?.focusMessageKey == null) {
+          _scrollToBottom(animate: false);
+        }
 
         // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
         final targetId = effectiveTargetId;

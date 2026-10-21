@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:provider/provider.dart';
 import '../models/message_model.dart';
+import '../providers/chat_provider.dart';
+import '../services/media_store.dart';
 import '../pages/full_text_page.dart';
 import '../theme/app_theme.dart';
 import 'avatar_widget.dart';
@@ -429,8 +432,30 @@ class MessageBubble extends StatelessWidget {
   }
 
   Future<void> _showImageViewer(BuildContext context) async {
-    final source = message.imageSource;
+    var source = message.imageSource;
     if (source == null) return;
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      final name = Uri.tryParse(source)?.path.split('/').last;
+      try {
+        final saved = await MediaStore.ensure(
+          knownPath: message.localPath,
+          remoteUrl: source,
+          name: (name == null || name.isEmpty) ? 'image.jpg' : name,
+        );
+        if (saved.path.isNotEmpty) {
+          source = saved.path;
+          final key = message.midKey;
+          if (key != null && key.isNotEmpty && context.mounted) {
+            await context.read<ChatProvider>().rememberMediaPath(key, saved.path);
+          }
+        }
+      } catch (error) {
+        debugPrint('保存图片失败: $error');
+      }
+    }
+    final resolved = source;
+    if (!context.mounted || resolved == null || resolved.isEmpty) return;
+    final display = resolved;
 
     Navigator.push(
       context,
@@ -440,14 +465,14 @@ class MessageBubble extends StatelessWidget {
           body: Stack(
             children: [
               Center(
-                child: source.startsWith('http')
+                child: display.startsWith('http')
                     ? PhotoView(
-                        imageProvider: NetworkImage(source),
+                        imageProvider: NetworkImage(display),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3,
                       )
                     : PhotoView(
-                        imageProvider: FileImage(File(source)),
+                        imageProvider: FileImage(File(display)),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3,
                       ),

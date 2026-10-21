@@ -30,6 +30,8 @@ class MessageModel {
   final String? replySenderName;
   /// 群消息已读人数。私聊不使用。
   final int? readCount;
+  /// 本机副本路径。有这个路径时优先用本地文件打开。
+  final String? localPath;
 
   MessageModel({
     required this.id,
@@ -53,6 +55,7 @@ class MessageModel {
     this.replyPreview,
     this.replySenderName,
     this.readCount,
+    this.localPath,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -116,9 +119,11 @@ class MessageModel {
     };
   }
 
-  /// 图片地址：优先 mediaUrl，实时消息只带 content 里的 URL 时也能显示
+  /// 图片地址：本机副本优先，否则用上传地址。
   String? get imageSource {
     if (type != MessageType.image) return null;
+    final local = localPath?.trim() ?? '';
+    if (local.isNotEmpty) return local;
     final url = mediaUrl;
     if (url != null && url.isNotEmpty) return url;
     if (content.startsWith('http')) return content;
@@ -235,6 +240,7 @@ class MessageModel {
     String? replyPreview,
     String? replySenderName,
     int? readCount,
+    String? localPath,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -258,6 +264,7 @@ class MessageModel {
       replyPreview: replyPreview ?? this.replyPreview,
       replySenderName: replySenderName ?? this.replySenderName,
       readCount: readCount ?? this.readCount,
+      localPath: localPath ?? this.localPath,
     );
   }
 }

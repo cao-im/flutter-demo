@@ -2,11 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../models/message_model.dart';
 import '../../models/video_content.dart';
+import '../../providers/chat_provider.dart';
+import '../../services/media_store.dart';
 
 class VideoMessageContent extends StatelessWidget {
   final MessageModel message;
@@ -55,17 +58,45 @@ class VideoMessageContent extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context, VideoContent? video) async {
-    final source = _playableSource(video);
-    if (source == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('视频无法播放')));
+    final remote = (video?.url ?? message.mediaUrl ?? '').trim();
+    final name = video?.name.trim().isNotEmpty == true ? video!.name.trim() : 'video.mp4';
+    var source = _playableSource(video);
+    final alreadyLocal = source != null && !VideoContent.isRemote(source);
+    if (!alreadyLocal && remote.startsWith('http')) {
+      final folder = await MediaStore.folder();
+      if (folder.isNotEmpty && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在保存到本机…')));
+      }
+      try {
+        final saved = await MediaStore.ensure(knownPath: message.localPath, remoteUrl: remote, name: name);
+        if (saved.path.isNotEmpty) {
+          source = saved.path;
+          final key = message.midKey;
+          if (key != null && key.isNotEmpty && context.mounted) {
+            await context.read<ChatProvider>().rememberMediaPath(key, saved.path);
+          }
+        }
+      } catch (error) {
+        debugPrint('保存视频失败: $error');
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+    }
+    if (source == null || !context.mounted) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('视频无法播放')));
+      }
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => VideoPlayPage(source: source)),
+      MaterialPageRoute(builder: (_) => VideoPlayPage(source: source!)),
     );
   }
 
   String? _playableSource(VideoContent? video) {
+    final local = (message.localPath ?? '').trim();
+    if (local.isNotEmpty && !kIsWeb && File(local).existsSync()) return local;
     final candidates = [video?.url ?? '', message.mediaUrl ?? ''];
     for (final raw in candidates) {
       final value = raw.trim();

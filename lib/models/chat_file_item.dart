@@ -13,6 +13,7 @@ class ChatFileItem {
   final String conversationName;
   final String senderName;
   final String content;
+  final String localPath;
 
   const ChatFileItem({
     required this.key,
@@ -26,7 +27,25 @@ class ChatFileItem {
     required this.conversationName,
     required this.senderName,
     required this.content,
+    this.localPath = '',
   });
+
+  ChatFileItem copyWith({String? localPath}) {
+    return ChatFileItem(
+      key: key,
+      type: type,
+      name: name,
+      url: url,
+      size: size,
+      time: time,
+      targetId: targetId,
+      isGroup: isGroup,
+      conversationName: conversationName,
+      senderName: senderName,
+      content: content,
+      localPath: localPath ?? this.localPath,
+    );
+  }
 
   String get sizeLabel {
     if (size <= 0) return '';

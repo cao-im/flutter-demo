@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/chat_file_opener.dart';
 import '../../theme/app_theme.dart';
 
 import '../../models/file_content.dart';
@@ -60,20 +60,27 @@ class FileMessageContent extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context, FileContent? file) async {
-    final url = (file?.url ?? message.mediaUrl ?? '').trim();
-    if (url.isEmpty) {
-      _toast(context, '文件地址无效');
+    final remote = (file?.url ?? '').trim();
+    final media = (message.mediaUrl ?? '').trim();
+    final local = (message.localPath ?? '').trim();
+    final url = remote.startsWith('http://') || remote.startsWith('https://')
+        ? remote
+        : (media.startsWith('http://') || media.startsWith('https://') ? media : remote);
+    final known = local.isNotEmpty
+        ? local
+        : (url.startsWith('http://') || url.startsWith('https://') ? '' : (url.isNotEmpty ? url : media));
+    if (url.isEmpty && known.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('文件地址无效')));
       return;
     }
-    final uri = url.startsWith('http://') || url.startsWith('https://') ? Uri.parse(url) : Uri.file(url);
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && context.mounted) {
-      _toast(context, '无法打开这个文件');
-    }
-  }
-
-  void _toast(BuildContext context, String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    final name = file?.name.isNotEmpty == true ? file!.name : '文件';
+    await ChatFileOpener.open(
+      context,
+      name: name,
+      remoteUrl: url,
+      localPath: known,
+      messageKey: message.midKey ?? message.id,
+    );
   }
 }
 

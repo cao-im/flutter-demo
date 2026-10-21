@@ -347,6 +347,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _clearConversationScheduled = false;
       if (!mounted) return;
+      final layout = context.read<LayoutProvider>();
+      final conversationId = layout.currentConversationId ?? '';
+      if (layout.selectedIndex == 0 && conversationId.isNotEmpty) return;
       context.read<ChatProvider>().clearCurrentConversation();
     });
   }

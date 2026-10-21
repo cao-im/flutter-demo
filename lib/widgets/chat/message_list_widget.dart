@@ -46,8 +46,9 @@ class MessageListWidget extends StatefulWidget {
 class _MessageListWidgetState extends State<MessageListWidget> {
   /// 上一次记录的消息数量，用于检测新消息并自动滚动
   int _lastMessageCount = 0;
-  final Map<int, GlobalKey> _messageKeys = {};
-  int? _highlightMid;
+  final Map<String, GlobalKey> _messageKeys = {};
+  String? _highlightKey;
+  String? _pendingFocus;
   Timer? _highlightTimer;
 
   @override
@@ -56,35 +57,82 @@ class _MessageListWidgetState extends State<MessageListWidget> {
     super.dispose();
   }
 
-  GlobalKey _keyFor(int mid) {
-    return _messageKeys.putIfAbsent(mid, GlobalKey.new);
+  GlobalKey _keyFor(String id) {
+    return _messageKeys.putIfAbsent(id, GlobalKey.new);
+  }
+
+  String _anchor(MessageModel message) => message.midKey ?? message.id;
+
+  bool _matches(MessageModel item, String focus) {
+    return item.midKey == focus || item.id == focus || 'l${item.id}' == focus;
+  }
+
+  void _scheduleFocus(String focus) {
+    if (_pendingFocus == focus) return;
+    final messages = context.read<ChatProvider>().messages;
+    final dataIndex = messages.indexWhere((item) => _matches(item, focus));
+    _pendingFocus = focus;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final chat = context.read<ChatProvider>();
+      if (chat.focusMessageKey != focus) {
+        _pendingFocus = null;
+        return;
+      }
+      chat.clearFocusMessage();
+      if (dataIndex < 0) {
+        _pendingFocus = null;
+        _showMissing('没有找到这条消息');
+        return;
+      }
+      final current = chat.messages;
+      final index = dataIndex < current.length && _matches(current[dataIndex], focus)
+          ? dataIndex
+          : current.indexWhere((item) => _matches(item, focus));
+      if (index < 0) {
+        _pendingFocus = null;
+        _showMissing('没有找到这条消息');
+        return;
+      }
+      await _reveal(current[index], index, current, missingText: '没有找到这条消息');
+      _pendingFocus = null;
+    });
   }
 
   Future<void> _jumpToQuoted(MessageModel message) async {
     final replyMid = message.replyMsgId;
     if (replyMid == null || replyMid <= 0) {
-      _showMissingQuote();
+      _showMissing('原消息不在当前记录中');
       return;
     }
     final messages = context.read<ChatProvider>().messages;
-    final dataIndex = messages.indexWhere((item) => item.mid == replyMid);
+    final dataIndex = messages.indexWhere((item) => item.mid == replyMid || item.midKey == '$replyMid');
     if (dataIndex < 0) {
-      _showMissingQuote();
+      _showMissing('原消息不在当前记录中');
       return;
     }
+    await _reveal(messages[dataIndex], dataIndex, messages, missingText: '原消息不在当前记录中');
+  }
 
-    setState(() => _highlightMid = replyMid);
+  Future<void> _reveal(
+    MessageModel message,
+    int dataIndex,
+    List<MessageModel> messages, {
+    required String missingText,
+  }) async {
+    final anchor = _anchor(message);
+    setState(() => _highlightKey = anchor);
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(milliseconds: 1600), () {
       if (!mounted) return;
-      setState(() => _highlightMid = null);
+      setState(() => _highlightKey = null);
     });
 
-    final key = _keyFor(replyMid);
+    final key = _keyFor(anchor);
     for (var attempt = 0; attempt < 12; attempt++) {
       if (!mounted) return;
       final targetContext = key.currentContext;
-      if (targetContext != null) {
+      if (targetContext != null && targetContext.mounted) {
         await Scrollable.ensureVisible(
           targetContext,
           alignment: 0.35,
@@ -106,14 +154,12 @@ class _MessageListWidgetState extends State<MessageListWidget> {
       await WidgetsBinding.instance.endOfFrame;
     }
     if (!mounted || key.currentContext != null) return;
-    _showMissingQuote();
+    _showMissing(missingText);
   }
 
-  void _showMissingQuote() {
+  void _showMissing(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('原消息不在当前记录中')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   /// 获取联系人信息
@@ -153,8 +199,13 @@ class _MessageListWidgetState extends State<MessageListWidget> {
         }
 
         // 消息数量变化时自动滚动到底部
+        final focus = chatProvider.focusMessageKey;
+        if (focus != null && focus.isNotEmpty) {
+          _scheduleFocus(focus);
+        }
+
         final currentMessageCount = chatProvider.messages.length;
-        if (currentMessageCount > _lastMessageCount && _lastMessageCount > 0) {
+        if (currentMessageCount > _lastMessageCount && _lastMessageCount > 0 && focus == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             widget.onScrollToBottom();
           });
@@ -234,16 +285,14 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                       )
                     else
                     MessageBubble(
-                      key: message.mid != null && message.mid! > 0
-                          ? _keyFor(message.mid!)
-                          : null,
+                      key: _keyFor(_anchor(message)),
                       message: message,
                       isMe: isMe,
                       senderAvatar: senderAvatar,
                       senderName: senderName,
                       showName: widget.isGroup && !isMe,
                       isGroup: widget.isGroup,
-                      highlighted: message.mid != null && message.mid == _highlightMid,
+                      highlighted: _highlightKey != null && _anchor(message) == _highlightKey,
                       onRetry: () => widget.onRetry(message),
                       onRecall: widget.onRecall,
                       onDelete: widget.onDelete,

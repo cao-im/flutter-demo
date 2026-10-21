@@ -20,6 +20,7 @@ class FileLibraryProvider extends ChangeNotifier {
   bool _loading = false;
 
   List<ChatFileItem> get items => _visible();
+  List<ChatFileItem> get storedItems => List.unmodifiable(_items);
   FileKindFilter get filter => _filter;
   String get keyword => _keyword;
   ChatFileItem? get selected => _selected;
@@ -70,6 +71,16 @@ class FileLibraryProvider extends ChangeNotifier {
   void setKeyword(String value) {
     if (_keyword == value) return;
     _keyword = value;
+    notifyListeners();
+  }
+
+  void noteLocalPath(String key, String path) {
+    final value = path.trim();
+    if (key.isEmpty || value.isEmpty) return;
+    final index = _items.indexWhere((item) => item.key == key);
+    if (index < 0 || _items[index].localPath == value) return;
+    _items[index] = _items[index].copyWith(localPath: value);
+    if (_selected?.key == key) _selected = _items[index];
     notifyListeners();
   }
 
@@ -131,11 +142,16 @@ class FileLibraryProvider extends ChangeNotifier {
 
     final parsed = _describe(type, message.content);
     final key = message.midKey ?? 'l${message.id ?? message.timestamp}';
+    final remote = parsed.$2.trim();
+    final stored = (message.localPath ?? '').trim();
+    final local = stored.isNotEmpty
+        ? stored
+        : (remote.startsWith('http://') || remote.startsWith('https://') || remote.isEmpty ? '' : remote);
     return ChatFileItem(
       key: key,
       type: type,
       name: parsed.$1,
-      url: parsed.$2,
+      url: remote.startsWith('http://') || remote.startsWith('https://') ? remote : '',
       size: parsed.$3,
       time: DateTime.fromMillisecondsSinceEpoch(message.timestamp),
       targetId: targetId,
@@ -143,6 +159,7 @@ class FileLibraryProvider extends ChangeNotifier {
       conversationName: conversationName,
       senderName: sender,
       content: message.content,
+      localPath: local,
     );
   }
 

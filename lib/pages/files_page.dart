@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/chat_file_item.dart';
 import '../models/chat_model.dart';
@@ -9,6 +8,8 @@ import '../providers/chat_provider.dart';
 import '../providers/file_library_provider.dart';
 import '../providers/layout_provider.dart';
 import '../router/app_router.dart';
+import '../services/chat_file_opener.dart';
+import '../services/media_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat/video_message_content.dart';
 
@@ -31,7 +32,9 @@ class _FilesPageState extends State<FilesPage> {
   Future<void> _reload() async {
     if (!mounted) return;
     final chat = context.read<ChatProvider>();
-    await context.read<FileLibraryProvider>().load(chat.conversations);
+    final library = context.read<FileLibraryProvider>();
+    await library.load(chat.conversations);
+    chat.cacheStoredFiles(library.storedItems);
   }
 
   @override
@@ -241,6 +244,8 @@ class FileDetailView extends StatelessWidget {
                   '${item.sizeLabel.isEmpty ? '' : ' · ${item.sizeLabel}'}',
                   style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
                 ),
+                const SizedBox(height: 8),
+                _LocalLocation(item: item),
               ],
             ),
           ),
@@ -258,8 +263,12 @@ class FileDetailView extends StatelessWidget {
               runSpacing: 8,
               children: [
                 FilledButton(
-                  onPressed: item.url.trim().isEmpty ? null : () => _open(context),
+                  onPressed: item.url.trim().isEmpty && item.localPath.trim().isEmpty ? null : () => _open(context),
                   child: const Text('打开'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _reveal(context),
+                  child: const Text('打开所在位置'),
                 ),
                 OutlinedButton(
                   onPressed: () => _openConversation(context),
@@ -274,13 +283,10 @@ class FileDetailView extends StatelessWidget {
   }
 
   Widget _preview(BuildContext context) {
-    if (item.type == MessageType.image && item.url.startsWith('http')) {
+    final imageSource = item.localPath.trim().isNotEmpty ? item.localPath.trim() : item.url.trim();
+    if (item.type == MessageType.image && imageSource.isNotEmpty) {
       return InteractiveViewer(
-        child: Image.network(
-          item.url,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => _placeholder(context, '图片无法显示'),
-        ),
+        child: MediaStore.image(imageSource, error: _placeholder(context, '图片无法显示')),
       );
     }
     if (item.type == MessageType.video) {
@@ -296,6 +302,8 @@ class FileDetailView extends StatelessWidget {
             content: item.content,
             mediaUrl: item.url,
             timestamp: item.time,
+            localPath: item.localPath.isEmpty ? null : item.localPath,
+            midKey: item.key,
           ),
         ),
       );
@@ -317,17 +325,29 @@ class FileDetailView extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    final url = item.url.trim();
-    if (url.isEmpty) return;
-    final uri = url.startsWith('http://') || url.startsWith('https://') ? Uri.parse(url) : Uri.file(url);
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await ChatFileOpener.open(
+      context,
+      name: item.name,
+      remoteUrl: item.url,
+      localPath: item.localPath,
+      messageKey: item.key,
+    );
+  }
+
+  Future<void> _reveal(BuildContext context) async {
+    final folder = await MediaStore.folder();
+    final path = item.localPath.trim().isNotEmpty ? item.localPath.trim() : folder;
+    final opened = await MediaStore.reveal(path);
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法打开这个文件')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(folder.isEmpty ? '网页端会用浏览器打开原文件' : '文件目录：$folder')),
+      );
     }
   }
 
   void _openConversation(BuildContext context) {
     final chat = context.read<ChatProvider>();
+    chat.focusMessage(item.key);
     final existing = chat.conversations.cast<ConversationModel?>().firstWhere(
           (entry) => entry != null && entry.targetId == item.targetId && entry.isGroup == item.isGroup,
           orElse: () => null,
@@ -358,6 +378,30 @@ class FileDetailView extends StatelessWidget {
         'conversationName': conversation.name,
         'isGroup': conversation.isGroup,
         'targetId': conversation.targetId,
+      },
+    );
+  }
+}
+
+class _LocalLocation extends StatelessWidget {
+  final ChatFileItem item;
+
+  const _LocalLocation({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(fontSize: 12, height: 1.4, color: AppTheme.textSecondary(context));
+    return FutureBuilder<String>(
+      future: MediaStore.folder(),
+      builder: (context, snapshot) {
+        final folder = snapshot.data ?? '';
+        final saved = item.localPath.trim();
+        if (folder.isEmpty && saved.isEmpty) {
+          return Text('网页端会用浏览器打开，文件留在浏览器的下载记录里。', style: style);
+        }
+        final where = saved.isNotEmpty ? saved : (folder.isEmpty ? '' : '$folder（打开后保存到这里）');
+        if (where.isEmpty) return const SizedBox.shrink();
+        return Text('本机位置：$where', style: style);
       },
     );
   }
