@@ -151,7 +151,10 @@ bool WinScreenshot::Open() {
   HDC memory = CreateCompatibleDC(screen);
   frame_ = CreateCompatibleBitmap(screen, width_, height_);
   shade_ = CreateCompatibleBitmap(screen, 1, 1);
-  if (memory == nullptr || frame_ == nullptr || shade_ == nullptr) {
+  dimmed_ = CreateCompatibleBitmap(screen, width_, height_);
+  compose_ = CreateCompatibleBitmap(screen, width_, height_);
+  if (memory == nullptr || frame_ == nullptr || shade_ == nullptr || dimmed_ == nullptr ||
+      compose_ == nullptr) {
     if (memory != nullptr) DeleteDC(memory);
     ReleaseDC(nullptr, screen);
     return false;
@@ -164,8 +167,27 @@ bool WinScreenshot::Open() {
   HBRUSH black = CreateSolidBrush(RGB(0, 0, 0));
   FillRect(memory, &pixel, black);
   DeleteObject(black);
+
+  SelectObject(memory, dimmed_);
+  HDC source = CreateCompatibleDC(screen);
+  HGDIOBJ old_source = SelectObject(source, frame_);
+  BitBlt(memory, 0, 0, width_, height_, source, 0, 0, SRCCOPY);
+  SelectObject(source, shade_);
+  BLENDFUNCTION blend{};
+  blend.BlendOp = AC_SRC_OVER;
+  blend.SourceConstantAlpha = 110;
+  AlphaBlend(memory, 0, 0, width_, height_, source, 0, 0, 1, 1, blend);
+  SelectObject(source, old_source);
+  DeleteDC(source);
   SelectObject(memory, previous);
   DeleteDC(memory);
+
+  compose_dc_ = CreateCompatibleDC(screen);
+  if (compose_dc_ == nullptr) {
+    ReleaseDC(nullptr, screen);
+    return false;
+  }
+  compose_previous_ = SelectObject(compose_dc_, compose_);
   ReleaseDC(nullptr, screen);
 
   dpi_ = GetDpiForSystem();
@@ -219,6 +241,22 @@ void WinScreenshot::Notify(std::vector<uint8_t> png, bool cancelled) {
 }
 
 void WinScreenshot::ReleaseFrame() {
+  if (compose_dc_ != nullptr) {
+    if (compose_previous_ != nullptr) {
+      SelectObject(compose_dc_, compose_previous_);
+      compose_previous_ = nullptr;
+    }
+    DeleteDC(compose_dc_);
+    compose_dc_ = nullptr;
+  }
+  if (compose_ != nullptr) {
+    DeleteObject(compose_);
+    compose_ = nullptr;
+  }
+  if (dimmed_ != nullptr) {
+    DeleteObject(dimmed_);
+    dimmed_ = nullptr;
+  }
   if (frame_ != nullptr) {
     DeleteObject(frame_);
     frame_ = nullptr;
@@ -275,61 +313,40 @@ void WinScreenshot::DrawButton(HDC hdc, RECT rect, const wchar_t* text,
 }
 
 void WinScreenshot::Paint(HDC hdc) {
-  if (frame_ == nullptr) return;
+  if (frame_ == nullptr || dimmed_ == nullptr || compose_dc_ == nullptr) return;
   HDC source = CreateCompatibleDC(hdc);
-  HGDIOBJ previous = SelectObject(source, frame_);
-  BitBlt(hdc, 0, 0, width_, height_, source, 0, 0, SRCCOPY);
+  HGDIOBJ previous = SelectObject(source, dimmed_);
+  BitBlt(compose_dc_, 0, 0, width_, height_, source, 0, 0, SRCCOPY);
 
-  BLENDFUNCTION blend{};
-  blend.BlendOp = AC_SRC_OVER;
-  blend.SourceConstantAlpha = 110;
-  HGDIOBJ shade_previous = SelectObject(source, shade_);
   const RECT selection = moved_ ? Selection() : RECT{0, 0, 0, 0};
   const int sel_w = selection.right - selection.left;
   const int sel_h = selection.bottom - selection.top;
   const bool has_selection = sel_w >= kMinSize && sel_h >= kMinSize;
-  if (!has_selection) {
-    AlphaBlend(hdc, 0, 0, width_, height_, source, 0, 0, 1, 1, blend);
-  } else {
-    if (selection.top > 0) {
-      AlphaBlend(hdc, 0, 0, width_, selection.top, source, 0, 0, 1, 1, blend);
-    }
-    if (selection.bottom < height_) {
-      AlphaBlend(hdc, 0, selection.bottom, width_, height_ - selection.bottom,
-                 source, 0, 0, 1, 1, blend);
-    }
-    if (selection.left > 0) {
-      AlphaBlend(hdc, 0, selection.top, selection.left, sel_h, source, 0, 0, 1, 1,
-                 blend);
-    }
-    if (selection.right < width_) {
-      AlphaBlend(hdc, selection.right, selection.top, width_ - selection.right, sel_h,
-                 source, 0, 0, 1, 1, blend);
-    }
+  if (has_selection) {
     SelectObject(source, frame_);
-    BitBlt(hdc, selection.left, selection.top, sel_w, sel_h, source, selection.left,
-           selection.top, SRCCOPY);
+    BitBlt(compose_dc_, selection.left, selection.top, sel_w, sel_h, source,
+           selection.left, selection.top, SRCCOPY);
     HPEN pen = CreatePen(PS_SOLID, Scale(2, dpi_), RGB(7, 193, 96));
-    HGDIOBJ old_pen = SelectObject(hdc, pen);
-    HGDIOBJ old_brush = SelectObject(hdc, GetStockObject(HOLLOW_BRUSH));
-    Rectangle(hdc, selection.left, selection.top, selection.right, selection.bottom);
-    SelectObject(hdc, old_brush);
-    SelectObject(hdc, old_pen);
+    HGDIOBJ old_pen = SelectObject(compose_dc_, pen);
+    HGDIOBJ old_brush = SelectObject(compose_dc_, GetStockObject(HOLLOW_BRUSH));
+    Rectangle(compose_dc_, selection.left, selection.top, selection.right,
+              selection.bottom);
+    SelectObject(compose_dc_, old_brush);
+    SelectObject(compose_dc_, old_pen);
     DeleteObject(pen);
   }
-  SelectObject(source, shade_previous);
   SelectObject(source, previous);
   DeleteDC(source);
 
-  HGDIOBJ old_font = font_ == nullptr ? nullptr : SelectObject(hdc, font_);
+  HGDIOBJ old_font = font_ == nullptr ? nullptr : SelectObject(compose_dc_, font_);
   if (!has_selection) {
     const wchar_t* hint =
         L"\u62D6\u52A8\u9009\u62E9\u533A\u57DF\uFF0CEnter \u5B8C\u6210\uFF0CEsc "
         L"\u53D6\u6D88";
     RECT hint_rect{0, Scale(24, dpi_), width_, Scale(56, dpi_)};
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 255, 255));
-    DrawTextW(hdc, hint, -1, &hint_rect, DT_CENTER | DT_SINGLELINE);
+    SetBkMode(compose_dc_, TRANSPARENT);
+    SetTextColor(compose_dc_, RGB(255, 255, 255));
+    DrawTextW(compose_dc_, hint, -1, &hint_rect, DT_CENTER | DT_SINGLELINE);
   } else if (!dragging_) {
     wchar_t label[32];
     swprintf_s(label, L"%d x %d", sel_w, sel_h);
@@ -339,16 +356,17 @@ void WinScreenshot::Paint(HDC hdc) {
       label_rect.top = selection.top + Scale(4, dpi_);
       label_rect.bottom = label_rect.top + Scale(20, dpi_);
     }
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 255, 255));
-    DrawTextW(hdc, label, -1, &label_rect, DT_LEFT | DT_SINGLELINE);
+    SetBkMode(compose_dc_, TRANSPARENT);
+    SetTextColor(compose_dc_, RGB(255, 255, 255));
+    DrawTextW(compose_dc_, label, -1, &label_rect, DT_LEFT | DT_SINGLELINE);
     RECT cancel{};
     RECT done{};
     LayoutActions(selection, &cancel, &done);
-    DrawButton(hdc, cancel, L"\u53D6\u6D88", RGB(60, 60, 60));
-    DrawButton(hdc, done, L"\u5B8C\u6210", RGB(7, 193, 96));
+    DrawButton(compose_dc_, cancel, L"\u53D6\u6D88", RGB(60, 60, 60));
+    DrawButton(compose_dc_, done, L"\u5B8C\u6210", RGB(7, 193, 96));
   }
-  if (old_font != nullptr) SelectObject(hdc, old_font);
+  if (old_font != nullptr) SelectObject(compose_dc_, old_font);
+  BitBlt(hdc, 0, 0, width_, height_, compose_dc_, 0, 0, SRCCOPY);
 }
 
 std::vector<uint8_t> WinScreenshot::EncodeSelection() const {
@@ -436,7 +454,9 @@ LRESULT WinScreenshot::Handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpa
     }
     case WM_MOUSEMOVE:
       if (dragging_) {
-        current_ = POINT{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+        const POINT next{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+        if (next.x == current_.x && next.y == current_.y) return 0;
+        current_ = next;
         moved_ = true;
         InvalidateRect(hwnd, nullptr, FALSE);
       }

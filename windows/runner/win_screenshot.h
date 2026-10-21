@@ -45,6 +45,10 @@ class WinScreenshot {
   HWND hwnd_ = nullptr;
   HBITMAP frame_ = nullptr;
   HBITMAP shade_ = nullptr;
+  HBITMAP dimmed_ = nullptr;
+  HBITMAP compose_ = nullptr;
+  HDC compose_dc_ = nullptr;
+  HGDIOBJ compose_previous_ = nullptr;
   HFONT font_ = nullptr;
   int origin_x_ = 0;
   int origin_y_ = 0;
