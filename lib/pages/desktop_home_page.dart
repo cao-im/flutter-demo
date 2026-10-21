@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import 'conversation_list_page.dart';
 import 'chat_page.dart';
 import 'favorites_page.dart';
+import 'files_page.dart';
 
 class _NewConversationIntent extends Intent {
   const _NewConversationIntent();
@@ -164,13 +165,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         );
 
       case 3:
-        return SizedBox(
+        return const SizedBox(
           width: _middlePanelWidth,
-          child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.folder_outlined, size: 48, color: Colors.grey[400]),
-            SizedBox(height: 12),
-            Text('文件管理开发中...', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
-          ])),
+          child: FilesPage(embedded: true),
         );
 
       case 4:
@@ -385,8 +382,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         return const Expanded(child: FavoriteDetailPane());
 
       case 3:
-        // 文件：开发中占位
-        return const Expanded(child: _PlaceholderPanel(icon: Icons.folder_outlined, title: '文件管理', subtitle: '此功能开发中...'));
+        return const Expanded(child: FileDetailPane());
 
       case 4:
         return const Expanded(child: _DesktopProfilePanel());

@@ -25,6 +25,16 @@ class LayoutProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 从文件或收藏跳进会话时始终打开，不把当前会话关掉。
+  void openConversation(String id, String name, bool isGroup) {
+    _selectedIndex = 0;
+    _selectedContact = null;
+    _currentConversationId = id;
+    _currentConversationName = name;
+    _isGroup = isGroup;
+    notifyListeners();
+  }
+
   void selectConversation(String id, String name, bool isGroup) {
     if (_currentConversationId == id) {
       // 再次点击同一会话时，关闭右侧聊天面板

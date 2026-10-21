@@ -7,6 +7,7 @@ import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/profile_editor.dart';
 import 'favorites_page.dart';
+import 'files_page.dart';
 import '../widgets/qr_code_card.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -182,6 +183,9 @@ class _ProfilePageState extends State<ProfilePage> {
           _buildMenuItem(Icons.qr_code_2, '我的二维码', () => showMyQrCode(context)),
           _buildMenuItem(Icons.star_outline, '我的收藏', () {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()));
+          }),
+          _buildMenuItem(Icons.folder_outlined, '聊天文件', () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const FilesPage()));
           }),
           _buildMenuItem(Icons.delete_sweep, '清空聊天记录', () => _showClearChatDataDialog(context)),
           _buildMenuItem(Icons.info_outline, '关于我们', () {

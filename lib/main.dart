@@ -9,6 +9,7 @@ import 'providers/chat_provider.dart';
 import 'providers/contact_provider.dart';
 import 'providers/connection_provider.dart';
 import 'providers/favorite_provider.dart';
+import 'providers/file_library_provider.dart';
 import 'providers/layout_provider.dart';
 
 void main() async {
@@ -25,6 +26,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ContactProvider()),
         ChangeNotifierProvider(create: (_) => LayoutProvider()),
         ChangeNotifierProvider(create: (_) => FavoriteProvider()),
+        ChangeNotifierProvider(create: (_) => FileLibraryProvider()),
         ChangeNotifierProvider(create: (_) => CallProvider()),
       ],
       child: const CaoApp(),
