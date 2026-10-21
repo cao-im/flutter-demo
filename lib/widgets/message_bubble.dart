@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
@@ -110,9 +111,12 @@ class MessageBubble extends StatelessWidget {
                         ],
                         Builder(
                           builder: (bubbleContext) {
-                            return GestureDetector(
-                          onLongPress: () =>
-                              _showMessageContextMenu(bubbleContext),
+                            return _MessageMenuTarget(
+                          desktop: _rightClickMenu,
+                          onOpen: (globalPosition) => _showMessageContextMenu(
+                            bubbleContext,
+                            globalPosition: globalPosition,
+                          ),
                           child: _isImageMessage
                               ? _buildImageBubble(context, bubbleMaxWidth / 4)
                               : _isFileMessage
@@ -194,6 +198,12 @@ class MessageBubble extends StatelessWidget {
         );
       },
     );
+  }
+
+  bool get _rightClickMenu {
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
   }
 
   bool get _isImageMessage =>
@@ -497,17 +507,27 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  void _showMessageContextMenu(BuildContext context) {
-    final bubble = context.findRenderObject() as RenderBox?;
+  void _showMessageContextMenu(BuildContext context, {Offset? globalPosition}) {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (bubble == null || overlay == null || !bubble.hasSize) return;
+    if (overlay == null || !overlay.hasSize) return;
 
-    final offset = bubble.localToGlobal(Offset.zero, ancestor: overlay);
-    final position = RelativeRect.fromRect(
-      Rect.fromLTWH(offset.dx, offset.dy, bubble.size.width, bubble.size.height),
-      Offset.zero & overlay.size,
-    );
+    final RelativeRect position;
+    if (globalPosition != null) {
+      final local = overlay.globalToLocal(globalPosition);
+      position = RelativeRect.fromRect(
+        Rect.fromLTWH(local.dx, local.dy, 0, 0),
+        Offset.zero & overlay.size,
+      );
+    } else {
+      final bubble = context.findRenderObject() as RenderBox?;
+      if (bubble == null || !bubble.hasSize) return;
+      final offset = bubble.localToGlobal(Offset.zero, ancestor: overlay);
+      position = RelativeRect.fromRect(
+        Rect.fromLTWH(offset.dx, offset.dy, bubble.size.width, bubble.size.height),
+        Offset.zero & overlay.size,
+      );
+    }
 
     showMenu(
       context: context,
@@ -636,5 +656,35 @@ class MessageBubble extends StatelessWidget {
         }
         break;
     }
+  }
+}
+
+class _MessageMenuTarget extends StatelessWidget {
+  final bool desktop;
+  final Widget child;
+  final void Function(Offset? globalPosition) onOpen;
+
+  const _MessageMenuTarget({
+    required this.desktop,
+    required this.child,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) {
+        if (kIsWeb && desktop) BrowserContextMenu.disableContextMenu();
+      },
+      onExit: (_) {
+        if (kIsWeb && desktop) BrowserContextMenu.enableContextMenu();
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPress: desktop ? null : () => onOpen(null),
+        onSecondaryTapDown: desktop ? (details) => onOpen(details.globalPosition) : null,
+        child: child,
+      ),
+    );
   }
 }
