@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'media_store_result.dart';
 
@@ -105,7 +106,18 @@ Future<OpenResult> ensure({
   return OpenResult(path: target.path, folder: dir, downloaded: true);
 }
 
-Future<bool> _launch(String path) async {
+Future<bool> _launch(String path, String remoteUrl) async {
+  if (Platform.isAndroid || Platform.isIOS) {
+    final remote = remoteUrl.trim();
+    if (remote.startsWith('http://') || remote.startsWith('https://')) {
+      final opened = await launchUrl(Uri.parse(remote), mode: LaunchMode.externalApplication);
+      if (opened) return true;
+    }
+    if (path.isNotEmpty) {
+      return launchUrl(Uri.file(path), mode: LaunchMode.externalApplication);
+    }
+    return false;
+  }
   if (Platform.isWindows) {
     await Process.run('cmd.exe', ['/c', 'start', '', path]);
     return true;
@@ -126,12 +138,14 @@ Future<OpenResult> open({
   final saved = await ensure(knownPath: knownPath, remoteUrl: remoteUrl, name: name);
   if (saved.path.isEmpty) {
     final remote = remoteUrl.trim();
-    if (remote.startsWith('http://') || remote.startsWith('https://')) {
-      return OpenResult(folder: saved.folder, opened: false);
+    if ((Platform.isAndroid || Platform.isIOS) &&
+        (remote.startsWith('http://') || remote.startsWith('https://'))) {
+      final opened = await launchUrl(Uri.parse(remote), mode: LaunchMode.externalApplication);
+      return OpenResult(folder: saved.folder, opened: opened);
     }
-    return saved;
+    return OpenResult(folder: saved.folder, opened: false);
   }
-  final opened = await _launch(saved.path);
+  final opened = await _launch(saved.path, remoteUrl);
   return OpenResult(
     path: saved.path,
     opened: opened,
