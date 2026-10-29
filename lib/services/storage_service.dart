@@ -131,6 +131,18 @@ class StorageService {
     return prefs.getBool(_autoLoginKey) ?? false;
   }
 
+  /// 退出登录或登录失效时清会话，保留记住的账号密码和自动登录开关。
+  static Future<void> clearSession() async {
+    final prefs = await _prefs;
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_imTokenKey);
+    await prefs.remove(_imRefreshTokenKey);
+    await prefs.remove(_userIdKey);
+    await prefs.remove(_imUserIdKey);
+    await prefs.remove(_nicknameKey);
+    await prefs.remove(_avatarKey);
+  }
+
   static Future<void> clearAll() async {
     final prefs = await _prefs;
     await prefs.clear();

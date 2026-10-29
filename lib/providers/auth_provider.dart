@@ -301,7 +301,7 @@ class AuthProvider with ChangeNotifier {
       debugPrint('⚠️[AuthProvider] _clearLocalSession disconnect 异常: $e');
     }
 
-    await StorageService.clearAll();
+    await StorageService.clearSession();
     _user = null;
     notifyListeners();
   }
@@ -339,7 +339,9 @@ class AuthProvider with ChangeNotifier {
     final contactProvider = context.read<ContactProvider>();
     await contactProvider.resetState();
 
-    await StorageService.clearAll();
+    // 主动退出后停在登录页，避免立刻被自动登录拉回去；记住的密码仍保留。
+    await StorageService.setAutoLogin(false);
+    await StorageService.clearSession();
     _user = null;
     notifyListeners();
   }

@@ -24,38 +24,64 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    _checkSavedCredentials();
-    _checkAutoLogin();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreLoginPreferences();
+    });
   }
 
-  Future<void> _checkSavedCredentials() async {
+  Future<void> _restoreLoginPreferences() async {
     final username = await StorageService.getUsername();
     final password = await StorageService.getPassword();
-    if (username != null && password != null) {
-      setState(() {
-        _usernameController.text = username;
-        _passwordController.text = password;
-        _rememberPassword = true;
-      });
+    final autoLogin = await StorageService.getAutoLogin();
+    if (!mounted) return;
+
+    final savedUsername = username;
+    final savedPassword = password;
+    final hasCredentials = savedUsername != null &&
+        savedUsername.isNotEmpty &&
+        savedPassword != null &&
+        savedPassword.isNotEmpty;
+    if (!hasCredentials && autoLogin) {
+      await StorageService.setAutoLogin(false);
+    }
+    if (!mounted) return;
+
+    if (savedUsername != null &&
+        savedUsername.isNotEmpty &&
+        savedPassword != null &&
+        savedPassword.isNotEmpty) {
+      _usernameController.text = savedUsername;
+      _passwordController.text = savedPassword;
+    }
+
+    final shouldAutoLogin = hasCredentials && autoLogin;
+    setState(() {
+      _rememberPassword = hasCredentials;
+      _autoLogin = shouldAutoLogin;
+      _isAutoLoggingIn = shouldAutoLogin;
+    });
+
+    if (shouldAutoLogin) {
+      await _handleLogin(isAutoLogin: true);
     }
   }
 
-  Future<void> _checkAutoLogin() async {
-    final autoLogin = await StorageService.getAutoLogin();
-    if (autoLogin) {
-      final username = await StorageService.getUsername();
-      final password = await StorageService.getPassword();
-      if (username != null && password != null) {
-        if (mounted) {
-          setState(() => _isAutoLoggingIn = true);
-        }
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          if (mounted) {
-            await _handleLogin(isAutoLogin: true);
-          }
-        });
+  void _setRememberPassword(bool value) {
+    setState(() {
+      _rememberPassword = value;
+      if (!value) {
+        _autoLogin = false;
       }
-    }
+    });
+  }
+
+  void _setAutoLogin(bool value) {
+    setState(() {
+      _autoLogin = value;
+      if (value) {
+        _rememberPassword = true;
+      }
+    });
   }
 
   @override
@@ -66,7 +92,12 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin({bool isAutoLogin = false}) async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_formKey.currentState?.validate() != true) {
+      if (isAutoLogin && mounted) {
+        setState(() => _isAutoLoggingIn = false);
+      }
+      return;
+    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final success = await authProvider.login(
@@ -78,17 +109,14 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (success) {
-      if (_rememberPassword) {
+      final keepCredentials = _rememberPassword || _autoLogin;
+      if (keepCredentials) {
         await StorageService.saveUsername(_usernameController.text.trim());
         await StorageService.savePassword(_passwordController.text);
       } else {
         await StorageService.removePassword();
       }
-      if (_autoLogin) {
-        await StorageService.setAutoLogin(true);
-      } else {
-        await StorageService.setAutoLogin(false);
-      }
+      await StorageService.setAutoLogin(_autoLogin);
 
       Navigator.of(context).pushReplacementNamed(AppRouter.home);
     } else {
@@ -287,15 +315,14 @@ class _LoginPageState extends State<LoginPage> {
                             onChanged: _isAutoLoggingIn
                                 ? null
                                 : (v) {
-                                    setState(() => _rememberPassword = v!);
+                                    _setRememberPassword(v!);
                                   },
                           ),
                           GestureDetector(
                             onTap: _isAutoLoggingIn
                                 ? null
                                 : () {
-                                    setState(() =>
-                                        _rememberPassword = !_rememberPassword);
+                                    _setRememberPassword(!_rememberPassword);
                                   },
                             child: Text(
                               '记住密码',
@@ -312,14 +339,14 @@ class _LoginPageState extends State<LoginPage> {
                             onChanged: _isAutoLoggingIn
                                 ? null
                                 : (v) {
-                                    setState(() => _autoLogin = v!);
+                                    _setAutoLogin(v!);
                                   },
                           ),
                           GestureDetector(
                             onTap: _isAutoLoggingIn
                                 ? null
                                 : () {
-                                    setState(() => _autoLogin = !_autoLogin);
+                                    _setAutoLogin(!_autoLogin);
                                   },
                             child: Text(
                               '自动登录',
@@ -492,14 +519,14 @@ class _LoginPageState extends State<LoginPage> {
                     onChanged: _isAutoLoggingIn
                         ? null
                         : (v) {
-                            setState(() => _rememberPassword = v!);
+                            _setRememberPassword(v!);
                           },
                   ),
                   GestureDetector(
                     onTap: _isAutoLoggingIn
                         ? null
                         : () {
-                            setState(() => _rememberPassword = !_rememberPassword);
+                            _setRememberPassword(!_rememberPassword);
                           },
                     child: Text(
                       '记住密码',
@@ -516,14 +543,14 @@ class _LoginPageState extends State<LoginPage> {
                     onChanged: _isAutoLoggingIn
                         ? null
                         : (v) {
-                            setState(() => _autoLogin = v!);
+                            _setAutoLogin(v!);
                           },
                   ),
                   GestureDetector(
                     onTap: _isAutoLoggingIn
                         ? null
                         : () {
-                            setState(() => _autoLogin = !_autoLogin);
+                            _setAutoLogin(!_autoLogin);
                           },
                     child: Text(
                       '自动登录',
