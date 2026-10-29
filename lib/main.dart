@@ -12,6 +12,7 @@ import 'providers/favorite_provider.dart';
 import 'providers/file_library_provider.dart';
 import 'providers/layout_provider.dart';
 import 'services/shortcut_controller.dart';
+import 'services/umeng_push.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ void main() async {
   await initializeDateFormatting('zh_CN');
   final shortcuts = ShortcutController();
   await shortcuts.init();
+  await startUmengPush();
 
   runApp(
     MultiProvider(

@@ -2,6 +2,9 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://developer.huawei.com/repo/") }
+        maven { url = uri("https://developer.hihonor.com/repo") }
+        maven { url = uri("https://repo1.maven.org/maven2/") }
     }
 }
 

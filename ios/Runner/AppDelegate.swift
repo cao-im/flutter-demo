@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import AVFoundation
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -13,8 +14,35 @@ import AVFoundation
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // 注册IM保活MethodChannel（需要在engine初始化后注册，延迟到didInitializeImplicitFlutterEngine中）
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    let userInfo = notification.request.content.userInfo
+    UmengPushSdkPlugin.didReceiveUMessage(userInfo)
+    if notification.request.trigger is UNPushNotificationTrigger {
+      UMessage.setAutoAlert(false)
+      UMessage.didReceiveRemoteNotification(userInfo)
+    }
+    completionHandler([.sound, .badge, .alert])
+  }
+
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let userInfo = response.notification.request.content.userInfo
+    UmengPushSdkPlugin.didOpenUMessage(userInfo)
+    if response.notification.request.trigger is UNPushNotificationTrigger {
+      UMessage.didReceiveRemoteNotification(userInfo)
+    }
+    completionHandler()
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

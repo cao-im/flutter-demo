@@ -1,0 +1,17 @@
+# 复制到 android/local.properties 末尾。这些值不要提交。
+# Dart 侧还要在运行参数里带上同一套友盟 Key，否则 SDK 不会初始化：
+# --dart-define=UMENG_ANDROID_APPKEY= --dart-define=UMENG_IOS_APPKEY= --dart-define=UMENG_MESSAGE_SECRET=
+
+umeng.appkey=
+umeng.message.secret=
+umeng.channel=caoim
+huawei.appid=
+honor.appid=
+xiaomi.appid=
+xiaomi.appkey=
+oppo.appkey=
+oppo.appsecret=
+vivo.appid=
+vivo.appkey=
+meizu.appid=
+meizu.appkey=

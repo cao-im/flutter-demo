@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -11,6 +13,9 @@ class StorageService {
   static const String _avatarKey = 'avatar';
   static const String _passwordKey = 'password';
   static const String _autoLoginKey = 'auto_login';
+  static const String _pushTokenKey = 'push_token';
+  static const String _pushProviderKey = 'push_provider';
+  static const String _pushDeviceIdKey = 'push_device_id';
 
   static Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
@@ -129,6 +134,43 @@ class StorageService {
   static Future<bool> getAutoLogin() async {
     final prefs = await _prefs;
     return prefs.getBool(_autoLoginKey) ?? false;
+  }
+
+  static Future<void> savePushToken(String token) async {
+    final prefs = await _prefs;
+    await prefs.setString(_pushTokenKey, token);
+  }
+
+  static Future<String?> getPushToken() async {
+    final prefs = await _prefs;
+    return prefs.getString(_pushTokenKey);
+  }
+
+  static Future<void> savePushProvider(String provider) async {
+    final prefs = await _prefs;
+    await prefs.setString(_pushProviderKey, provider);
+  }
+
+  static Future<String?> getPushProvider() async {
+    final prefs = await _prefs;
+    return prefs.getString(_pushProviderKey);
+  }
+
+  static Future<String?> getPushDeviceId() async {
+    final prefs = await _prefs;
+    return prefs.getString(_pushDeviceIdKey);
+  }
+
+  /// 同一台安装保持不变，用来覆盖旧的厂商令牌。
+  static Future<String> pushDeviceId() async {
+    final prefs = await _prefs;
+    final existing = prefs.getString(_pushDeviceIdKey);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final created = '${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(1 << 32)}';
+    await prefs.setString(_pushDeviceIdKey, created);
+    return created;
   }
 
   /// 退出登录或登录失效时清会话，保留记住的账号密码和自动登录开关。

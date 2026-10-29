@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../router/app_router.dart';
 import '../services/api_service.dart';
 import '../services/keep_alive_service.dart';
+import '../services/push_registration.dart';
 import '../services/storage_service.dart';
 import 'connection_provider.dart';
 import 'contact_provider.dart';
@@ -60,6 +61,7 @@ class AuthProvider with ChangeNotifier {
             await StorageService.saveImUserId(user.imUserId!);
             debugPrint('✅[AuthProvider] 存储 imUserId: ${user.imUserId}');
           }
+          await PushRegistration.sync();
 
           final connectionProvider =
               context.read<ConnectionProvider>();
@@ -129,6 +131,7 @@ class AuthProvider with ChangeNotifier {
             await StorageService.saveImUserId(user.imUserId!);
             debugPrint('✅[AuthProvider] 注册时存储 imUserId: ${user.imUserId}');
           }
+          await PushRegistration.sync();
         }
 
         notifyListeners();
@@ -177,6 +180,7 @@ class AuthProvider with ChangeNotifier {
             );
             debugPrint('✅[AuthProvider] connect() 返回');
           }
+          await PushRegistration.sync();
 
           debugPrint('ℹ️[AuthProvider] SDK已接管用户信息获取和Token管理');
 
@@ -339,6 +343,7 @@ class AuthProvider with ChangeNotifier {
     final contactProvider = context.read<ContactProvider>();
     await contactProvider.resetState();
 
+    await PushRegistration.unregister();
     // 主动退出后停在登录页，避免立刻被自动登录拉回去；记住的密码仍保留。
     await StorageService.setAutoLogin(false);
     await StorageService.clearSession();

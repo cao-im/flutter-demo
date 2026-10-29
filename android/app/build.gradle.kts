@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val umengProperties = Properties()
+val umengPropertiesFile = rootProject.file("local.properties")
+if (umengPropertiesFile.exists()) {
+    umengPropertiesFile.inputStream().use { umengProperties.load(it) }
+}
+
+fun umengProperty(name: String): String = umengProperties.getProperty(name) ?: ""
 
 android {
     namespace = "com.clb.caoim"
@@ -26,10 +36,24 @@ android {
         applicationId = "com.clb.caoim"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // 友盟和厂商参数写在 android/local.properties，不提交到仓库。
+        manifestPlaceholders["UMENG_APPKEY"] = umengProperty("umeng.appkey")
+        manifestPlaceholders["UMENG_MESSAGE_SECRET"] = umengProperty("umeng.message.secret")
+        manifestPlaceholders["UMENG_CHANNEL"] = umengProperty("umeng.channel").ifBlank { "caoim" }
+        manifestPlaceholders["HUAWEI_APP_ID"] = umengProperty("huawei.appid")
+        manifestPlaceholders["HONOR_APP_ID"] = umengProperty("honor.appid")
+        manifestPlaceholders["XIAOMI_APP_ID"] = umengProperty("xiaomi.appid")
+        manifestPlaceholders["XIAOMI_APP_KEY"] = umengProperty("xiaomi.appkey")
+        manifestPlaceholders["OPPO_APP_KEY"] = umengProperty("oppo.appkey")
+        manifestPlaceholders["OPPO_APP_SECRET"] = umengProperty("oppo.appsecret")
+        manifestPlaceholders["VIVO_APP_ID"] = umengProperty("vivo.appid")
+        manifestPlaceholders["VIVO_APP_KEY"] = umengProperty("vivo.appkey")
+        manifestPlaceholders["MEIZU_APP_ID"] = umengProperty("meizu.appid")
+        manifestPlaceholders["MEIZU_APP_KEY"] = umengProperty("meizu.appkey")
     }
 
     buildTypes {

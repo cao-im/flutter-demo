@@ -57,6 +57,8 @@ dependencies:
   video_player_win: ^3.2.1
   fc_native_video_thumbnail: ^0.17.2
   flutter_webrtc: ^0.14.2
+  umeng_common_sdk: ^1.2.9
+  umeng_push_sdk: ^2.4.0
 
 dev_dependencies:
   flutter_test:
