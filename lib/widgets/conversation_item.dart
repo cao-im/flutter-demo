@@ -142,20 +142,7 @@ class ConversationItem extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          _preview(context),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: conversation.unreadCount > 0 && !conversation.isMute
-                                ? AppTheme.textPrimary(context)
-                                : AppTheme.textSecondary(context),
-                            fontWeight: conversation.unreadCount > 0 && !conversation.isMute
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                        ),
+                        child: _previewLine(context),
                       ),
                       if (conversation.isMute)
                         Padding(
@@ -170,6 +157,46 @@ class ConversationItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _previewLine(BuildContext context) {
+    final style = TextStyle(
+      fontSize: 13,
+      color: conversation.unreadCount > 0 && !conversation.isMute
+          ? AppTheme.textPrimary(context)
+          : AppTheme.textSecondary(context),
+      fontWeight: conversation.unreadCount > 0 && !conversation.isMute
+          ? FontWeight.w500
+          : FontWeight.normal,
+    );
+    final mentioned = conversation.mentionMessageKey != null &&
+        conversation.mentionMessageKey!.isNotEmpty;
+    final text = _preview(context);
+    if (!mentioned) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(
+            text: '[有人@我] ',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFFFA5151),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(text: text, style: style),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 

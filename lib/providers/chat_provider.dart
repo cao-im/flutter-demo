@@ -47,6 +47,9 @@ class ChatProvider with ChangeNotifier {
   MessageModel? _replyingTo;
   final List<int> _pendingMentions = [];
   final Map<int, String> _mentionLabels = {};
+  final Map<int, String> _mentionJumpKeys = {};
+  bool _mentionsReady = false;
+  int _mentionScanToken = 0;
   List<ConversationModel> _conversations = [];
   bool _isLoading = false;
   bool _isListening = false;
@@ -90,6 +93,119 @@ class ChatProvider with ChangeNotifier {
     _pendingMentions.clear();
     if (kept.isEmpty) return null;
     return kept.join(',');
+  }
+
+  Future<void> _ensureMentionsLoaded() async {
+    if (_mentionsReady) return;
+    _mentionJumpKeys.addAll(await StorageService.loadGroupMentions());
+    _mentionsReady = true;
+  }
+
+  /// 打开群聊前读取未读 @ 的跳转位置。
+  Future<String?> peekMention(int groupId) async {
+    await _ensureMentionsLoaded();
+    final key = _mentionJumpKeys[groupId];
+    if (key == null || key.isEmpty) return null;
+    return key;
+  }
+
+  void _rememberMention(int groupId, String key) {
+    if (groupId <= 0 || key.isEmpty || _mentionJumpKeys.containsKey(groupId)) return;
+    if (_isViewingTarget(groupId, true)) return;
+    _mentionJumpKeys[groupId] = key;
+    StorageService.saveGroupMentions(_mentionJumpKeys);
+  }
+
+  void _clearMention(int groupId) {
+    if (_mentionJumpKeys.remove(groupId) == null) return;
+    StorageService.saveGroupMentions(_mentionJumpKeys);
+  }
+
+  bool _mentionsMe(String? atUserIds) {
+    final me = _sdkManager.client.currentUserId;
+    if (me == null || me <= 0 || atUserIds == null || atUserIds.isEmpty) return false;
+    return atUserIds.split(',').any((item) => int.tryParse(item.trim()) == me);
+  }
+
+  String? _messageJumpKey(sdk.Message message) {
+    final raw = message.midKey?.trim();
+    if (raw != null && raw.isNotEmpty) return raw;
+    final mid = message.mid;
+    if (mid == null || mid <= 0) return null;
+    return mid.toString();
+  }
+
+  void _noteIncomingMention(sdk.Message message) {
+    final groupId = message.groupId;
+    if (groupId == null || groupId <= 0) return;
+    final me = _sdkManager.client.currentUserId;
+    if (me == null || message.fromId == me) return;
+    if (!_mentionsMe(message.atUserIds)) return;
+    if (_isViewingTarget(groupId, true)) return;
+    final key = _messageJumpKey(message);
+    if (key == null) return;
+    _rememberMention(groupId, key);
+  }
+
+  String? _mentionKeyFor(sdk.Conversation conv, int unreadCount) {
+    if (!conv.isGroup) return null;
+    if (unreadCount <= 0 || _isViewingTarget(conv.targetId, true)) {
+      _clearMention(conv.targetId);
+      return null;
+    }
+    final remembered = _mentionJumpKeys[conv.targetId];
+    if (remembered != null && remembered.isNotEmpty) return remembered;
+    final last = conv.lastMessage;
+    final me = _sdkManager.client.currentUserId;
+    if (last != null && me != null && last.fromId != me && _mentionsMe(last.atUserIds)) {
+      final key = _messageJumpKey(last);
+      if (key != null) {
+        _rememberMention(conv.targetId, key);
+        return key;
+      }
+    }
+    return null;
+  }
+
+  void _scheduleMentionScan() {
+    final token = ++_mentionScanToken;
+    _scanUnreadMentions(token);
+  }
+
+  Future<void> _scanUnreadMentions(int token) async {
+    final me = _sdkManager.client.currentUserId;
+    if (me == null || me <= 0) return;
+    final pending = _conversations.where((item) =>
+        item.isGroup &&
+        item.unreadCount > 0 &&
+        (item.mentionMessageKey == null || item.mentionMessageKey!.isEmpty));
+    var changed = false;
+    for (final conversation in pending) {
+      if (token != _mentionScanToken) return;
+      if (_mentionJumpKeys.containsKey(conversation.targetId)) continue;
+      try {
+        final hit = await _sdkManager.client.findRecentGroupMention(
+          groupId: conversation.targetId,
+          userId: me,
+          recentLimit: conversation.unreadCount.clamp(1, 200),
+        );
+        final key = hit == null ? null : _messageJumpKey(hit);
+        if (key == null) continue;
+        _rememberMention(conversation.targetId, key);
+        changed = true;
+      } catch (e) {
+        debugPrint('查找未读@失败: $e');
+      }
+    }
+    if (!changed || token != _mentionScanToken) return;
+    for (var index = 0; index < _conversations.length; index++) {
+      final conversation = _conversations[index];
+      if (!conversation.isGroup || conversation.unreadCount <= 0) continue;
+      final key = _mentionJumpKeys[conversation.targetId];
+      if (key == null || key == conversation.mentionMessageKey) continue;
+      _conversations[index] = conversation.copyWith(mentionMessageKey: key);
+    }
+    notifyListeners();
   }
 
   int get totalUnreadCount {
@@ -165,6 +281,7 @@ class ChatProvider with ChangeNotifier {
 
       // 如果不在当前会话，正常加载会话列表（包含未读数）并触发通知
       if (!isInCurrentConversation) {
+        _noteIncomingMention(event.message);
         loadConversations();
         if (event.message.msgType != sdk.MessageType.system) {
           _triggerMessageNotification(event.message);
@@ -288,6 +405,7 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> loadConversations() async {
+    await _ensureMentionsLoaded();
     _isLoading = true;
     notifyListeners();
 
@@ -333,6 +451,8 @@ class ChatProvider with ChangeNotifier {
           lastActiveTime = DateTime.fromMillisecondsSinceEpoch(conv.updateTime);
         }
 
+        final unreadCount = _isViewingTarget(conv.targetId, conv.isGroup) ? 0 : conv.unreadCount;
+
         conversationModels.add(ConversationModel(
           id: displayId,
           dbId: conv.id,
@@ -343,11 +463,12 @@ class ChatProvider with ChangeNotifier {
           lastMessage: conv.lastMessage != null
               ? _convertSdkMessageToModel(conv.lastMessage!)
               : null,
-          unreadCount: _isViewingTarget(conv.targetId, conv.isGroup) ? 0 : conv.unreadCount,
+          unreadCount: unreadCount,
           isGroup: conv.isGroup,
           lastActiveTime: lastActiveTime,
           isTop: conv.isTop,
           isMute: conv.isMute,
+          mentionMessageKey: _mentionKeyFor(conv, unreadCount),
         ));
       }
 
@@ -359,6 +480,7 @@ class ChatProvider with ChangeNotifier {
       });
 
       _conversations = conversationModels;
+      _scheduleMentionScan();
 
       debugPrint('📍[ChatProvider] 会话列表转换完成, 数量: ${_conversations.length}');
       if (_conversations.isNotEmpty) {
@@ -518,6 +640,7 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> _loadConversationsAndClearUnread() async {
     try {
+      await _ensureMentionsLoaded();
       final sdkConversations = await _sdkManager.client.getConversationList();
 
       // 性能优化：批量预加载联系人信息
@@ -573,6 +696,7 @@ class ChatProvider with ChangeNotifier {
           lastActiveTime: lastActiveTime,
           isTop: conv.isTop,
           isMute: conv.isMute,
+          mentionMessageKey: _mentionKeyFor(conv, unreadCount),
         ));
       }
 
@@ -584,6 +708,7 @@ class ChatProvider with ChangeNotifier {
       });
 
       _conversations = conversationModels;
+      _scheduleMentionScan();
       notifyListeners();
     } catch (e) {
       debugPrint('❌[ChatProvider] 加载会话列表(清零未读)失败: $e');
@@ -1191,6 +1316,8 @@ class ChatProvider with ChangeNotifier {
     final currentUserInfo = await _getCurrentUserInfo();
     final reply = _replyingTo;
     _replyingTo = null;
+    final isGroup = _currentConversation!.isGroup;
+    final atUserIds = isGroup && type == 'text' ? _consumeAtUserIds(content) : null;
 
     final tempMessage = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1219,6 +1346,7 @@ class ChatProvider with ChangeNotifier {
       replyPreview: reply?.quoteText,
       replySenderName: reply?.senderDisplayName,
       localPath: localPath,
+      atUserIds: atUserIds,
     );
 
     debugPrint('📤[ChatProvider] 发送消息(本地) senderInfo=${tempMessage.senderInfo?.toJson()}');
@@ -1228,7 +1356,6 @@ class ChatProvider with ChangeNotifier {
 
     try {
       final targetId = _currentConversation!.targetId;
-      final isGroup = _currentConversation!.isGroup;
 
       debugPrint('📍[ChatProvider] 发送消息: conversationId=${_currentConversation!.id}, targetId=$targetId, isGroup=$isGroup, currentUserId=$currentUserId');
       
@@ -1236,8 +1363,6 @@ class ChatProvider with ChangeNotifier {
         debugPrint('❌[ChatProvider] ⚠️ targetId 无效 ($targetId)，取消发送');
         return;
       }
-
-      final atUserIds = isGroup && type == 'text' ? _consumeAtUserIds(content) : null;
 
       sdk.Message sentMessage;
       if (isGroup) {
@@ -1653,14 +1778,18 @@ class ChatProvider with ChangeNotifier {
       // 使用数据库主键作为 conversationId（这才是 SDK 需要的）
       final conversationId = (resolvedDbId != null && resolvedDbId > 0) ? resolvedDbId : targetId;
       await _sdkManager.client.markConversationAsRead(conversationId);
+      if (isGroup) _clearMention(targetId);
 
       final convIndex = _conversations.indexWhere(
         (c) => c.id.contains(targetId.toString()),
       );
 
-      if (convIndex != -1 && _conversations[convIndex].unreadCount > 0) {
+      if (convIndex != -1 &&
+          (_conversations[convIndex].unreadCount > 0 ||
+              _conversations[convIndex].mentionMessageKey != null)) {
         final updatedConv = _conversations[convIndex].copyWith(
           unreadCount: 0,
+          clearMention: true,
         );
         _conversations[convIndex] = updatedConv;
         debugPrint('✅[ChatProvider] 会话已读标记成功, 未读数已清零 (conversationId=$conversationId)');
@@ -1929,11 +2058,12 @@ class ChatProvider with ChangeNotifier {
       final targetId = message.groupId ?? (message.fromId);
       final isGroup = message.groupId != null && message.groupId! > 0;
 
-      // 免打扰会话不弹通知
+      // 免打扰会话不弹通知；有人 @ 我时仍然提醒
+      final mentioned = isGroup && _mentionsMe(message.atUserIds);
       final muted = _conversations.any(
         (c) => c.isMute && c.targetId == (isGroup ? message.groupId : message.fromId),
       );
-      if (muted) {
+      if (muted && !mentioned) {
         debugPrint('🔕[ChatProvider] 免打扰会话，跳过通知: targetId=$targetId');
         return;
       }
@@ -1949,7 +2079,7 @@ class ChatProvider with ChangeNotifier {
           }
         }
         if (title == nickname) title = '群聊';
-        body = '$nickname: $preview';
+        body = mentioned ? '$nickname @了你' : '$nickname: $preview';
       }
 
       final notificationData = NotificationData(
@@ -2347,6 +2477,7 @@ class ChatProvider with ChangeNotifier {
       replyPreview: msg.replyPreview,
       replySenderName: msg.replySenderName,
       localPath: msg.localPath,
+      atUserIds: msg.atUserIds,
     );
   }
 
@@ -2480,7 +2611,10 @@ class _ChatMessageListener implements sdk.MessageListener {
       replyPreview: message.replyPreview,
       replySenderName: message.replySenderName,
       localPath: message.localPath,
+      atUserIds: message.atUserIds,
     );
+
+    _provider._noteIncomingMention(message);
 
     debugPrint('📥[ChatProvider] 收到消息 fromId=${message.fromId} senderInfo=${senderInfo?.toJson()} groupInfo=${groupInfo?.toJson()}');
 

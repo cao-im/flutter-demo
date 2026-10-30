@@ -358,9 +358,9 @@ class MessageBubble extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        _mentionText(
           message.content,
-          style: style,
+          style,
           maxLines: exceeds ? _foldMaxLines : null,
           overflow: exceeds ? TextOverflow.ellipsis : TextOverflow.visible,
         ),
@@ -388,6 +388,39 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _mentionText(
+    String content,
+    TextStyle style, {
+    int? maxLines,
+    TextOverflow overflow = TextOverflow.clip,
+  }) {
+    final pattern = RegExp(r'@[^\s@]+');
+    if (!pattern.hasMatch(content)) {
+      return Text(content, style: style, maxLines: maxLines, overflow: overflow);
+    }
+    final mentionStyle = style.copyWith(
+      color: isMe ? const Color(0xFFFFE08A) : AppTheme.primaryColor,
+      fontWeight: FontWeight.w600,
+    );
+    final spans = <InlineSpan>[];
+    var start = 0;
+    for (final match in pattern.allMatches(content)) {
+      if (match.start > start) {
+        spans.add(TextSpan(text: content.substring(start, match.start), style: style));
+      }
+      spans.add(TextSpan(text: match.group(0), style: mentionStyle));
+      start = match.end;
+    }
+    if (start < content.length) {
+      spans.add(TextSpan(text: content.substring(start), style: style));
+    }
+    return Text.rich(
+      TextSpan(children: spans),
+      maxLines: maxLines,
+      overflow: overflow,
     );
   }
 

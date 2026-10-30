@@ -15,6 +15,8 @@ class ConversationModel {
   final String? groupOwner;
   final bool isTop;
   final bool isMute;
+  /// 未读里有人 @ 我时，跳到这条消息。
+  final String? mentionMessageKey;
 
   ConversationModel({
     required this.id,
@@ -30,6 +32,7 @@ class ConversationModel {
     this.groupOwner,
     this.isTop = false,
     this.isMute = false,
+    this.mentionMessageKey,
   });
 
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
@@ -84,6 +87,8 @@ class ConversationModel {
     String? groupOwner,
     bool? isTop,
     bool? isMute,
+    String? mentionMessageKey,
+    bool clearMention = false,
   }) {
     return ConversationModel(
       id: id ?? this.id,
@@ -99,6 +104,7 @@ class ConversationModel {
       groupOwner: groupOwner ?? this.groupOwner,
       isTop: isTop ?? this.isTop,
       isMute: isMute ?? this.isMute,
+      mentionMessageKey: clearMention ? null : (mentionMessageKey ?? this.mentionMessageKey),
     );
   }
 }

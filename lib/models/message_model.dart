@@ -32,6 +32,8 @@ class MessageModel {
   final int? readCount;
   /// 本机副本路径。有这个路径时优先用本地文件打开。
   final String? localPath;
+  /// 群消息里被 @ 的用户 ID，逗号分隔。
+  final String? atUserIds;
 
   MessageModel({
     required this.id,
@@ -56,6 +58,7 @@ class MessageModel {
     this.replySenderName,
     this.readCount,
     this.localPath,
+    this.atUserIds,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -94,6 +97,7 @@ class MessageModel {
       replyMsgId: json['replyMsgId'],
       replyPreview: json['replyPreview'],
       replySenderName: json['replySenderName'],
+      atUserIds: json['atUserIds']?.toString(),
     );
   }
 
@@ -116,6 +120,7 @@ class MessageModel {
       if (replyMsgId != null) 'replyMsgId': replyMsgId,
       if (replyPreview != null) 'replyPreview': replyPreview,
       if (replySenderName != null) 'replySenderName': replySenderName,
+      if (atUserIds != null && atUserIds!.isNotEmpty) 'atUserIds': atUserIds,
     };
   }
 
@@ -180,6 +185,13 @@ class MessageModel {
 
   String? get senderDisplayAvatar {
     return senderInfo?.avatar;
+  }
+
+  bool mentionsUser(String? userId) {
+    if (userId == null || userId.isEmpty || atUserIds == null || atUserIds!.isEmpty) {
+      return false;
+    }
+    return atUserIds!.split(',').map((item) => item.trim()).contains(userId);
   }
 
   String? get groupDisplayName {
@@ -250,6 +262,7 @@ class MessageModel {
     String? replySenderName,
     int? readCount,
     String? localPath,
+    String? atUserIds,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -274,6 +287,7 @@ class MessageModel {
       replySenderName: replySenderName ?? this.replySenderName,
       readCount: readCount ?? this.readCount,
       localPath: localPath ?? this.localPath,
+      atUserIds: atUserIds ?? this.atUserIds,
     );
   }
 }

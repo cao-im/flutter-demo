@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +17,7 @@ class StorageService {
   static const String _pushTokenKey = 'push_token';
   static const String _pushProviderKey = 'push_provider';
   static const String _pushDeviceIdKey = 'push_device_id';
+  static const String _groupMentionsKey = 'group_mention_keys';
 
   static Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
@@ -183,6 +185,37 @@ class StorageService {
     await prefs.remove(_imUserIdKey);
     await prefs.remove(_nicknameKey);
     await prefs.remove(_avatarKey);
+  }
+
+  static Future<Map<int, String>> loadGroupMentions() async {
+    final prefs = await _prefs;
+    final raw = prefs.getString(_groupMentionsKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final result = <int, String>{};
+      for (final entry in decoded.entries) {
+        final id = int.tryParse('${entry.key}');
+        final text = entry.value?.toString() ?? '';
+        if (id != null && id > 0 && text.isNotEmpty) result[id] = text;
+      }
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveGroupMentions(Map<int, String> keys) async {
+    final prefs = await _prefs;
+    if (keys.isEmpty) {
+      await prefs.remove(_groupMentionsKey);
+      return;
+    }
+    await prefs.setString(
+      _groupMentionsKey,
+      jsonEncode(keys.map((key, value) => MapEntry('$key', value))),
+    );
   }
 
   static Future<void> clearAll() async {

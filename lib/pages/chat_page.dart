@@ -54,6 +54,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final FocusNode _inputFocusNode = FocusNode(); // 输入框焦点，用于键盘高度监听
   final ImagePicker _picker = ImagePicker();
   bool _isSending = false;
+  bool _mentionPickerOpen = false;
+  bool _applyingMention = false;
   bool _isLoadingMore = false;
   int _currentPage = 1;
   bool _hasMore = true;
@@ -129,6 +131,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     debugPrint('🔄[ChatPage] initState 被调用: conversationId=${widget.conversationId}, conversationName=${widget.conversationName}');
     _scrollController.addListener(_scrollListener);
+    _messageController.addListener(_onMentionTyped);
     _lastMessageCount = 0;
     if (widget.isGroup) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadGroupMeta());
@@ -161,6 +164,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         debugPrint('🔄[ChatPage] initState postFrameCallback 执行: 加载消息');
+        await _focusUnreadMention();
         await _chatProvider?.loadMessages(widget.conversationId);
 
         if (_chatProvider?.focusMessageKey == null) {
@@ -225,6 +229,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         debugPrint('🔄[ChatPage] _onConversationChanged postFrameCallback 执行: 加载消息');
+        await _focusUnreadMention();
         await _chatProvider?.loadMessages(widget.conversationId);
 
         if (_chatProvider?.focusMessageKey == null) {
@@ -256,6 +261,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.removeObserver(this);
     _keyboardDebounceTimer?.cancel();
+    _messageController.removeListener(_onMentionTyped);
     _keyboardProvider.dispose();
     _inputFocusNode.dispose();
     _messageController.dispose();
@@ -896,7 +902,31 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _mentionMember() async {
+  Future<void> _focusUnreadMention() async {
+    if (!widget.isGroup) return;
+    final key = await _chatProvider?.peekMention(effectiveTargetId);
+    if (key == null || key.isEmpty) return;
+    _chatProvider?.focusMessage(key);
+  }
+
+  void _onMentionTyped() {
+    if (!widget.isGroup || _mentionPickerOpen || _applyingMention) return;
+    final value = _messageController.value;
+    final offset = value.selection.baseOffset;
+    if (!value.selection.isCollapsed || offset <= 0) return;
+    final text = value.text;
+    if (offset > text.length || text[offset - 1] != '@') return;
+    if (offset >= 2) {
+      final previous = text[offset - 2];
+      if (previous != ' ' && previous != '\n') return;
+    }
+    _mentionPickerOpen = true;
+    _mentionMember(replaceTypedAt: true).whenComplete(() {
+      _mentionPickerOpen = false;
+    });
+  }
+
+  Future<void> _mentionMember({bool replaceTypedAt = false}) async {
     if (effectiveTargetId <= 0) return;
     try {
       final members = await GroupApi().fetchMembers(effectiveTargetId);
@@ -922,10 +952,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (picked == null || !mounted) return;
       final name = _mentionName(picked);
       final userId = _asMentionId(picked['userId']);
-      final text = _messageController.text;
-      final spacer = text.isEmpty || text.endsWith(' ') ? '' : ' ';
-      _messageController.text = '$text$spacer@$name ';
-      _messageController.selection = TextSelection.collapsed(offset: _messageController.text.length);
+      var text = _messageController.text;
+      var cursor = _messageController.selection.baseOffset;
+      if (cursor < 0 || cursor > text.length) cursor = text.length;
+      if (replaceTypedAt && cursor > 0 && text[cursor - 1] == '@') {
+        text = text.substring(0, cursor - 1) + text.substring(cursor);
+        cursor -= 1;
+      }
+      final before = text.substring(0, cursor);
+      final after = text.substring(cursor);
+      final spacer = before.isEmpty || before.endsWith(' ') || before.endsWith('\n') ? '' : ' ';
+      final insert = '$spacer@$name ';
+      _applyingMention = true;
+      _messageController.value = TextEditingValue(
+        text: '$before$insert$after',
+        selection: TextSelection.collapsed(offset: before.length + insert.length),
+      );
+      _applyingMention = false;
       context.read<ChatProvider>().addMention(userId, name);
       _inputFocusNode.requestFocus();
     } catch (e) {
