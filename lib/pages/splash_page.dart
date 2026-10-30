@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../navigation/app_route.dart';
 import 'package:provider/provider.dart';
 import '../config/server_config.dart';
 import '../theme/app_theme.dart';
@@ -83,7 +84,7 @@ class _SplashPageState extends State<SplashPage>
       if (context.mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => HomePage()),
+          AppRoute(builder: (_) => HomePage()),
         );
       }
     } else {
@@ -91,7 +92,7 @@ class _SplashPageState extends State<SplashPage>
       if (context.mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => LoginPage()),
+          AppRoute(builder: (_) => LoginPage()),
         );
       }
     }

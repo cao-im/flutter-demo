@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../navigation/app_route.dart';
 import '../providers/call_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
@@ -846,7 +847,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _openGroupInfoPage() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => GroupInfoPage(
           groupId: effectiveTargetId,
           groupName: _groupNameOverride ?? widget.conversationName,
@@ -1103,7 +1104,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         context.read<LayoutProvider>().selectNavigation(4);
       } else {
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ProfilePage()),
+          AppRoute(builder: (_) => const ProfilePage()),
         );
       }
       return;
@@ -1152,7 +1153,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => UserProfilePage(contact: contact)),
+      AppRoute(builder: (_) => UserProfilePage(contact: contact)),
     );
   }
 

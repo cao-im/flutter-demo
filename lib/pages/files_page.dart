@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../navigation/app_route.dart';
 import '../models/chat_file_item.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
@@ -130,7 +131,7 @@ class _FileLibraryBody extends StatelessWidget {
                 if (!embedded) {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => FileDetailPage(item: item)),
+                    AppRoute(builder: (_) => FileDetailPage(item: item)),
                   );
                 }
               },

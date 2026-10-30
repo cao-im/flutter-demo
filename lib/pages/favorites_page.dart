@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../navigation/app_route.dart';
 import '../models/favorite_item.dart';
 import '../models/message_model.dart';
 import '../providers/favorite_provider.dart';
@@ -87,7 +88,7 @@ class _FavoriteList extends StatelessWidget {
                     if (!embedded) {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => FavoriteDetailPage(item: item)),
+                        AppRoute(builder: (_) => FavoriteDetailPage(item: item)),
                       );
                     }
                   },
@@ -241,7 +242,7 @@ class FavoriteDetailView extends StatelessWidget {
                   : () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => VideoPlayPage(source: video.url)),
+                        AppRoute(builder: (_) => VideoPlayPage(source: video.url)),
                       );
                     },
               child: const Text('播放视频'),

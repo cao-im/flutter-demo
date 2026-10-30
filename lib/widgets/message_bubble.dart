@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:provider/provider.dart';
+import '../navigation/app_route.dart';
 import '../models/message_model.dart';
 import '../providers/chat_provider.dart';
 import '../services/media_store.dart';
@@ -370,7 +371,7 @@ class MessageBubble extends StatelessWidget {
             child: GestureDetector(
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
+                  AppRoute(
                     builder: (_) => FullTextPage(content: message.content),
                   ),
                 );
@@ -528,7 +529,7 @@ class MessageBubble extends StatelessWidget {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => Scaffold(
           backgroundColor: Colors.black,
           body: Stack(

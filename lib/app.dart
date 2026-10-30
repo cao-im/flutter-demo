@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'navigation/app_route.dart';
 import 'theme/app_theme.dart';
 import 'pages/call_page.dart';
 import 'router/app_router.dart';
@@ -36,7 +37,9 @@ class _CaoAppState extends State<CaoApp> {
       darkTheme: AppTheme.darkTheme,
       initialRoute: AppRouter.splash,
       onGenerateRoute: AppRouter.generateRoute,
-      builder: (context, child) => CallOverlay(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => KeyboardDismissOnBlank(
+        child: CallOverlay(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

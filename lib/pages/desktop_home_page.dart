@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../navigation/app_route.dart';
 import '../providers/layout_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/contact_provider.dart';
@@ -320,7 +321,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
           subtitle: context.watch<ShortcutController>().subtitleForSettings(),
           subtitleColor: context.watch<ShortcutController>().hasConflict ? AppTheme.errorColor : null,
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ShortcutSettingsPage()));
+            Navigator.push(context, AppRoute(builder: (_) => const ShortcutSettingsPage()));
           },
         ),
         _buildSettingsItem(

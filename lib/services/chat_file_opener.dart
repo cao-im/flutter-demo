@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:provider/provider.dart';
 
+import '../navigation/app_route.dart';
 import '../models/file_content.dart';
 import '../providers/chat_provider.dart';
 import '../providers/file_library_provider.dart';
@@ -63,7 +64,7 @@ class ChatFileOpener {
     if (!context.mounted) return;
     final display = source;
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => Scaffold(
           backgroundColor: Colors.black,
           body: Stack(
@@ -108,7 +109,7 @@ class ChatFileOpener {
       if (context.mounted) context.read<FileLibraryProvider>().noteLocalPath(messageKey, source);
     }
     if (!context.mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => VideoPlayPage(source: source)));
+    await Navigator.of(context).push(AppRoute(builder: (_) => VideoPlayPage(source: source)));
   }
 
   static Future<void> _openExternal(

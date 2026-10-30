@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../navigation/app_route.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/layout_provider.dart';
@@ -182,10 +183,10 @@ class _ProfilePageState extends State<ProfilePage> {
           const Divider(height: 1, indent: 16),
           _buildMenuItem(Icons.qr_code_2, '我的二维码', () => showMyQrCode(context)),
           _buildMenuItem(Icons.star_outline, '我的收藏', () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()));
+            Navigator.push(context, AppRoute(builder: (_) => const FavoritesPage()));
           }),
           _buildMenuItem(Icons.folder_outlined, '聊天文件', () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FilesPage()));
+            Navigator.push(context, AppRoute(builder: (_) => const FilesPage()));
           }),
           _buildMenuItem(Icons.delete_sweep, '清空聊天记录', () => _showClearChatDataDialog(context)),
           _buildMenuItem(Icons.info_outline, '关于我们', () {

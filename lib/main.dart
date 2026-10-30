@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'app.dart';
+import 'navigation/app_route.dart';
+import 'router/app_router.dart';
 import 'video_player_setup_stub.dart' if (dart.library.io) 'video_player_setup_io.dart';
 import 'providers/auth_provider.dart';
 import 'providers/call_provider.dart';
@@ -16,6 +18,7 @@ import 'services/umeng_push.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding.instance.addObserver(KeyboardBackObserver(AppRouter.navigatorKey));
   registerDesktopVideoPlayer();
   await initializeDateFormatting('zh_CN');
   final shortcuts = ShortcutController();

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../navigation/app_route.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
 import '../providers/layout_provider.dart';
@@ -336,7 +337,7 @@ class _ConversationListPageState extends State<ConversationListPage>
       } else if (value == 'group_chat') {
         Navigator.pushNamed(context, AppRouter.groupCreate);
       } else if (value == 'scan') {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScanPage()));
+        Navigator.push(context, AppRoute(builder: (_) => const QrScanPage()));
       }
     });
   }
@@ -642,7 +643,7 @@ class _ConversationListPageState extends State<ConversationListPage>
           Navigator.pushNamed(context, AppRouter.groupCreate);
         }
       } else if (value == 'scan') {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const QrScanPage()));
+        Navigator.push(context, AppRoute(builder: (_) => const QrScanPage()));
       }
     });
   }

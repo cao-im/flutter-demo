@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../navigation/app_route.dart';
 import '../pages/splash_page.dart';
 import '../pages/login_page.dart';
 import '../pages/register_page.dart';
@@ -29,16 +30,16 @@ class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case splash:
-        return MaterialPageRoute(builder: (_) => const SplashPage());
+        return AppRoute(builder: (_) => const SplashPage());
       case login:
-        return MaterialPageRoute(builder: (_) => const LoginPage());
+        return AppRoute(builder: (_) => const LoginPage());
       case register:
-        return MaterialPageRoute(builder: (_) => const RegisterPage());
+        return AppRoute(builder: (_) => const RegisterPage());
       case home:
-        return MaterialPageRoute(builder: (_) => const HomePage());
+        return AppRoute(builder: (_) => const HomePage());
       case chat:
         final args = settings.arguments as Map<String, dynamic>?;
-        return MaterialPageRoute(
+        return AppRoute(
           builder: (_) => ChatPage(
             conversationId: args?['conversationId'] ?? '',
             conversationName: args?['conversationName'] ?? '',
@@ -47,29 +48,29 @@ class AppRouter {
           ),
         );
       case groupCreate:
-        return MaterialPageRoute(
+        return AppRoute(
             builder: (_) => const GroupCreatePage());
       case groupList:
-        return MaterialPageRoute(
+        return AppRoute(
             builder: (_) => const GroupListPage());
       case groupChat:
         final args = settings.arguments as Map<String, dynamic>?;
-        return MaterialPageRoute(
+        return AppRoute(
           builder: (_) => GroupChatPage(
             groupId: args?['groupId'] ?? '',
             groupName: args?['groupName'] ?? '',
           ),
         );
       case searchAddFriend:
-        return MaterialPageRoute(
+        return AppRoute(
           builder: (_) => const SearchAddFriendPage(),
         );
       case newFriends:
-        return MaterialPageRoute(
+        return AppRoute(
           builder: (_) => const NewFriendsPage(),
         );
       default:
-        return MaterialPageRoute(
+        return AppRoute(
           builder: (_) => Scaffold(
             body: Center(
               child: Text('No route defined for ${settings.name}'),

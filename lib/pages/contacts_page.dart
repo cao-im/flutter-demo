@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../navigation/app_route.dart';
 import '../theme/app_theme.dart';
 import '../models/user_model.dart';
 import '../providers/contact_provider.dart';
@@ -417,7 +418,7 @@ class _ContactsPageState extends State<ContactsPage>
       isMute: conversation?.isMute,
     );
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => UserProfilePage(contact: profile)),
+      AppRoute(builder: (_) => UserProfilePage(contact: profile)),
     );
   }
 
