@@ -30,6 +30,7 @@ class MessageBubble extends StatelessWidget {
   final void Function(MessageModel)? onFavorite;
   final VoidCallback? onQuoteTap;
   final VoidCallback? onAvatarTap;
+  final VoidCallback? onTap;
   final bool highlighted;
 
   const MessageBubble({
@@ -49,6 +50,7 @@ class MessageBubble extends StatelessWidget {
     this.onFavorite,
     this.onQuoteTap,
     this.onAvatarTap,
+    this.onTap,
     this.highlighted = false,
   });
 
@@ -113,6 +115,7 @@ class MessageBubble extends StatelessWidget {
                           builder: (bubbleContext) {
                             return _MessageMenuTarget(
                           desktop: _rightClickMenu,
+                          onTap: onTap,
                           onOpen: (globalPosition) => _showMessageContextMenu(
                             bubbleContext,
                             globalPosition: globalPosition,
@@ -299,6 +302,10 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
+    if (message.isCallRecord) {
+      return _buildCallRecord(context);
+    }
+
     switch (message.type) {
       case MessageType.image:
         // 图片气泡由外层单独渲染，避免套上文字消息的蓝色背景
@@ -313,6 +320,25 @@ class MessageBubble extends StatelessWidget {
       default:
         return _buildFoldableText(context, maxTextWidth);
     }
+  }
+
+  Widget _buildCallRecord(BuildContext context) {
+    final color = isMe ? Colors.white : AppTheme.textPrimary(context);
+    final icon = Icon(
+      message.callWithVideo ? Icons.videocam : Icons.phone,
+      size: 18,
+      color: color,
+    );
+    final label = Text(
+      message.content,
+      style: TextStyle(fontSize: 15, color: color, height: 1.4),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: isMe
+          ? [label, const SizedBox(width: 6), icon]
+          : [icon, const SizedBox(width: 6), label],
+    );
   }
 
   Widget _buildFoldableText(BuildContext context, double maxTextWidth) {
@@ -529,11 +555,9 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
-    showMenu(
-      context: context,
-      position: position,
-      items: [
-        PopupMenuItem(
+    final items = <PopupMenuEntry<String>>[
+        if (!message.isCallRecord)
+          PopupMenuItem(
           value: 'copy',
           child: Row(
             children: [
@@ -543,7 +567,7 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
-        if (onQuote != null && message.status != MessageStatus.recalled)
+        if (onQuote != null && !message.isCallRecord && message.status != MessageStatus.recalled)
           PopupMenuItem(
             value: 'quote',
             child: Row(
@@ -554,7 +578,7 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-        if (message.canRecall)
+        if (message.canRecall && !message.isCallRecord)
           PopupMenuItem(
             value: 'recall',
             child: Row(
@@ -587,7 +611,8 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-        PopupMenuItem(
+        if (!message.isCallRecord)
+          PopupMenuItem(
           value: 'forward',
           child: Row(
             children: [
@@ -597,7 +622,13 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
-      ],
+      ];
+    if (items.isEmpty) return;
+
+    showMenu(
+      context: context,
+      position: position,
+      items: items,
     ).then((value) {
       if (value != null && context.mounted) {
         _handleMenuAction(value, context);
@@ -662,12 +693,14 @@ class MessageBubble extends StatelessWidget {
 class _MessageMenuTarget extends StatelessWidget {
   final bool desktop;
   final Widget child;
+  final VoidCallback? onTap;
   final void Function(Offset? globalPosition) onOpen;
 
   const _MessageMenuTarget({
     required this.desktop,
     required this.child,
     required this.onOpen,
+    this.onTap,
   });
 
   @override
@@ -679,8 +712,10 @@ class _MessageMenuTarget extends StatelessWidget {
       onExit: (_) {
         if (kIsWeb && desktop) BrowserContextMenu.enableContextMenu();
       },
+      cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTap: onTap,
         onLongPress: desktop ? null : () => onOpen(null),
         onSecondaryTapDown: desktop ? (details) => onOpen(details.globalPosition) : null,
         child: child,

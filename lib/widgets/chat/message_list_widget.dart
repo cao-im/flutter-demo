@@ -23,6 +23,7 @@ class MessageListWidget extends StatefulWidget {
   final void Function(MessageModel)? onForward;
   final void Function(MessageModel)? onFavorite;
   final void Function(MessageModel message, bool isMe)? onAvatarTap;
+  final void Function(MessageModel message)? onCallTap;
 
   const MessageListWidget({
     super.key,
@@ -37,6 +38,7 @@ class MessageListWidget extends StatefulWidget {
     this.onForward,
     this.onFavorite,
     this.onAvatarTap,
+    this.onCallTap,
   });
 
   @override
@@ -274,7 +276,7 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                   children: [
                     if (showTimeSeparator)
                       TimeSeparator(time: message.timestamp),
-                    if (message.type == MessageType.notice)
+                    if (message.type == MessageType.notice && !message.isCallRecord)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
                         child: Text(
@@ -305,6 +307,9 @@ class _MessageListWidgetState extends State<MessageListWidget> {
                       onQuoteTap: message.replyMsgId == null
                           ? null
                           : () => _jumpToQuoted(message),
+                      onTap: message.isCallRecord && widget.onCallTap != null
+                          ? () => widget.onCallTap!(message)
+                          : null,
                     ),
                   ],
                 );

@@ -24,6 +24,8 @@ class CallProvider extends ChangeNotifier {
   CallPhase phase = CallPhase.idle;
   bool video = false;
   String peerName = '';
+  String peerAvatar = '';
+  int peerId = 0;
   String errorText = '';
   int elapsedSeconds = 0;
 
@@ -67,12 +69,14 @@ class CallProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> invite(int peerId, String name, {bool withVideo = false}) async {
+  Future<void> invite(int peerId, String name, {String? avatar, bool withVideo = false}) async {
     if (phase != CallPhase.idle || peerId <= 0) return;
     _caller = true;
     video = withVideo;
     _callId = '${DateTime.now().microsecondsSinceEpoch}';
+    this.peerId = peerId;
     peerName = name;
+    peerAvatar = avatar ?? '';
     phase = CallPhase.outgoing;
     errorText = '';
     notifyListeners();
@@ -129,6 +133,8 @@ class CallProvider extends ChangeNotifier {
         if (phase == CallPhase.outgoing) {
           _callId = event.callId ?? _callId;
           if ((event.name ?? '').isNotEmpty) peerName = event.name!;
+          if ((event.avatar ?? '').isNotEmpty) peerAvatar = event.avatar!;
+          if ((event.peerId ?? 0) > 0) peerId = event.peerId!;
           notifyListeners();
         }
       case 'incoming':
@@ -136,6 +142,8 @@ class CallProvider extends ChangeNotifier {
         _caller = false;
         _callId = event.callId;
         video = event.video;
+        peerId = event.peerId ?? 0;
+        peerAvatar = event.avatar ?? '';
         peerName = (event.name ?? '').isEmpty ? (event.video ? '视频通话' : '语音通话') : event.name!;
         phase = CallPhase.incoming;
         notifyListeners();
@@ -345,6 +353,8 @@ class CallProvider extends ChangeNotifier {
     phase = CallPhase.idle;
     errorText = '';
     peerName = '';
+    peerAvatar = '';
+    peerId = 0;
     elapsedSeconds = 0;
     video = false;
     remoteVideoReady = false;

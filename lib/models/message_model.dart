@@ -186,6 +186,15 @@ class MessageModel {
     return groupInfo?.groupName;
   }
 
+  /// 私聊通话记录。文案由服务端写成「语音通话…」或「视频通话…」。
+  bool get isCallRecord {
+    if (type != MessageType.notice) return false;
+    final text = content.trimLeft();
+    return text.startsWith('语音通话') || text.startsWith('视频通话');
+  }
+
+  bool get callWithVideo => content.trimLeft().startsWith('视频通话');
+
   /// 群提示在自己这边显示「你」，其他人显示操作者名字。
   String noticeText(String? myId) {
     const marker = '修改群名为';

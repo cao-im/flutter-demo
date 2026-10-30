@@ -1,9 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 
+import '../config/server_config.dart';
 import '../providers/call_provider.dart';
+import '../providers/chat_provider.dart';
+import '../providers/contact_provider.dart';
 
 /// 盖在当前页面上的一对一语音或视频通话。
 class CallOverlay extends StatelessWidget {
@@ -35,6 +39,9 @@ class CallPage extends StatefulWidget {
 }
 
 class _CallPageState extends State<CallPage> {
+  String _serverAvatar = '';
+  int _serverFor = 0;
+
   @override
   void initState() {
     super.initState();
@@ -66,11 +73,7 @@ class _CallPageState extends State<CallPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const CircleAvatar(
-                      radius: 48,
-                      backgroundColor: Color(0xFF3A3F47),
-                      child: Icon(Icons.person, size: 52, color: Colors.white),
-                    ),
+                    _PeerAvatar(imageUrl: _resolveAvatar(context, call)),
                     const SizedBox(height: 20),
                     Text(
                       call.peerName,
@@ -148,6 +151,41 @@ class _CallPageState extends State<CallPage> {
     );
   }
 
+  String _resolveAvatar(BuildContext context, CallProvider call) {
+    _loadServerAvatar(context, call.peerId);
+    if (_serverAvatar.isNotEmpty) return _serverAvatar;
+    if (call.peerAvatar.isNotEmpty) return call.peerAvatar;
+    final peerId = call.peerId;
+    if (peerId <= 0) return '';
+    final contacts = context.read<ContactProvider>();
+    final cached = contacts.getContactFromCache(peerId);
+    if (cached != null && cached.avatar.isNotEmpty) return cached.avatar;
+    for (final contact in contacts.contacts) {
+      final id = int.tryParse(contact.imUserId ?? '') ?? int.tryParse(contact.id) ?? 0;
+      if (id == peerId && (contact.avatar ?? '').isNotEmpty) return contact.avatar!;
+    }
+    final chat = context.read<ChatProvider>();
+    final fromConversation = chat.privateConversation(peerId)?.avatar;
+    if (fromConversation != null && fromConversation.isNotEmpty) return fromConversation;
+    for (final message in chat.messages.reversed) {
+      if (message.senderId != '$peerId') continue;
+      final fromMessage = message.senderDisplayAvatar;
+      if (fromMessage != null && fromMessage.isNotEmpty) return fromMessage;
+    }
+    return '';
+  }
+
+  void _loadServerAvatar(BuildContext context, int peerId) {
+    if (peerId <= 0 || _serverFor == peerId) return;
+    _serverFor = peerId;
+    _serverAvatar = '';
+    context.read<ContactProvider>().refreshContactFromServer(peerId).then((user) {
+      final avatar = user?.avatar?.trim() ?? '';
+      if (!mounted || avatar.isEmpty || _serverFor != peerId) return;
+      setState(() => _serverAvatar = avatar);
+    });
+  }
+
   Widget _roundButton({
     required Color color,
     required IconData icon,
@@ -168,6 +206,35 @@ class _CallPageState extends State<CallPage> {
         const SizedBox(height: 8),
         Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
       ],
+    );
+  }
+}
+
+class _PeerAvatar extends StatelessWidget {
+  final String imageUrl;
+
+  const _PeerAvatar({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl.isEmpty ? '' : ServerConfig.reachableFileUrl(imageUrl);
+    const fallback = ColoredBox(
+      color: Color(0xFF3A3F47),
+      child: Center(child: Icon(Icons.person, size: 52, color: Colors.white)),
+    );
+    return ClipOval(
+      child: SizedBox(
+        width: 96,
+        height: 96,
+        child: url.isEmpty
+            ? fallback
+            : CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.cover,
+                placeholder: (context, _) => fallback,
+                errorWidget: (context, _, __) => fallback,
+              ),
+      ),
     );
   }
 }

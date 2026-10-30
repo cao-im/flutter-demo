@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../config/server_config.dart';
 import '../theme/app_theme.dart';
 
 class AvatarWidget extends StatelessWidget {
@@ -44,7 +45,7 @@ class AvatarWidget extends StatelessWidget {
   Widget _buildAvatar() {
     if (imageUrl != null && imageUrl!.isNotEmpty) {
       return CachedNetworkImage(
-        imageUrl: imageUrl!,
+        imageUrl: ServerConfig.reachableFileUrl(imageUrl!),
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),

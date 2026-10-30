@@ -756,6 +756,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onForward: _forwardMessage,
               onFavorite: _favoriteMessage,
               onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
+              onCallTap: widget.isGroup
+                  ? null
+                  : (message) => _startCall(context, withVideo: message.callWithVideo),
             ),
                 ),
               ],
@@ -953,12 +956,37 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _startCall(context, withVideo: true);
   }
 
+  String? _peerAvatar(BuildContext context, int peerId) {
+    final contacts = context.read<ContactProvider>();
+    final cached = contacts.getContactFromCache(peerId);
+    if (cached != null && cached.avatar.isNotEmpty) return cached.avatar;
+    for (final contact in contacts.contacts) {
+      final id = int.tryParse(contact.imUserId ?? '') ?? int.tryParse(contact.id) ?? 0;
+      if (id == peerId && (contact.avatar ?? '').isNotEmpty) return contact.avatar;
+    }
+    final chat = context.read<ChatProvider>();
+    final conversation = chat.privateConversation(peerId);
+    final avatar = conversation?.avatar;
+    if (avatar != null && avatar.isNotEmpty) return avatar;
+    for (final message in chat.messages.reversed) {
+      if (message.senderId != '$peerId') continue;
+      final fromMessage = message.senderDisplayAvatar;
+      if (fromMessage != null && fromMessage.isNotEmpty) return fromMessage;
+    }
+    return null;
+  }
+
   void _startCall(BuildContext context, {required bool withVideo}) {
     final peerId = effectiveTargetId;
     if (peerId <= 0) return;
     FocusManager.instance.primaryFocus?.unfocus();
     SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-    context.read<CallProvider>().invite(peerId, widget.conversationName, withVideo: withVideo);
+    context.read<CallProvider>().invite(
+          peerId,
+          widget.conversationName,
+          avatar: _peerAvatar(context, peerId),
+          withVideo: withVideo,
+        );
   }
 
   void _openPeerProfile(BuildContext context) {
