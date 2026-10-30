@@ -56,6 +56,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool _isSending = false;
   bool _mentionPickerOpen = false;
   bool _applyingMention = false;
+  String? _mentionJumpKey;
   bool _isLoadingMore = false;
   int _currentPage = 1;
   bool _hasMore = true;
@@ -144,6 +145,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       debugPrint('🔄[ChatPage] initState: 同步设置当前会话 ${widget.conversationId}');
       try {
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        if (widget.isGroup) {
+          _mentionJumpKey = chatProvider.mentionKeyNow(effectiveTargetId);
+        }
         chatProvider.setCurrentConversation(
           ConversationModel(
             id: widget.conversationId,
@@ -164,12 +168,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         debugPrint('🔄[ChatPage] initState postFrameCallback 执行: 加载消息');
-        await _focusUnreadMention();
+        await _captureMention();
         await _chatProvider?.loadMessages(widget.conversationId);
-
-        if (_chatProvider?.focusMessageKey == null) {
-          _scrollToBottom(animate: false);
-        }
+        _scrollToBottom(animate: false);
 
         // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
         final targetId = effectiveTargetId;
@@ -208,6 +209,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     // 会话切换时重新解析 targetId
     _resolvedTargetId = null;
     _resolveTargetIdFromConversations();
+    _mentionJumpKey = widget.isGroup ? _chatProvider?.mentionKeyNow(effectiveTargetId) : null;
     if (widget.isGroup) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadGroupMeta());
     }
@@ -229,12 +231,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       // 异步操作（加载消息、标记已读）仍然使用 postFrameCallback
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         debugPrint('🔄[ChatPage] _onConversationChanged postFrameCallback 执行: 加载消息');
-        await _focusUnreadMention();
+        await _captureMention();
         await _chatProvider?.loadMessages(widget.conversationId);
-
-        if (_chatProvider?.focusMessageKey == null) {
-          _scrollToBottom(animate: false);
-        }
+        _scrollToBottom(animate: false);
 
         // 使用 effectiveTargetId（含兜底查询后的真实用户ID）
         final targetId = effectiveTargetId;
@@ -750,22 +749,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     ),
                   ),
                 Expanded(
-                  child: MessageListWidget(
-              scrollController: _scrollController,
-              onScrollToBottom: () => _scrollToBottom(),
-              targetId: effectiveTargetId,
-              isGroup: widget.isGroup,
-              onRetry: (message) => _retryMessage(message),
-              onRecall: (message) => _recallMessage(message),
-              onDelete: (message) => _deleteMessage(message),
-              onQuote: _quoteMessage,
-              onForward: _forwardMessage,
-              onFavorite: _favoriteMessage,
-              onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
-              onCallTap: widget.isGroup
-                  ? null
-                  : (message) => _startCall(context, withVideo: message.callWithVideo),
-            ),
+                  child: Stack(
+                    children: [
+                      MessageListWidget(
+                        scrollController: _scrollController,
+                        onScrollToBottom: () => _scrollToBottom(),
+                        targetId: effectiveTargetId,
+                        isGroup: widget.isGroup,
+                        onRetry: (message) => _retryMessage(message),
+                        onRecall: (message) => _recallMessage(message),
+                        onDelete: (message) => _deleteMessage(message),
+                        onQuote: _quoteMessage,
+                        onForward: _forwardMessage,
+                        onFavorite: _favoriteMessage,
+                        onAvatarTap: (message, isMe) => _openSenderProfile(context, message, isMe),
+                        onCallTap: widget.isGroup
+                            ? null
+                            : (message) => _startCall(context, withVideo: message.callWithVideo),
+                      ),
+                      if (widget.isGroup && _mentionJumpKey != null)
+                        Positioned(
+                          top: 12,
+                          right: 0,
+                          child: _mentionJumpButton(),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -902,11 +911,57 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _focusUnreadMention() async {
-    if (!widget.isGroup) return;
+  Future<void> _captureMention() async {
+    if (!widget.isGroup) {
+      if (mounted && _mentionJumpKey != null) setState(() => _mentionJumpKey = null);
+      return;
+    }
+    if (_mentionJumpKey != null && _mentionJumpKey!.isNotEmpty) return;
     final key = await _chatProvider?.peekMention(effectiveTargetId);
+    if (!mounted || key == null || key.isEmpty) return;
+    setState(() => _mentionJumpKey = key);
+  }
+
+  void _jumpToMention() {
+    final key = _mentionJumpKey;
     if (key == null || key.isEmpty) return;
-    _chatProvider?.focusMessage(key);
+    final chat = _chatProvider;
+    if (chat == null || chat.isLoading) return;
+    chat.focusMessage(key);
+    chat.markFocusReady();
+    chat.dismissMention(effectiveTargetId);
+    setState(() => _mentionJumpKey = null);
+  }
+
+  Widget _mentionJumpButton() {
+    return Material(
+      color: AppTheme.surface(context),
+      elevation: 2,
+      shadowColor: Colors.black26,
+      borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+      child: InkWell(
+        onTap: _jumpToMention,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(10, 6, 12, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.keyboard_arrow_up, size: 18, color: Color(0xFFFA5151)),
+              SizedBox(width: 2),
+              Text(
+                '@我的消息',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFFFA5151),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onMentionTyped() {

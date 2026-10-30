@@ -101,13 +101,20 @@ class ChatProvider with ChangeNotifier {
     _mentionsReady = true;
   }
 
-  /// 打开群聊前读取未读 @ 的跳转位置。
-  Future<String?> peekMention(int groupId) async {
-    await _ensureMentionsLoaded();
+  /// 内存里已有的 @ 跳转位置。打开聊天前先拿走，避免随后清未读时丢掉。
+  String? mentionKeyNow(int groupId) {
     final key = _mentionJumpKeys[groupId];
     if (key == null || key.isEmpty) return null;
     return key;
   }
+
+  /// 打开群聊前读取未读 @ 的跳转位置。
+  Future<String?> peekMention(int groupId) async {
+    await _ensureMentionsLoaded();
+    return mentionKeyNow(groupId);
+  }
+
+  void dismissMention(int groupId) => _clearMention(groupId);
 
   void _rememberMention(int groupId, String key) {
     if (groupId <= 0 || key.isEmpty || _mentionJumpKeys.containsKey(groupId)) return;
@@ -150,7 +157,6 @@ class ChatProvider with ChangeNotifier {
   String? _mentionKeyFor(sdk.Conversation conv, int unreadCount) {
     if (!conv.isGroup) return null;
     if (unreadCount <= 0 || _isViewingTarget(conv.targetId, true)) {
-      _clearMention(conv.targetId);
       return null;
     }
     final remembered = _mentionJumpKeys[conv.targetId];
