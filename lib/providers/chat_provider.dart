@@ -24,6 +24,7 @@ import '../services/apis/file_api.dart';
 import '../services/media_store.dart';
 import '../services/keep_alive_service.dart';
 import '../widgets/adaptive_layout.dart';
+import '../widgets/group_avatar.dart';
 import '../services/apis/message_api.dart';
 import '../services/contact_database_service.dart';
 import '../services/notification_service.dart';
@@ -244,6 +245,13 @@ class ChatProvider with ChangeNotifier {
   void startEventListening() {
     if (_isEventListening) return;
     _isEventListening = true;
+
+    _eventBus.on<ConnectionEvent>().listen((event) {
+      if (event.type != ConnectionEventType.connected) return;
+      debugPrint('📍[ChatProvider] 连接已恢复，刷新会话并重试失败的请求');
+      loadConversations();
+      GroupAvatarCache.instance.retryFailed();
+    });
 
     // 监听消息发送成功/状态更新 → 同步气泡状态并刷新会话列表
     _eventBus.on<MessageSentEvent>().listen((event) {

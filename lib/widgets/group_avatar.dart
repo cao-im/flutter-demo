@@ -23,6 +23,7 @@ class GroupAvatarCache extends ChangeNotifier {
 
   final Map<int, List<GroupAvatarSlot>> _slots = {};
   final Map<int, Future<void>> _loading = {};
+  final Set<int> _failed = {};
 
   List<GroupAvatarSlot>? peek(int groupId) => _slots[groupId];
 
@@ -37,7 +38,8 @@ class GroupAvatarCache extends ChangeNotifier {
     if (groupId <= 0 || _slots.containsKey(groupId)) return Future.value();
     return _loading.putIfAbsent(groupId, () async {
       try {
-        final rows = await GroupApi().fetchMembers(groupId);
+        final rows = await _fetchMembers(groupId);
+        _failed.remove(groupId);
         put(
           groupId,
           rows.map((row) {
@@ -52,14 +54,37 @@ class GroupAvatarCache extends ChangeNotifier {
           }).toList(),
         );
       } catch (_) {
-        if (!_slots.containsKey(groupId)) {
-          _slots[groupId] = const [];
-          notifyListeners();
-        }
+        _failed.add(groupId);
       } finally {
         _loading.remove(groupId);
       }
     });
+  }
+
+  /// 服务恢复后重拉刚才失败的群成员，不把失败结果当成空头像缓存。
+  void retryFailed() {
+    if (_failed.isEmpty) return;
+    final ids = _failed.toList();
+    _failed.clear();
+    for (final id in ids) {
+      _loading.remove(id);
+      ensure(id);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchMembers(int groupId) async {
+    Object? lastError;
+    const waits = [1, 2, 3, 5];
+    for (var attempt = 0; attempt <= waits.length; attempt++) {
+      try {
+        return await GroupApi().fetchMembers(groupId);
+      } catch (e) {
+        lastError = e;
+        if (attempt == waits.length) break;
+        await Future.delayed(Duration(seconds: waits[attempt]));
+      }
+    }
+    throw lastError ?? StateError('获取群成员失败');
   }
 }
 

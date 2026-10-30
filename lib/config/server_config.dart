@@ -2,19 +2,21 @@ import 'package:flutter/foundation.dart';
 
 /// 服务地址。可用编译参数覆盖，例如：
 /// flutter run --dart-define=APP_SERVER_URL=http://192.168.0.10:8081/api --dart-define=IM_SERVER_URL=http://192.168.0.10:8080/api --dart-define=IM_WS_URL=ws://192.168.0.10:8080/api/ws
+/// 生产走反向代理时加上 --dart-define=USE_TLS=true，默认地址会改成 https / wss。
 class ServerConfig {
   static const String _appOverride = String.fromEnvironment('APP_SERVER_URL');
   static const String _imOverride = String.fromEnvironment('IM_SERVER_URL');
   static const String _wsOverride = String.fromEnvironment('IM_WS_URL');
+  static const bool useTls = bool.fromEnvironment('USE_TLS');
 
   static String get appServerUrl =>
-      _appOverride.isNotEmpty ? _appOverride : _url('http', 8081, '/api');
+      _appOverride.isNotEmpty ? _appOverride : _url(useTls ? 'https' : 'http', 8081, '/api');
 
   static String get imServerUrl =>
-      _imOverride.isNotEmpty ? _imOverride : _url('http', 8080, '/api');
+      _imOverride.isNotEmpty ? _imOverride : _url(useTls ? 'https' : 'http', 8080, '/api');
 
   static String get imWebSocketUrl =>
-      _wsOverride.isNotEmpty ? _wsOverride : _url('ws', 8080, '/api/ws');
+      _wsOverride.isNotEmpty ? _wsOverride : _url(useTls ? 'wss' : 'ws', 8080, '/api/ws');
 
   /// 资料里的头像常被存成 127.0.0.1。手机上这是设备自己，换成当前应用服务地址才能打开。
   static String reachableFileUrl(String raw) {

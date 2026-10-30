@@ -71,6 +71,10 @@ class ConnectionProvider with ChangeNotifier {
       rethrow;
     } catch (e, stack) {
       debugPrint('❌[ConnProvider] connect 失败: $e | stackTrace: $stack');
+      if (_sdkManager.client.isReconnecting) {
+        _setState(ImConnectionState.reconnecting);
+        return;
+      }
       _setError(e.toString());
       _setState(ImConnectionState.disconnected);
     }
